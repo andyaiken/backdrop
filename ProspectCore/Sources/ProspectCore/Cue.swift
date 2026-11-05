@@ -21,12 +21,13 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case title(TitleContent)
         case anagram(AnagramContent)
         case image(ImageContent)
+        case morph(MorphContent)
         case video(VideoContent)
         case blank(BlankContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, video, blank
+        case title, anagram, image, morph, video, blank
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -56,6 +57,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .title: .title
         case .anagram: .anagram
         case .image: .image
+        case .morph: .morph
         case .video: .video
         case .blank: .blank
         }
@@ -69,6 +71,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .title(let c): c.text
             case .anagram(let c): c.anagrams.first?.text ?? ""
             case .image(let c): c.text
+            case .morph(let c): c.text
             case .video(let c): c.text
             case .blank(let c): c.text
             }
@@ -81,6 +84,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 c.anagrams[0].text = newValue
                 content = .anagram(c)
             case .image(var c): c.text = newValue; content = .image(c)
+            case .morph(var c): c.text = newValue; content = .morph(c)
             case .video(var c): c.text = newValue; content = .video(c)
             case .blank(var c): c.text = newValue; content = .blank(c)
             }
@@ -95,7 +99,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch content {
             case .title(let c): c.sub
             case .anagram(let c): c.anagrams.first?.answer ?? ""
-            case .image: ""
+            case .image, .morph: ""
             case .video(let c): c.sub
             case .blank: ""
             }
@@ -107,7 +111,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 if c.anagrams.isEmpty { c.anagrams = [Anagram()] }
                 c.anagrams[0].answer = newValue
                 content = .anagram(c)
-            case .image: break
+            case .image, .morph: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .blank: break
             }
@@ -165,6 +169,26 @@ public struct ImageContent: Equatable, Sendable {
     public init(text: String = "", src: String = "", overrides: ImageOverrides = .init()) {
         self.text = text
         self.src = src
+        self.overrides = overrides
+    }
+}
+
+public struct MorphContent: Equatable, Sendable {
+    /// The cue's name, and what the stage shows for a missing picture.
+    public var text: String
+    /// The first picture, and the second it becomes: relative paths inside
+    /// the package.
+    public var src: String
+    public var into: String
+    /// The features matched across the two.
+    public var pairs: [MorphPair]
+    public var overrides: MorphOverrides
+
+    public init(text: String = "", src: String = "", into: String = "", pairs: [MorphPair] = [], overrides: MorphOverrides = .init()) {
+        self.text = text
+        self.src = src
+        self.into = into
+        self.pairs = pairs
         self.overrides = overrides
     }
 }
@@ -274,6 +298,30 @@ public struct AnagramOverrides: Codable, Equatable, Sendable {
     }
 }
 
+/// A morph cue's own values for settings the show holds defaults for. Nil
+/// inherits the show's default.
+public struct MorphOverrides: Codable, Equatable, Sendable {
+    public var clockMs: Int?
+    public var holdTicks: Int?
+    public var morphMs: Int?
+
+    public init(clockMs: Int? = nil, holdTicks: Int? = nil, morphMs: Int? = nil) {
+        self.clockMs = clockMs
+        self.holdTicks = holdTicks
+        self.morphMs = morphMs
+    }
+
+    public var isEmpty: Bool { self == MorphOverrides() }
+
+    func clamped() -> MorphOverrides {
+        var o = self
+        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
+        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
+        o.morphMs = morphMs.map { SettingRange.morphMs.clamp($0) }
+        return o
+    }
+}
+
 /// An image cue's own values for settings the show holds defaults for. Nil
 /// inherits the show's default.
 public struct ImageOverrides: Codable, Equatable, Sendable {
@@ -319,7 +367,8 @@ public struct ImageOverrides: Codable, Equatable, Sendable {
 // and answer, in place of the cue's own text and answer.
 extension Cue: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, colour, atEnd, overrides
+        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, into, pairs, colour, atEnd
+        case overrides
     }
 
     public init(from decoder: Decoder) throws {
@@ -357,6 +406,14 @@ extension Cue: Codable {
                 text: text,
                 src: src,
                 overrides: (try c.decodeIfPresent(ImageOverrides.self, forKey: .overrides) ?? .init()).clamped()
+            ))
+        case .morph:
+            content = .morph(MorphContent(
+                text: text,
+                src: src,
+                into: try c.decodeIfPresent(String.self, forKey: .into) ?? "",
+                pairs: try c.decodeIfPresent([MorphPair].self, forKey: .pairs) ?? [],
+                overrides: (try c.decodeIfPresent(MorphOverrides.self, forKey: .overrides) ?? .init()).clamped()
             ))
         case .video:
             content = .video(VideoContent(
@@ -405,6 +462,11 @@ extension Cue: Codable {
         case .image(let i):
             try c.encode(i.src, forKey: .src)
             if !i.overrides.isEmpty { try c.encode(i.overrides, forKey: .overrides) }
+        case .morph(let m):
+            try c.encode(m.src, forKey: .src)
+            try c.encode(m.into, forKey: .into)
+            try c.encode(m.pairs, forKey: .pairs)
+            if !m.overrides.isEmpty { try c.encode(m.overrides, forKey: .overrides) }
         case .video(let v):
             try c.encode(v.sub, forKey: .sub)
             try c.encode(v.src, forKey: .src)

@@ -17,12 +17,15 @@ public enum SettingValue: Equatable, Sendable {
 /// and the printed sheet: its range and step, how it reads, and where it
 /// lives in the model.
 public enum SettingKey: String, CaseIterable, Sendable {
-    case clock, wave, hold, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, advance, pause, font, transition, fade
+    case clock, wave, hold, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, advance, pause, font, morphTime
+    case transition, fade
 
     /// What a title cue can override.
     public static let title: [SettingKey] = [.clock, .wave, .hold, .histogram, .sceneLine, .letters, .bars]
     /// What an anagram cue can override.
     public static let anagram: [SettingKey] = [.clock, .wave, .hold, .advance, .pause, .font]
+    /// What a morph cue can override: it has no wave.
+    public static let morph: [SettingKey] = [.clock, .hold, .morphTime]
     /// What an image cue can override.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
     /// The transition into a cue, which every cue can override.
@@ -33,6 +36,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         ("Decryption cues", [.textScale, .histogram, .sceneLine, .letters, .bars]),
         ("Image cues", [.grid, .flip, .order, .reveal]),
         ("Anagram cues", [.advance, .pause, .font]),
+        ("Morph cues", [.morphTime]),
         ("Transitions", transitions),
     ]
 
@@ -53,6 +57,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .advance: "Advance"
         case .pause: "Pause"
         case .font: "Font"
+        case .morphTime: "Morph"
         case .transition: "Transition"
         case .fade: "Fade"
         }
@@ -71,6 +76,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .bars: "What the histogram counts: single letters, or the commonest pairs of letters, which tell more on a long text."
         case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. GO carries the cue on rather than firing the next one."
         case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves."
+        case .morphTime: "How long the first picture takes to become the second, after the hold."
         case .font: "The typeface an anagram is set in. Each letter keeps its own shape as it travels, so a printed hand suits; a joined-up script loses its joins."
         case .letters: "How each letter finds its way home: cycling through random glyphs and rolling back into place, or spinning on a dial, like a cryptex's, and settling."
         case .grid: "How many tiles across the picture is cut into."
@@ -118,6 +124,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .letters: .choice(["Cycling", "Dials"])
         case .bars: .choice(["Letters", "Digraphs"])
         case .font: .font
+        case .morphTime: .slider(SettingRange.morphMs, step: 100)
         case .transition: .choice(["Fade through black", "Snap"])
         case .fade: .slider(SettingRange.fadeMs, step: 100)
         }
@@ -148,7 +155,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.clock, .number(let n)), (.flip, .number(let n)): "\(n) ms"
         case (.wave, .number(let n)), (.hold, .number(let n)), (.pause, .number(let n)): n == 0 ? "none" : "\(n)"
         case (.textScale, .number(let n)): "\(n)%"
-        case (.fade, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
+        case (.fade, .number(let n)), (.morphTime, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
         case (.grid, .number(let n)): "\(n) wide"
         case (_, .flag(let on)): on ? "on" : "off"
         case (_, .order(.diagonal)): "diagonal sweep"
@@ -192,6 +199,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .advance: .advance(s.advance)
         case .pause: .number(s.pauseTicks)
         case .font: .font(s.anagramFont)
+        case .morphTime: .number(s.morphMs)
         case .transition: .style(s.transition)
         case .fade: .number(s.fadeMs)
         }
@@ -214,6 +222,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.advance, .advance(let advance)): s.advance = advance
         case (.pause, .number(let n)): s.pauseTicks = n
         case (.font, .font(let family)): s.anagramFont = family
+        case (.morphTime, .number(let n)): s.morphMs = n
         case (.transition, .style(let style)): s.transition = style
         case (.fade, .number(let n)): s.fadeMs = n
         default: break
@@ -228,6 +237,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         return switch kind {
         case .title: Self.title.contains(self)
         case .anagram: Self.anagram.contains(self)
+        case .morph: Self.morph.contains(self)
         case .image: Self.image.contains(self)
         case .video, .blank: false
         }
@@ -263,6 +273,14 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .advance: return o.advance.map(SettingValue.advance)
             case .pause: return o.pauseTicks.map(SettingValue.number)
             case .font: return o.font.map(SettingValue.font)
+            default: return nil
+            }
+        case .morph(let c):
+            let o = c.overrides
+            switch self {
+            case .clock: return o.clockMs.map(SettingValue.number)
+            case .hold: return o.holdTicks.map(SettingValue.number)
+            case .morphTime: return o.morphMs.map(SettingValue.number)
             default: return nil
             }
         case .image(let c):
@@ -328,6 +346,14 @@ public enum SettingKey: String, CaseIterable, Sendable {
             default: return
             }
             cue.content = .anagram(c)
+        case .morph(var c):
+            switch self {
+            case .clock: c.overrides.clockMs = number()
+            case .hold: c.overrides.holdTicks = number()
+            case .morphTime: c.overrides.morphMs = number()
+            default: return
+            }
+            cue.content = .morph(c)
         case .image(var c):
             switch self {
             case .clock: c.overrides.clockMs = number()

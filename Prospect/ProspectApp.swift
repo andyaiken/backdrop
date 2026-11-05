@@ -175,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func addTitleCue(_ sender: Any?) { current?.controller?.addCue(.title) }
     @objc func addAnagramCue(_ sender: Any?) { current?.controller?.addCue(.anagram) }
     @objc func addImageCue(_ sender: Any?) { current?.controller?.addCue(.image) }
+    @objc func addMorphCue(_ sender: Any?) { current?.controller?.addCue(.morph) }
     @objc func addVideoCue(_ sender: Any?) { current?.controller?.addCue(.video) }
     @objc func addBlankCue(_ sender: Any?) { current?.controller?.addCue(.blank) }
     @objc func renumberAllCues(_ sender: Any?) { current?.console?.confirmRenumber() }
@@ -209,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let controller = current?.controller
         let editing = controller?.mode == .edit
         switch item.action {
-        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addVideoCue(_:)), #selector(addBlankCue(_:)):
+        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addMorphCue(_:)), #selector(addVideoCue(_:)), #selector(addBlankCue(_:)):
             return editing
         case #selector(renumberAllCues(_:)):
             return editing && controller?.show.cues.isEmpty == false
@@ -378,6 +379,7 @@ enum MainMenu {
         edit.addItem(withTitle: "Add Decryption Cue", action: #selector(AppDelegate.addTitleCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Anagram Cue", action: #selector(AppDelegate.addAnagramCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Image Cue", action: #selector(AppDelegate.addImageCue(_:)), keyEquivalent: "")
+        edit.addItem(withTitle: "Add Morph Cue", action: #selector(AppDelegate.addMorphCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Video Cue", action: #selector(AppDelegate.addVideoCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Blank Cue", action: #selector(AppDelegate.addBlankCue(_:)), keyEquivalent: "")
         edit.addItem(.separator())

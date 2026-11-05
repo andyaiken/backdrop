@@ -18,6 +18,12 @@ public struct TickClock: Equatable, Sendable {
         self.firstFrame = isInstant ? 0 : -holdTicks
     }
 
+    /// Where the cue is at `time`, in frames, fractions and all: for a
+    /// renderer that moves smoothly between the clock's frames.
+    public func position(at time: Double) -> Double {
+        Double(firstFrame) + max(0, time - start) * 1000 / Double(tickMs)
+    }
+
     public func frame(at time: Double) -> Int {
         // A microsecond of slack, so a timestamp landing exactly on a tick
         // isn't counted as the frame before it.

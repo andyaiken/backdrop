@@ -109,7 +109,7 @@ public enum ShowPackage {
     /// in the package, where an undo expects to find it; this finds what can
     /// go for Remove Unused Media.
     public static func unusedMedia(in package: FileWrapper, show: Show) -> [String] {
-        let used = Set(show.cues.compactMap(\.mediaPath))
+        let used = Set(show.cues.flatMap(\.mediaPaths))
         return mediaPaths(in: package).filter { !used.contains($0) }
     }
 
@@ -123,14 +123,18 @@ public enum ShowPackage {
 }
 
 extension Cue {
-    /// The picture or clip this cue plays, as a path in the package.
-    public var mediaPath: String? {
+    /// The pictures or clip this cue plays, as paths in the package.
+    public var mediaPaths: [String] {
         switch content {
-        case .image(let c): c.src.isEmpty ? nil : c.src
-        case .video(let c): c.src.isEmpty ? nil : c.src
-        case .title, .anagram, .blank: nil
+        case .image(let c): [c.src].filter { !$0.isEmpty }
+        case .morph(let c): [c.src, c.into].filter { !$0.isEmpty }
+        case .video(let c): [c.src].filter { !$0.isEmpty }
+        case .title, .anagram, .blank: []
         }
     }
+
+    /// The picture or clip this cue plays first.
+    public var mediaPath: String? { mediaPaths.first }
 }
 
 /// The one piece of state worth recovering after a crash: which show, and

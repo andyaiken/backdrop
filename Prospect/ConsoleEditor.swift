@@ -7,8 +7,10 @@ import ProspectStage
 /// undoable edit.
 final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
     weak var controller: ShowController?
-    var importMedia: (URL, UUID) -> Void = { _, _ in }
-    var chooseMedia: (UUID) -> Void = { _ in }
+    var importMedia: (URL, UUID, ShowDocument.MediaSlot?) -> Void = { _, _, _ in }
+    var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
+    /// Opens a morph's points.
+    var editPoints: (UUID) -> Void = { _ in }
     /// Return or Escape in a field gives the keyboard back to the show keys.
     var finishedEditing: () -> Void = {}
 
@@ -46,6 +48,14 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
     private let well = MediaWell()
     private let choose = CueEditorPanel.button("Choose\u{2026}")
     private let removeMedia = CueEditorPanel.button("Remove")
+    // A morph's second picture, and its points.
+    private let secondLabel = Desk.label("Second", font: Desk.sans(12.5), colour: Desk.dim)
+    private let secondWell = MediaWell()
+    private let chooseSecond = CueEditorPanel.button("Choose\u{2026}")
+    private let removeSecond = CueEditorPanel.button("Remove")
+    private let pointsLabel = Desk.label("Points", font: Desk.sans(12.5), colour: Desk.dim)
+    private let pointsCount = Desk.label("", font: Desk.sans(12.5), colour: Desk.text)
+    private let editPointsButton = CueEditorPanel.button("Edit Points\u{2026}")
     private let atEndLabel = Desk.label("At the end", font: Desk.sans(12.5), colour: Desk.dim)
     private let atEnd = NSPopUpButton(frame: .zero, pullsDown: false)
     private let colourLabel = Desk.label("Colour", font: Desk.sans(12.5), colour: Desk.dim)
@@ -63,7 +73,9 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         anagrams.text.hint = "The phrase on the first line, the answer on the last, and any working between. A blank line starts another anagram, solved after this one. One line alone is solved already; ~ before a phrase leaves it unsolved."
         anagrams.text.toolTip = "Each anagram is a paragraph: its phrase, then any working, a step to a line, then its answer. Working may be partial or wrong; the letters a step doesn\u{2019}t use dim beneath it. A paragraph of one line stands solved from the start, and one whose phrase starts with ~ stands unsolved; the cue skips both. Return starts a new line; Tab moves on, and Escape puts it back as it was."
 
-        for (button, action) in [(choose, #selector(choosePressed)), (removeMedia, #selector(removePressed))] {
+        for (button, action) in [(choose, #selector(choosePressed)), (removeMedia, #selector(removePressed)),
+                                 (chooseSecond, #selector(chooseSecondPressed)), (removeSecond, #selector(removeSecondPressed)),
+                                 (editPointsButton, #selector(editPointsPressed))] {
             button.target = self
             button.action = action
         }
@@ -83,11 +95,16 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         colour.action = #selector(colourChosen)
         well.onDrop = { [weak self] url in
             guard let self, let cue else { return }
-            importMedia(url, cue.id)
+            importMedia(url, cue.id, .first)
+        }
+        secondWell.onDrop = { [weak self] url in
+            guard let self, let cue else { return }
+            importMedia(url, cue.id, .second)
         }
         let views: [NSView] = [heading, empty, numberLabel, number, lineLabel, line,
                                continueLabel, continueMode, continueSeconds, secondsLabel,
                                textLabel, text, subLabel, sub, keyLabel, key, anagramsLabel, anagrams, mediaLabel, well, choose, removeMedia,
+                               secondLabel, secondWell, chooseSecond, removeSecond, pointsLabel, pointsCount, editPointsButton,
                                atEndLabel, atEnd, colourLabel, colour]
         views.forEach(addSubview)
     }
@@ -139,11 +156,14 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         text.isHidden = textLabel.isHidden
         anagramsLabel.isHidden = kind != .anagram
         anagrams.isHidden = anagramsLabel.isHidden
-        subLabel.isHidden = kind == nil || kind == .blank || kind == .image || kind == .anagram
+        subLabel.isHidden = kind == nil || kind == .blank || kind == .image || kind == .anagram || kind == .morph
         sub.isHidden = subLabel.isHidden
         keyLabel.isHidden = kind != .title
         key.isHidden = keyLabel.isHidden
-        for view in [mediaLabel, well, choose, removeMedia] as [NSView] { view.isHidden = kind != .image && kind != .video }
+        for view in [mediaLabel, well, choose, removeMedia] as [NSView] { view.isHidden = ![.image, .video, .morph].contains(kind) }
+        for view in [secondLabel, secondWell, chooseSecond, removeSecond, pointsLabel, pointsCount, editPointsButton] as [NSView] {
+            view.isHidden = kind != .morph
+        }
         atEndLabel.isHidden = kind != .video
         atEnd.isHidden = atEndLabel.isHidden
         colourLabel.isHidden = kind != .blank
@@ -189,6 +209,15 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
             mediaLabel.stringValue = "Picture"
             well.show(path: c.src, kind: .image, empty: "No picture \u{2014} drop one here")
             removeMedia.isEnabled = !c.src.isEmpty
+        case .morph(let c):
+            textLabel.stringValue = "Label"
+            mediaLabel.stringValue = "First"
+            well.show(path: c.src, kind: .morph, empty: "The picture it starts from \u{2014} drop one here")
+            removeMedia.isEnabled = !c.src.isEmpty
+            secondWell.show(path: c.into, kind: .morph, empty: "The picture it becomes \u{2014} drop one here")
+            removeSecond.isEnabled = !c.into.isEmpty
+            pointsCount.stringValue = c.pairs.isEmpty ? "None: a plain dissolve" : "\(c.pairs.count) matched"
+            editPointsButton.isEnabled = !c.src.isEmpty && !c.into.isEmpty
         case .video(let c):
             textLabel.stringValue = "Label"
             subLabel.stringValue = "Caption"
@@ -336,7 +365,16 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         }
     }
 
-    @objc private func choosePressed() { if let cue { chooseMedia(cue.id) } }
+    @objc private func choosePressed() { if let cue { chooseMedia(cue.id, .first) } }
+    @objc private func chooseSecondPressed() { if let cue { chooseMedia(cue.id, .second) } }
+    @objc private func editPointsPressed() { if let cue { editPoints(cue.id) } }
+
+    @objc private func removeSecondPressed() {
+        guard let cue else { return }
+        controller?.updateCue(cue.id, "Remove Picture") { cue in
+            if case .morph(var c) = cue.content { c.into = ""; cue.content = .morph(c) }
+        }
+    }
 
     /// Leaves the file in the show, where an undo expects it.
     @objc private func removePressed() {
@@ -344,6 +382,7 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         controller?.updateCue(cue.id, cue.kind == .video ? "Remove Clip" : "Remove Picture") { cue in
             switch cue.content {
             case .image(var c): c.src = ""; cue.content = .image(c)
+            case .morph(var c): c.src = ""; cue.content = .morph(c)
             case .video(var c): c.src = ""; cue.content = .video(c)
             default: break
             }
@@ -403,12 +442,21 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         }
         if !sub.isHidden { left(subLabel, sub) }
         if !key.isHidden { left(keyLabel, key) }
-        if !well.isHidden {
-            mediaLabel.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
-            let buttons = choose.fittingSize.width + removeMedia.fittingSize.width + 12
+        func media(_ label: NSTextField, _ well: MediaWell, _ choose: NSButton, _ remove: NSButton) {
+            label.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
+            let buttons = choose.fittingSize.width + remove.fittingSize.width + 12
             well.frame = NSRect(x: x + labelWidth, y: ly, width: leftWidth - labelWidth - buttons - 8, height: 24)
             choose.frame = NSRect(x: well.frame.maxX + 8, y: ly, width: choose.fittingSize.width, height: 24)
-            removeMedia.frame = NSRect(x: choose.frame.maxX + 4, y: ly, width: removeMedia.fittingSize.width, height: 24)
+            remove.frame = NSRect(x: choose.frame.maxX + 4, y: ly, width: remove.fittingSize.width, height: 24)
+            ly += 32
+        }
+        if !well.isHidden { media(mediaLabel, well, choose, removeMedia) }
+        if !secondWell.isHidden {
+            media(secondLabel, secondWell, chooseSecond, removeSecond)
+            pointsLabel.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
+            let buttonWidth = editPointsButton.fittingSize.width
+            pointsCount.frame = NSRect(x: x + labelWidth, y: ly + 3, width: leftWidth - labelWidth - buttonWidth - 8, height: 18)
+            editPointsButton.frame = NSRect(x: x + leftWidth - buttonWidth, y: ly, width: buttonWidth, height: 24)
             ly += 32
         }
         if !atEnd.isHidden { left(atEndLabel, atEnd, controlWidth: min(220, leftWidth - labelWidth)) }

@@ -276,6 +276,15 @@ public final class StageRunner {
 
     private func paint(at time: Double) {
         guard let cue, let clock, let renderer = renderers[cue.kind] else { return }
+        if let smooth = renderer as? PaintsBetweenFrames {
+            let f = clock.frame(at: time)
+            lastFrame = f
+            if TickClock.hasSettled(rendererDone: smooth.paint(at: clock.position(at: time)), frame: f) {
+                isRunning = false
+                settlePending = true
+            }
+            return
+        }
         let f = clock.frame(at: time)
         guard f != lastFrame else { return }
         lastFrame = f

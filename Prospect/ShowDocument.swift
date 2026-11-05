@@ -109,6 +109,7 @@ final class ShowDocument: NSDocument {
                 .title: TitleRenderer(),
                 .anagram: AnagramRenderer(),
                 .image: ImageRenderer(media: media),
+                .morph: MorphRenderer(media: media),
                 .video: VideoRenderer(media: media),
                 .blank: BlankRenderer(),
             ]
@@ -122,8 +123,9 @@ final class ShowDocument: NSDocument {
         // makes AppKit treat the console as already added, and the show is
         // left owning no windows, so showWindows puts nothing on screen.
         let console = ConsoleWindowController(controller: controller)
-        console.importMedia = { [weak self] url, cue in self?.importMedia(from: url, into: cue) }
-        console.chooseMedia = { [weak self] cue in self?.chooseMedia(for: cue) }
+        console.importMedia = { [weak self] url, cue, slot in self?.importMedia(from: url, into: cue, slot: slot) }
+        console.chooseMedia = { [weak self] cue, slot in self?.chooseMedia(for: cue, slot: slot) }
+        console.mediaURL = { [weak self] path in self?.mediaURL(path) }
         addWindowController(console)
         self.console = console
 
@@ -192,14 +194,25 @@ final class ShowDocument: NSDocument {
 
     // MARK: Media
 
+    /// Which of a morph's two pictures a file is for. Every other cue has
+    /// only the one.
+    enum MediaSlot {
+        case first, second
+    }
+
     /// Copies a picture or clip into the show and gives it to a cue. The
     /// original can then be moved or deleted without breaking the show.
-    func importMedia(from url: URL, into cueID: UUID) {
+    ///
+    /// - Parameter slot: For a morph, which picture. Without one, as when a
+    ///   file is dropped on its row, the first if it has none, else the second.
+    func importMedia(from url: URL, into cueID: UUID, slot: MediaSlot? = nil) {
         guard let controller, controller.mode == .edit, let cue = controller.show[cueID] else { return }
         guard Self.accepts(url, for: cue.kind) else {
             controller.say("\(url.lastPathComponent) isn\u{2019}t \(cue.kind == .video ? "a clip" : "a picture") this cue can use.")
             return
         }
+        var second = slot == .second
+        if slot == nil, case .morph(let m) = cue.content { second = !m.src.isEmpty }
         do {
             let package = try ShowPackage.updated(self.package, with: controller.show)
             self.package = package
@@ -208,6 +221,9 @@ final class ShowDocument: NSDocument {
             controller.updateCue(cueID, cue.kind == .video ? "Set Clip" : "Set Picture") { cue in
                 switch cue.content {
                 case .image(var c): c.src = path; cue.content = .image(c)
+                case .morph(var c):
+                    if second { c.into = path } else { c.src = path }
+                    cue.content = .morph(c)
                 case .video(var c): c.src = path; cue.content = .video(c)
                 default: break
                 }
@@ -220,20 +236,25 @@ final class ShowDocument: NSDocument {
     static func accepts(_ url: URL, for kind: Cue.Kind) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
         switch kind {
-        case .image: return type.conforms(to: .image)
+        case .image, .morph: return type.conforms(to: .image)
         case .video: return type.conforms(to: .movie)
         default: return false
         }
     }
 
-    func chooseMedia(for cueID: UUID) {
+    func chooseMedia(for cueID: UUID, slot: MediaSlot? = nil) {
         guard let window = console?.window, let cue = controller?.show[cueID] else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = cue.kind == .video ? [.movie] : [.image]
-        panel.message = cue.kind == .video ? "Choose a clip for cue \(cue.number)." : "Choose a picture for cue \(cue.number)."
+        panel.message = switch (cue.kind, slot) {
+        case (.video, _): "Choose a clip for cue \(cue.number)."
+        case (.morph, .second): "Choose the picture cue \(cue.number) becomes."
+        case (.morph, _): "Choose the picture cue \(cue.number) starts from."
+        default: "Choose a picture for cue \(cue.number)."
+        }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated { self?.importMedia(from: url, into: cueID) }
+            MainActor.assumeIsolated { self?.importMedia(from: url, into: cueID, slot: slot ?? .first) }
         }
     }
 

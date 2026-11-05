@@ -48,6 +48,16 @@ extension CueRenderer {
     public func settingsChanged(_ defaults: ShowSettings) {}
 }
 
+/// A renderer that moves smoothly between the clock's frames, as a morph
+/// does: it is asked to paint on every display refresh, not just when the
+/// frame changes.
+@MainActor
+public protocol PaintsBetweenFrames: CueRenderer {
+    /// Paints the cue `position` frames in, fractions and all. True when it
+    /// has settled.
+    func paint(at position: Double) -> Bool
+}
+
 /// A renderer that can find something wrong while loading a cue, such as a
 /// missing image. The console shows what it says; the stage carries on.
 @MainActor

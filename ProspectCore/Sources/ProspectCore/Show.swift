@@ -109,6 +109,8 @@ public struct ShowSettings: Equatable, Sendable {
     /// The font family anagram letters are set in. Empty is the stage's own
     /// type, SF Mono.
     public var anagramFont = ""
+    /// How long a morph takes, from the first picture to the second.
+    public var morphMs = 3000
     /// How the stage changes to each cue, and how long each fade takes.
     public var transition = Transition.standard.style
     public var fadeMs = Transition.standard.fadeMs
@@ -137,6 +139,10 @@ public struct ShowSettings: Equatable, Sendable {
     public func resolved(_ o: AnagramOverrides) -> AnagramSettings {
         AnagramSettings(clockMs: o.clockMs ?? clockMs, waveTicks: o.waveTicks ?? waveTicks, holdTicks: o.holdTicks ?? holdTicks,
                         advance: o.advance ?? advance, pauseTicks: o.pauseTicks ?? pauseTicks, font: o.font ?? anagramFont)
+    }
+
+    public func resolved(_ o: MorphOverrides) -> MorphSettings {
+        MorphSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, morphMs: o.morphMs ?? morphMs)
     }
 
     public func resolved(_ o: ImageOverrides) -> ImageSettings {
@@ -194,6 +200,19 @@ public struct AnagramSettings: Equatable, Sendable {
     }
 }
 
+/// The settings a morph cue runs with, once its overrides are applied.
+public struct MorphSettings: Equatable, Sendable {
+    public var clockMs: Int
+    public var holdTicks: Int
+    public var morphMs: Int
+
+    public init(clockMs: Int, holdTicks: Int, morphMs: Int) {
+        self.clockMs = clockMs
+        self.holdTicks = holdTicks
+        self.morphMs = morphMs
+    }
+}
+
 /// The settings an image cue runs with, once its overrides are applied.
 public struct ImageSettings: Equatable, Sendable {
     public var clockMs: Int
@@ -236,6 +255,9 @@ extension Cue {
         case .image(let c):
             let s = defaults.resolved(c.overrides)
             return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
+        case .morph(let c):
+            let s = defaults.resolved(c.overrides)
+            return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
         case .video, .blank:
             // A video plays on its own clock from GO, and a blank is instant.
             return CueTiming(clockMs: defaults.clockMs, holdTicks: 0, isInstant: true)
@@ -253,6 +275,7 @@ public enum SettingRange {
     public static let textScale = 40...130
     public static let gridColumns = 4...28
     public static let flipMs = 150...1200
+    public static let morphMs = 500...15000
     public static let fadeMs = 100...3000
     public static let geometrySize = 20...100
     public static let geometryOffset = -40...40
@@ -265,7 +288,7 @@ extension ClosedRange where Bound == Int {
 extension ShowSettings: Codable {
     private enum CodingKeys: String, CodingKey {
         case clockMs, waveTicks, holdTicks, histogram, sceneLine, letters, bars, gridColumns, flipMs, order
-        case reveal, advance, pauseTicks, anagramFont, transition, fadeMs, textScale, geometry, projector
+        case reveal, advance, pauseTicks, anagramFont, morphMs, transition, fadeMs, textScale, geometry, projector
     }
 
     public init(from decoder: Decoder) throws {
@@ -288,6 +311,7 @@ extension ShowSettings: Codable {
         advance = try c.decodeIfPresent(AnagramAdvance.self, forKey: .advance) ?? d.advance
         pauseTicks = try int(.pauseTicks, d.pauseTicks, SettingRange.pauseTicks)
         anagramFont = try c.decodeIfPresent(String.self, forKey: .anagramFont) ?? d.anagramFont
+        morphMs = try int(.morphMs, d.morphMs, SettingRange.morphMs)
         transition = try c.decodeIfPresent(TransitionStyle.self, forKey: .transition) ?? d.transition
         fadeMs = try int(.fadeMs, d.fadeMs, SettingRange.fadeMs)
         textScale = try int(.textScale, d.textScale, SettingRange.textScale)
@@ -311,6 +335,7 @@ extension ShowSettings: Codable {
         try c.encode(advance, forKey: .advance)
         try c.encode(pauseTicks, forKey: .pauseTicks)
         try c.encode(anagramFont, forKey: .anagramFont)
+        try c.encode(morphMs, forKey: .morphMs)
         try c.encode(transition, forKey: .transition)
         try c.encode(fadeMs, forKey: .fadeMs)
         try c.encode(textScale, forKey: .textScale)

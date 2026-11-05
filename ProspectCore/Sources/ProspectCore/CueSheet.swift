@@ -77,6 +77,7 @@ public struct CueSheet: Equatable, Sendable {
         case .title(let c): lines = [c.text, c.sub]
         case .anagram(let c): lines = anagramLines(c, advance: defaults.resolved(c.overrides).advance)
         case .image(let c): lines = [c.text]
+        case .morph(let c): lines = [c.text]
         case .video(let c): lines = [c.text, c.sub]
         case .blank(let c): lines = [c.text, c.colour.hex.uppercased()]
         }
@@ -138,6 +139,12 @@ public struct CueSheet: Equatable, Sendable {
             return timing(SettingKey.anagram)
         case .image(let c):
             return timing(SettingKey.image) + [Setting(name: "Picture", value: file(c.src, "none"), overridden: false)]
+        case .morph(let c):
+            return timing(SettingKey.morph) + [
+                Setting(name: "First picture", value: file(c.src, "none"), overridden: false),
+                Setting(name: "Second picture", value: file(c.into, "none"), overridden: false),
+                Setting(name: "Points", value: "\(c.pairs.count)", overridden: false),
+            ]
         case .video(let c):
             let end = switch c.atEnd {
             case .hold: "hold the last frame"

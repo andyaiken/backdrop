@@ -21,6 +21,8 @@ public enum SheetIssue: Equatable, Sendable {
     /// instead of travelling: those only in the phrase, and those only in
     /// the answer. Working may use any letters it likes.
     case anagramLettersDiffer(cue: UUID, anagram: Int, extra: String, missing: String)
+    /// A morph without both its pictures.
+    case morphWithoutPictures(cue: UUID)
 
     /// The cues the console highlights for this issue.
     public var cues: [UUID] {
@@ -28,7 +30,7 @@ public enum SheetIssue: Equatable, Sendable {
         case .duplicateNumber(_, let cues): cues
         case .missingNumber(let cue), .continuesPastEnd(let cue), .neverFinishes(let cue), .videoWithoutClip(let cue),
              .decryptionWithoutPlace(let cue), .decryptionWithoutKey(let cue), .anagramWithoutPhrase(let cue, _),
-             .anagramLettersDiffer(let cue, _, _, _): [cue]
+             .anagramLettersDiffer(let cue, _, _, _), .morphWithoutPictures(let cue): [cue]
         }
     }
 }
@@ -56,6 +58,9 @@ extension Show {
                 } else if t.key.trimmingCharacters(in: .whitespaces).isEmpty {
                     issues.append(.decryptionWithoutKey(cue: cue.id))
                 }
+            }
+            if case .morph(let m) = cue.content, m.src.isEmpty || m.into.isEmpty {
+                issues.append(.morphWithoutPictures(cue: cue.id))
             }
             if case .anagram(let c) = cue.content {
                 if c.anagrams.isEmpty { issues.append(.anagramWithoutPhrase(cue: cue.id, anagram: 0)) }
@@ -103,6 +108,8 @@ extension Show {
             return "\(name(id)) has no text, so nothing will appear."
         case .decryptionWithoutKey(let id):
             return "\(name(id)) has no key, so its text isn\u{2019}t encrypted."
+        case .morphWithoutPictures(let id):
+            return "\(name(id)) needs both pictures: the one it starts from and the one it becomes."
         case .anagramWithoutPhrase(let id, let n):
             return "\(anagram(n, of: id)) needs both phrases: the one that appears and the one it rearranges into."
         case .anagramLettersDiffer(let id, let n, let extra, let missing):

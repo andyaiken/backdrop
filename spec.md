@@ -97,7 +97,9 @@ protocol CueRenderer: AnyObject {
 }
 ```
 
-Five conformers: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `VideoRenderer` and `BlankRenderer`. Adding a sixth means writing one class and adding one case. Nothing generic is touched.
+Six conformers: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `MorphRenderer`, `VideoRenderer` and `BlankRenderer`. Adding a seventh means writing one class and adding one case. Nothing generic is touched.
+
+A renderer that moves smoothly rather than in steps of the clock, as a morph does, also conforms to `PaintsBetweenFrames`: the runner then asks it to paint on every display refresh, at the clock's position in fractions of a frame, instead of only when the frame number changes. Settling is still judged on whole frames.
 
 A renderer whose cue can stop partway and wait for GO also conforms to `WaitsForGO`: it says when it is waiting, so the clock can rest, and carries on when told. Only `AnagramRenderer` does. The playhead counts the GOs; the renderer keeps the time.
 
@@ -149,7 +151,7 @@ The cue clock is driven by the projector display's display link. While that disp
 
 ## Cue types and rendering
 
-Five cue types, each a `CueRenderer`.
+Six cue types, each a `CueRenderer`.
 
 ### Decryption cues
 
@@ -218,6 +220,18 @@ This is what Core Animation is for. One `CALayer` per tile, `transform.rotation.
 - Every order spans the same duration, so switching does not change cue timing.
 - The flip is an animation with its own duration; the clock only triggers each tile.
 - **Reveal by** is flipping or sharpening, selectable like the order. A sharpening tile stays square on and steps, over the same time a flip takes, from its flat colour through its part of the picture as one block, then 2 x 2, 3 x 3, 5 x 5, 8 x 8 and on through the Fibonacci numbers, until a block would be smaller than two of the picture's pixels; then the picture itself. Each step is drawn down from the next finer one. The blocks are drawn crisp, not smoothed, and the steps fall on the clock's frames, each for a frame at least; a flip too short for every step leaves out the finest, which are the least missed.
+
+### Morph cues
+
+One picture becoming another: the classic morph, as Leonardo's self-portrait becoming the Mona Lisa. Matched points, an eye on one picture and the same eye on the other, slide from their places on the first picture to their places on the second; both pictures stretch with them, and the first dissolves into the second as they go.
+
+- **Points are pairs.** Each is a place on the first picture and a place on the second, stored as fractions of each picture's width and height from the top left, so they hold whatever size the pictures are. With no points at all the pictures still match corner to corner, and the morph is a plain dissolve.
+- **The mesh.** Every pair is a vertex, as are the pictures' corners and the middles of their edges, which stay matched corner to corner so the whole of both pictures is always covered. The mesh is a Delaunay triangulation of where each vertex is halfway through, which keeps the triangles as fat as they can be for the whole morph; the frame's points are nudged outward a hair before triangulating, so three of them never lie on one line. Points off a picture are pulled onto it, and a second point in the same place as one before it is dropped.
+- **Drawn live with Metal**, decided over pre-rendering a clip so an edit shows at once. Each vertex carries where it falls on both pictures, so one pass warps both and mixes them. Pictures are drawn into a plain sRGB bitmap before they become textures, after Metal's own texture loader was found to swap colour channels on some PNGs and shift colours on others; the stage's Metal layer is tagged sRGB, so it is colour-managed like every other layer.
+- **Placement matches an image cue's**: each picture fitted to 90% of the stage, keeping its shape, on whole points. A morph from a picture an image cue has just shown starts exactly where that picture was. Two pictures of different shapes morph between their two placements.
+- **Timing.** The hold shows the first picture still; then the morph runs for its own time, half a second to fifteen, three by default, eased in and out. It paints on every display refresh (`PaintsBetweenFrames`), so the stretch is smooth whatever the clock. It doesn't count as finished while its pictures are still loading, so nothing continues from a black stage.
+- **A missing or unreadable picture** shows the cue's label on black in its place, and the console says which picture and why, as an image cue does. A morph without both pictures is flagged in the console.
+- **The points window.** Edit Points… in the Cue tab opens both pictures side by side, the same numbered points on each, and the morph beneath them at any moment, scrubbed with a slider. Clicking either picture adds a point to both, in the same place; dragging a point places it on that picture; Delete removes the one selected; the pointer over a point lights its partner. **Find Faces** puts Vision's 76 landmarks of the largest face on each picture, matched feature for feature, plus three points above the brow for the shape of the head, replacing any points already there after asking. Every change is one step of undo.
 
 ### Video cues
 
@@ -377,8 +391,8 @@ New shows start in edit mode: they are being written, not run. A show opened fro
 
 Edit mode adds a cue editor beside the projection area. It edits the cue standing by, so clicking a cue in the list opens it.
 
-- **Add Cue**, a pull-down in the console's header in edit mode, adds a Decryption, Anagram, Image, Video or Blank cue, as the Edit menu's Add items do. The new cue goes in after the standby cue, numbered by the rules below, stands by, and opens in the Cue tab. Its fields start empty. Keeping Add in the header leaves the Cue tab to the cue's own details.
-- Two columns. On the left, what the cue shows: text, subtext and key for a decryption cue; the text box of anagrams and their working for an anagram cue; a label and a picture for an image cue; a label, caption, clip and end behaviour for a video cue; a label and colour for a blank. On the right, where it comes in the book: number, cue point and Continue, a menu of When cued, After and When finished, after, each but the first with a seconds field, and When finished disabled for a cue that doesn't take time. Tab moves down the left column, then the right, and round again.
+- **Add Cue**, a pull-down in the console's header in edit mode, adds a Decryption, Anagram, Image, Morph, Video or Blank cue, as the Edit menu's Add items do. The new cue goes in after the standby cue, numbered by the rules below, stands by, and opens in the Cue tab. Its fields start empty. Keeping Add in the header leaves the Cue tab to the cue's own details.
+- Two columns. On the left, what the cue shows: text, subtext and key for a decryption cue; the text box of anagrams and their working for an anagram cue; a label and a picture for an image cue; a label, its first and second pictures and its points for a morph; a label, caption, clip and end behaviour for a video cue; a label and colour for a blank. On the right, where it comes in the book: number, cue point and Continue, a menu of When cued, After and When finished, after, each but the first with a seconds field, and When finished disabled for a cue that doesn't take time. Tab moves down the left column, then the right, and round again.
 - A picture or clip is dropped on the editor or on the cue's row in the list, or chosen with Choose…. Remove takes it off the cue and leaves the file in the package.
 - In edit mode each row in the cue list has a delete button and a grip at its right. Dragging a row by its grip moves the cue, its number with it, with a brass line showing where it will land; the list scrolls if the pointer reaches its edge. Delete removes the cue at once, without asking: both are one step of undo, and the Cue tab keeps to the cue's own details.
 - Edit › Renumber All Cues… asks first, with Cancel as the default. It is a menu item rather than a button in the editor, so it is never one stray click away.
@@ -437,7 +451,7 @@ These are not cosmetic. A cue sheet is read on a music stand under a single lamp
 
 **Decided: build both.** A second layout, chosen in the print panel, for the projection operator rather than the DSM.
 
-Same one row per cue in running order, different columns: cue number, type, content, and the settings that cue runs with once its overrides are applied to the show defaults. For a decryption cue that is the hold, clock and wave, whether the histogram and subtext are on, its letters and its bars. For an anagram it is the hold, clock, wave, advance, pause and font. For an image cue it is the hold, clock, wave, grid, flip duration, order and reveal. For a video cue it is the end behaviour, and for a blank cue its colour. Every cue also lists its transition in: the style, and the fade time when it fades; and a cue that continues says when. A value the cue overrides is marked, so a setting changed for one cue is not mistaken for the show default.
+Same one row per cue in running order, different columns: cue number, type, content, and the settings that cue runs with once its overrides are applied to the show defaults. For a decryption cue that is the hold, clock and wave, whether the histogram and subtext are on, its letters and its bars. For an anagram it is the hold, clock, wave, advance, pause and font. For an image cue it is the hold, clock, wave, grid, flip duration, order and reveal. For a morph it is the hold, clock and morph time, with both picture files and how many points are matched. For a video cue it is the end behaviour, and for a blank cue its colour. Every cue also lists its transition in: the style, and the fade time when it fades; and a cue that continues says when. A value the cue overrides is marked, so a setting changed for one cue is not mistaken for the show default.
 
 It is a tech-week document. It exists so settings dialled in on the rig can be written down, checked against, and restored if a document is ever lost or rebuilt. It carries no cue points, because an operator reading settings is not the operator waiting for a line.
 
@@ -451,19 +465,21 @@ A `Cue` is a struct with an enum payload per kind, so an invalid combination can
 | --- | --- | --- |
 | `id` | all | A UUID, never shown. The identity used by undo, the playhead and the crash record, since numbers may be duplicated |
 | `num` | all | String, not an integer. `9.5` and `P12` are both valid |
-| `kind` | all | `title` (a decryption cue), `anagram`, `image`, `video` or `blank` |
+| `kind` | all | `title` (a decryption cue), `anagram`, `image`, `morph`, `video` or `blank` |
 | `line` | all | The cue point: the spoken line or action to wait for |
 | `text` | all | Text on a decryption cue, the phrase that appears on an anagram, label on an image or video cue |
 | `answer` | anagram | The phrase an anagram's letters rearrange into. A missing phrase, or letters only one of them has, is flagged in the console |
 | `anagrams` | anagram | In place of `text` and `answer`, when a cue has more than one anagram or any working: a list, each with its `text`, `working` (a list of steps), `answer` and, if it is ignored, `"ignored": true`. Each anagram the cue solves is checked on its own; working isn't |
 | `sub` | title, video | Subtext on a decryption cue, caption on a video cue. An image cue has none |
 | `key` | title | Vigenere key. Drives the ciphertext; never shown on stage or in the cue list. A decryption cue with no key, or no text, is flagged in the console |
-| `src` | image, video | Relative path inside the package. Empty on an image cue shows the cue's label on black; empty on a video cue is an error flagged in the console |
+| `src` | image, morph, video | Relative path inside the package: a morph's first picture. Empty on an image cue shows the cue's label on black; empty on a video cue, or on a morph, is flagged in the console |
+| `into` | morph | The picture a morph becomes, a path as `src` is |
+| `pairs` | morph | The matched points: `{"from": [x, y], "to": [x, y]}`, each a fraction of its picture's width and height from the top left |
 | `colour` | blank | `#RRGGBB`. Black by default. A hand-edited show.json may also use `rgb()` or a CSS colour name; anything unrecognised reads as black |
 | `atEnd` | video | hold, black or loop. Default hold |
 | `continue` | all | What happens after this cue: absent for when cued; `{"after": 5}` for seconds after it fires; `{"finished": 2}` for seconds after it finishes. Flagged in the console on the last cue, or on a looping clip set to continue when finished |
 | `transition` | all | The cue's own transition in, overriding the show's: a style, `snap` or `fade`, a fade time in milliseconds, or both. Absent means the show's default |
-| `overrides` | title, anagram, image | This cue's values for settings the show holds defaults for. Absent means inherit. Decryption: clock, wave, hold, histogram, subtext, letters, bars. Anagram: clock, wave, hold, advance, pause, font. Image: clock, wave, hold, grid, flip, order, reveal by |
+| `overrides` | title, anagram, image, morph | This cue's values for settings the show holds defaults for. Absent means inherit. Decryption: clock, wave, hold, histogram, subtext, letters, bars. Anagram: clock, wave, hold, advance, pause, font. Image: clock, wave, hold, grid, flip, order, reveal by. Morph: clock, hold, morph |
 
 ### Show defaults and overrides
 
@@ -471,7 +487,7 @@ A `Cue` is a struct with an enum payload per kind, so an invalid combination can
 
 In edit mode the panels beneath the preview are tabs: Cue, Cue Settings, Show Defaults and Projection Area.
 
-- **Show Defaults** has three groups side by side: timing (clock, wave, hold), decryption cues (text size, histogram, subtext, letters, bars) and image cues (grid, flip, order, reveal by), with anagram cues (advance, pause, font) and transitions (style, fade time) beneath, and how timing works beside them, each setting with its own range and step. A change applies when a cue next runs, except text size, which refits a title on stage at once.
+- **Show Defaults** has three groups side by side: timing (clock, wave, hold), decryption cues (text size, histogram, subtext, letters, bars) and image cues (grid, flip, order, reveal by), with anagram cues (advance, pause, font), morph cues (morph time) and transitions (style, fade time) beneath, and how timing works below them, each setting with its own range and step. A change applies when a cue next runs, except text size, which refits a title on stage at once.
 - **Cue Settings** shows what the cue standing by runs with, in the same groups. Values the cue sets itself are in brass, each with a Reset that puts it back on the show's default. A video or blank cue has only its transition in here: a video plays on its own clock and a blank is instant.
 - A slider drag is one step of undo, however far it moves.
 - The console, the printed operator sheet and the panels word every setting the same way, from one definition of each. That definition also explains each setting, shown when the pointer rests on it, and the panels explain clock, wave and hold together: timing is counted in steps of the clock. A hold reads in steps and in seconds, as "44 · 1.9 s", on screen and on paper.
@@ -508,7 +524,7 @@ The menu bar adds what macOS users will look for, and nothing that duplicates a 
 | Menu | Items |
 | --- | --- |
 | File | New, Open, Open Recent, Save, Duplicate, Print Cue Sheet, Export Cue Sheet as PDF, Remove Unused Media |
-| Edit | Undo, Redo, Cut, Copy, Paste, plus Add Decryption Cue, Add Anagram Cue, Add Image Cue, Add Video Cue, Add Blank Cue, and Renumber All Cues |
+| Edit | Undo, Redo, Cut, Copy, Paste, plus Add Decryption Cue, Add Anagram Cue, Add Image Cue, Add Morph Cue, Add Video Cue, Add Blank Cue, and Renumber All Cues |
 | Show | Enter Show Mode, Enter Edit Mode, Open Projector (Close Projector while it is open), Choose Projector Display, Blackout |
 | Window | Console, Projector, standard items |
 

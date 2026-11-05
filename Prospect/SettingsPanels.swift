@@ -385,7 +385,7 @@ final class CueSettingsPanel: PanelView {
             note.stringValue = "A video plays on its own clock from GO, so it has only its transition in to set. Its end behaviour is in the Cue tab."
         case .blank:
             note.stringValue = "A blank is instant, so it has only its transition in to set. Its colour is in the Cue tab."
-        case .title, .anagram, .image:
+        case .title, .anagram, .image, .morph:
             note.stringValue = SettingKey.timingExplanation + " Values in brass are set for this cue; the rest come from the Show tab. Reset puts a value back on the default."
         }
         let timing = cue.timing(defaults: defaults)

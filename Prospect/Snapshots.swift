@@ -125,6 +125,35 @@ enum Snapshots {
             save(console, "console-show-anagram-waiting", to: directory)
         }
 
+        // A morph between two drawn faces, five points matched, in the Cue
+        // tab and in its points window.
+        controller.enterEditMode()
+        console.showEditTab(0)
+        if let morph = controller.addCue(.morph) {
+            controller.updateCue(morph, "Change Label") { $0.text = "LEONARDO" }
+            let faces = [(name: "first.png", wide: 0.30, eyes: 0.40), (name: "second.png", wide: 0.36, eyes: 0.46)]
+            for (i, face) in faces.enumerated() {
+                let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(face.name)
+                try? Self.face(wide: face.wide, eyes: face.eyes, warm: i == 1).write(to: url)
+                document.importMedia(from: url, into: morph, slot: i == 0 ? .first : .second)
+            }
+            let pairs = [(0.40, 0.40, 0.38, 0.46), (0.60, 0.40, 0.62, 0.46), (0.50, 0.62, 0.50, 0.68), (0.50, 0.20, 0.50, 0.22),
+                         (0.50, 0.80, 0.50, 0.84)].map { MorphPair(from: PicturePoint(x: $0.0, y: $0.1), to: PicturePoint(x: $0.2, y: $0.3)) }
+            controller.updateCue(morph, "Add Point") { cue in
+                if case .morph(var c) = cue.content { c.pairs = pairs; cue.content = .morph(c) }
+            }
+            save(console, "console-edit-morph", to: directory)
+            console.showPoints(for: morph)
+            for window in NSApp.windows where window.title.hasPrefix("Morph Points") {
+                if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.layoutSubtreeIfNeeded()
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: directory).appendingPathComponent("morph-points.png"))
+                }
+            }
+        }
+
         // Prospect › Settings.
         let preferences = PreferencesWindowController()
         if let view = preferences.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
@@ -135,6 +164,25 @@ enum Snapshots {
         }
 
         exit(0)
+    }
+
+    /// A simple drawn face for a morph: a head, two eyes and a mouth.
+    private static func face(wide: Double, eyes: Double, warm: Bool) -> Data {
+        let w = 800, h = 1000
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        // Core Graphics measures from the bottom; the face is set out from the top.
+        func y(_ fromTop: Double) -> CGFloat { CGFloat(1 - fromTop) * CGFloat(h) }
+        ctx.setFillColor(warm ? CGColor(red: 0.30, green: 0.22, blue: 0.14, alpha: 1) : CGColor(red: 0.12, green: 0.16, blue: 0.24, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.setFillColor(warm ? CGColor(red: 0.86, green: 0.70, blue: 0.52, alpha: 1) : CGColor(red: 0.78, green: 0.74, blue: 0.68, alpha: 1))
+        ctx.fillEllipse(in: CGRect(x: CGFloat(0.5 - wide) * CGFloat(w), y: y(0.84), width: CGFloat(wide * 2) * CGFloat(w), height: y(0.2) - y(0.84)))
+        ctx.setFillColor(CGColor(gray: 0.1, alpha: 1))
+        for x in [0.5 - wide / 3, 0.5 + wide / 3] {
+            ctx.fillEllipse(in: CGRect(x: CGFloat(x) * CGFloat(w) - 30, y: y(eyes) - 20, width: 60, height: 40))
+        }
+        ctx.fill(CGRect(x: CGFloat(w) * 0.42, y: y(eyes + 0.24) - 8, width: CGFloat(w) * 0.16, height: 16))
+        return NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:]) ?? Data()
     }
 
     /// A short show to photograph: three places, each a decryption, its

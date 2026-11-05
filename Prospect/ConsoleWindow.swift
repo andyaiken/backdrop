@@ -38,9 +38,13 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let keybar = KeyBar()
 
     /// Copies a dropped or chosen file into the show for a cue.
-    var importMedia: (URL, UUID) -> Void = { _, _ in }
+    var importMedia: (URL, UUID, ShowDocument.MediaSlot?) -> Void = { _, _, _ in }
     /// Offers an open panel for a cue's picture or clip.
-    var chooseMedia: (UUID) -> Void = { _ in }
+    var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
+    /// Where a file in the show is on disk.
+    var mediaURL: (String) -> URL? = { _ in nil }
+    /// The morph points window, while one is open.
+    private var points: MorphPointsWindowController?
 
     /// Open Projector, from the header button.
     var openProjector: () -> Void = {}
@@ -101,12 +105,13 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             self.window?.makeFirstResponder(self.root)
             self.controller.standBy(id)
         }
-        cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id) }
+        cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
         cueList.onMove = { [weak controller] id, offset in controller?.moveCue(id, by: offset) }
         editor.controller = controller
-        editor.importMedia = { [weak self] url, id in self?.importMedia(url, id) }
-        editor.chooseMedia = { [weak self] id in self?.chooseMedia(id) }
+        editor.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
+        editor.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
+        editor.editPoints = { [weak self] id in self?.showPoints(for: id) }
         editor.finishedEditing = { [weak self] in
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
@@ -179,8 +184,22 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
     #endif
 
+    /// Opens a morph's points, in its own window.
+    func showPoints(for id: UUID) {
+        guard controller.mode == .edit, let cue = controller.show[id], cue.kind == .morph else { return }
+        if points?.cueID != id {
+            points?.close()
+            let window = MorphPointsWindowController(controller: controller, cueID: id, mediaURL: mediaURL)
+            window.undoManagerSource = { [weak self] in self?.document?.undoManager }
+            points = window
+        }
+        points?.showWindow(nil)
+    }
+
     func refresh() {
         refreshPending = false
+        points?.refresh()
+        if points?.window?.isVisible == false { points = nil }
         let show = controller.show, playhead = controller.playhead, projector = controller.projector
         let live = playhead.live.flatMap { show[$0] }
         let next = playhead.standby.flatMap { show[$0] }

@@ -442,7 +442,7 @@ final class CueRowView: NSView {
         super.init(frame: .zero)
         let continues = cue.continueMode.continues ? "Continues " + cue.continueMode.summary : nil
         toolTip = [cue.line.isEmpty ? nil : cue.line, continues].compactMap { $0 }.joined(separator: "\n").nilIfEmpty
-        if cue.kind == .image || cue.kind == .video { registerForDraggedTypes([.fileURL]) }
+        if [.image, .morph, .video].contains(cue.kind) { registerForDraggedTypes([.fileURL]) }
     }
 
     required init?(coder: NSCoder) {
@@ -467,6 +467,7 @@ final class CueRowView: NSView {
         case .title: "\u{2261}"
         case .anagram: "\u{21C4}"
         case .image: "\u{25A6}"
+        case .morph: "\u{25D0}"
         case .video: "\u{25B6}"
         case .blank: "\u{25A1}"
         }
@@ -479,6 +480,8 @@ final class CueRowView: NSView {
             [c.anagrams.first.map { $0.answer.isEmpty ? "" : "\u{2192} " + $0.answer } ?? "",
              c.anagrams.count > 1 ? "and \(c.anagrams.count - 1) more" : ""].filter { !$0.isEmpty }.joined(separator: "   ")
         case .image(let c): c.src.isEmpty ? "no picture" : ""
+        case .morph(let c):
+            c.src.isEmpty || c.into.isEmpty ? "needs both pictures" : "\(c.pairs.count) point\(c.pairs.count == 1 ? "" : "s")"
         case .video(let c): [c.sub, c.atEnd == .hold ? "" : c.atEnd.rawValue].filter { !$0.isEmpty }.joined(separator: "   ")
         case .blank(let c): c.colour.hex
         }
