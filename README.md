@@ -33,12 +33,13 @@ On first launch Prospect opens a new, empty show. To try it:
 | R | Run the live cue again |
 | B | Blackout |
 
-Entering and leaving show mode is deliberately done from the menu only, with no shortcut. The spec explains why.
+Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
+
+Nothing takes the keyboard in show mode except the Go-to field, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
 
 ## Repository layout
 
 ```
-spec.md                      the specification and every decision taken
 Prospect.xcodeproj           the app project and its shared scheme
 Config/Prospect-Info.plist   document type and the .prospect UTI
 Prospect/                    the app: AppKit windows, menus, documents
@@ -67,7 +68,7 @@ ProspectCore/                a Swift package with two libraries
 tools/package.sh             builds the zip and disk image for another Mac
 ```
 
-The split follows the spec's architecture, in three layers:
+The code is in three layers:
 
 - **ProspectCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.prospect` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
 - **ProspectStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
@@ -210,4 +211,4 @@ The script checks both before it builds anything, and says which one is missing.
 ## Before the first real show
 
 - Package the copy for the booth Mac with `tools/package.sh --notarise`.
-- Run the booth checklist in spec.md, under Booth Mac setup: the console is the main display, a Focus mode is on, the projector's wallpaper is black, automatic updates are off and the show runs from the internal disk.
+- Run the booth checklist: the console is the main display, a Focus mode is on, the projector's wallpaper is black, automatic updates are off and the show runs from the internal disk.

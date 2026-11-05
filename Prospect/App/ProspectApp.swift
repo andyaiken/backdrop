@@ -165,7 +165,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func showSettings(_ sender: Any?) {
         let preferences = self.preferences ?? PreferencesWindowController()
         self.preferences = preferences
-        preferences.refresh()
         preferences.showWindow(nil)
     }
 

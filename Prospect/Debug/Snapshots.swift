@@ -154,9 +154,11 @@ enum Snapshots {
         }
 
         // Prospect › Settings.
+        // Its content is SwiftUI, which sizes itself as it lays out, so it
+        // is laid out before it is measured.
         let preferences = PreferencesWindowController()
+        preferences.window?.contentView?.layoutSubtreeIfNeeded()
         if let view = preferences.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-            view.layoutSubtreeIfNeeded()
             view.cacheDisplay(in: view.bounds, to: rep)
             try? rep.representation(using: .png, properties: [:])?
                 .write(to: URL(fileURLWithPath: directory).appendingPathComponent("settings.png"))
