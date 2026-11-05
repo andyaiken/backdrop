@@ -61,9 +61,10 @@ final class StandbyPanel: PanelView {
         }
         let line = goPoint == nil ? standby?.line.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" : ""
         if let goPoint {
-            // No cue point of its own: what GO does here, and how to skip it.
-            let after = standby.map { "cue \($0.number)" } ?? "the end of the sheet"
-            cuePoint.stringValue = "GO carries cue \(goPoint.cue.number) on. \u{2192} skips to \(after)."
+            // No cue point of its own: what GO does here.
+            cuePoint.stringValue = goPoint.cue.id == live?.id
+                ? "GO carries cue \(goPoint.cue.number) on to this step."
+                : "GO fires cue \(goPoint.cue.number) straight to this step, the steps before it already done."
         } else {
             cuePoint.stringValue = !line.isEmpty ? line : (standby == nil ? "Nothing to stand by for" : "No cue point set")
         }

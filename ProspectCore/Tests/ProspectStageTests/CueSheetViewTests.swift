@@ -111,6 +111,28 @@ struct CueSheetViewTests {
         #expect(text(of: document, page: 0).contains("No cues yet"))
     }
 
+    @Test("Each GO a cue waits for prints on a row of its own, under its cue")
+    func goRows() throws {
+        let anagram = Cue(number: "4.8", line: "SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", content: .anagram(AnagramContent(
+            anagrams: [Anagram(text: "O, Draconian devil!", working: ["Dracula? No."], answer: "Leonardo da Vinci!"),
+                       Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!")],
+            overrides: AnagramOverrides(advance: .eachStep))))
+        let sheetShow = Show(title: "The Da Vinci Code", cues: [show.cues[0], anagram, show.cues[1]])
+        let view = CueSheetView(sheet: CueSheet(show: sheetShow, title: "The Da Vinci Code", layout: .dsm),
+                                printed: Date(timeIntervalSince1970: 1_792_051_200))
+        let rows = view.pages.flatMap { $0 }.map(\.row)
+        #expect(rows.map(\.number) == ["1", "4.8", "", "", "", "2"])
+        #expect(rows.map(\.type) == ["Decryption", "Anagram", "GO 1", "GO 2", "GO 3", "Image"])
+        let page = text(of: try pdf(.dsm, show: sheetShow), page: 0)
+        #expect(page.contains("GO 1") && page.contains("Dracula? No.") && page.contains("GO 3"))
+        let rect = view.rectForPage(1)
+        if let rep = view.bitmapImageRepForCachingDisplay(in: rect), let directory = ProcessInfo.processInfo.environment["PROSPECT_SNAPSHOTS"] {
+            view.cacheDisplay(in: rect, to: rep)
+            try? rep.representation(using: .png, properties: [:])?
+                .write(to: URL(fileURLWithPath: directory).appendingPathComponent("cue-sheet-goes.png"))
+        }
+    }
+
     @Test("The pages, for looking at")
     func snapshot() {
         for layout in CueSheet.Layout.allCases {

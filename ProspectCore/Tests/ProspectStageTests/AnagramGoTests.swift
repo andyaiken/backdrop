@@ -55,7 +55,7 @@ struct AnagramGoTests {
         #expect(runUntilIdle(c), "waiting for GO, the clock rests")
         #expect(c.standingByGoPoint == ShowController.StandingByGoPoint(cue: c.show.cues[0], point: GoPoint(unit: .step, text: "TSAR"),
                                                                         number: 1, count: 2))
-        #expect(c.standingByCue?.id == anagram && c.playhead.standby == next)
+        #expect(c.standingByCue?.id == anagram && c.playhead.standby == anagram && c.playhead.standbyStep == 0)
         #expect(anagrams.moveShown(0) == nil, "nothing has moved")
 
         c.go()
@@ -71,15 +71,53 @@ struct AnagramGoTests {
         #expect(c.playhead.live == next)
     }
 
-    @Test("→ skips the rest of the working to fire the next cue")
-    func skipAhead() {
+    @Test("→ steps through the cue's GOs, then on to the next cue, which GO fires")
+    func arrowsThroughSteps() {
         let c = controller([stepped("1"), titleCue("NEXT")])
         c.go()
         runUntilIdle(c)
         c.standByNext()
-        #expect(c.standingByGoPoint == nil)
+        #expect(c.standingByGoPoint?.number == 2)
+        c.standByNext()
+        #expect(c.standingByGoPoint == nil && c.playhead.standby == c.show.cues[1].id)
         c.go()
         #expect(c.playhead.live == c.show.cues[1].id)
+    }
+
+    @Test("GO on a later step jumps straight there; on a step done, it goes back and runs it again")
+    func jumpsForwardAndBack() throws {
+        let c = controller([stepped("1"), titleCue("NEXT")])
+        let anagram = c.show.cues[0].id
+        c.go()
+        runUntilIdle(c)
+        c.standBy(anagram, step: 1)
+        c.go()
+        #expect(anagrams.moveShown(0) == 1, "straight to the second move, the first already landed")
+        #expect(runUntilIdle(c))
+        #expect(c.standingByCue?.id == c.show.cues[1].id)
+
+        c.standBy(anagram, step: 0)
+        c.go()
+        #expect(anagrams.moveShown(0) == 0, "back to the first move, from the phrase")
+        let layers = try #require(anagrams.tree(for: stage)?.tracks.first?.pieces)
+        #expect(layers.allSatisfy { $0.animationKeys() == nil }, "placed at once, nothing animating into place")
+        #expect(runUntilIdle(c))
+        #expect(anagrams.moveShown(0) == 0 && c.standingByGoPoint?.number == 2, "then waiting for the next GO as usual")
+    }
+
+    @Test("A step of another cue fires that cue there, after its transition, the steps before already done")
+    func fireAtStep() {
+        var cue = stepped("2")
+        cue.transition = TransitionOverrides(style: .fade, fadeMs: 200)
+        let c = controller([titleCue("FIRST"), cue, titleCue("NEXT")])
+        c.go()
+        runUntilIdle(c)
+        c.standBy(cue.id, step: 1)
+        c.go()
+        #expect(c.playhead.live == cue.id)
+        #expect(runUntilIdle(c))
+        #expect(anagrams.moveShown(0) == 1, "the second move ran, the first was already done")
+        #expect(c.standingByCue?.id == c.show.cues[2].id)
     }
 
     @Test("A cue set to continue when finished continues only once its last GO has run")

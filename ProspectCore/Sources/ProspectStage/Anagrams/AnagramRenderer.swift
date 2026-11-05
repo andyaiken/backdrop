@@ -23,13 +23,16 @@ public final class AnagramRenderer: CueRenderer, ReportsProblems, WaitsForGO {
     private var random: AnyUnitRandom
     private(set) var plan: AnagramCuePlan?
     /// When each part of the cue starts, as GO lets them go.
-    private(set) var timeline = AnagramCuePlan.Timeline(parts: [0])
+    private(set) var timeline = GoTimeline(parts: [0])
     private var clockSeconds = 0.044
     private var textScale = 100
     private var family = ""
     private(set) var lastFrame: Int?
     /// The first paint of a cue put up finished lands without animating.
     private var fresh = true
+    /// The next paint follows a jump to a GO point, so the stage is placed
+    /// as it stands then, with nothing animating into place.
+    private var jumped = false
     private var trees: [ObjectIdentifier: Tree] = [:]
 
     /// How bright a letter is on the line of those a step leaves unused.
@@ -157,8 +160,9 @@ public final class AnagramRenderer: CueRenderer, ReportsProblems, WaitsForGO {
         lastFrame = f
         guard plan != nil else { return true }
         let finished = timeline.isFinished(at: f)
-        apply(f, animated: !(fresh && finished))
+        apply(f, animated: !(fresh && finished) && !jumped)
         fresh = false
+        jumped = false
         return finished
     }
 
@@ -190,6 +194,12 @@ public final class AnagramRenderer: CueRenderer, ReportsProblems, WaitsForGO {
 
     public func carryOnToEnd() {
         timeline.carryOnToEnd()
+    }
+
+    /// GO point k lets go part k + 1; part 0 runs from the cue's start.
+    public func goTo(_ point: Int, at f: Int) {
+        timeline.jump(toPart: point + 1, at: f)
+        jumped = true
     }
 
     // MARK: Pieces

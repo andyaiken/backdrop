@@ -44,6 +44,10 @@ public struct CueSheet: Equatable, Sendable {
         public var cuePoint: String
         /// What the cue runs with. Empty in the DSM layout.
         public var settings: [Setting]
+        /// A GO the cue above waits for partway, counted from 1, on a row of
+        /// its own under it in the DSM layout: no number, its content what
+        /// the GO brings on, and its cue point left for pencil.
+        public var go: Int? = nil
     }
 
     public let title: String
@@ -59,23 +63,29 @@ public struct CueSheet: Equatable, Sendable {
     public init(show: Show, title: String, layout: Layout) {
         self.title = title
         self.layout = layout
-        rows = show.cues.enumerated().map { i, cue in
-            Row(
+        rows = show.cues.enumerated().flatMap { i, cue in
+            let row = Row(
                 number: cue.number,
                 type: cue.kind.heading,
                 auto: i > 0 && show.cues[i - 1].continueMode.continues,
-                content: Self.content(of: cue, defaults: show.settings),
+                content: Self.content(of: cue),
                 cuePoint: layout == .dsm ? cue.line.trimmingCharacters(in: .whitespacesAndNewlines) : "",
                 settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : []
             )
+            // Every GO the DSM calls gets a row, so none is missed in the book.
+            guard layout == .dsm else { return [row] }
+            let goes = cue.goPoints(defaults: show.settings).enumerated().map { n, point in
+                Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: "", settings: [], go: n + 1)
+            }
+            return [row] + goes
         }
     }
 
-    private static func content(of cue: Cue, defaults: ShowSettings) -> [String] {
+    private static func content(of cue: Cue) -> [String] {
         let lines: [String]
         switch cue.content {
         case .title(let c): lines = [c.text, c.sub]
-        case .anagram(let c): lines = anagramLines(c, advance: defaults.resolved(c.overrides).advance)
+        case .anagram(let c): lines = anagramLines(c)
         case .image(let c): lines = [c.text]
         case .morph(let c): lines = [c.text]
         case .video(let c): lines = [c.text, c.sub]
@@ -85,19 +95,14 @@ public struct CueSheet: Equatable, Sendable {
     }
 
     /// Each anagram's phrase, its working after an ellipsis, and its answer
-    /// after an arrow. Where the cue waits for GO partway, the line GO brings
-    /// on starts GO, so the DSM can see every GO the cue takes. One the cue
-    /// doesn't solve is the one line it shows, saying so.
-    static func anagramLines(_ c: AnagramContent, advance: AnagramAdvance) -> [String] {
+    /// after an arrow. One the cue doesn't solve is the one line it shows,
+    /// saying so. The GOs the cue waits for have rows of their own.
+    static func anagramLines(_ c: AnagramContent) -> [String] {
         c.anagrams.flatMap { a -> [String] in
             if a.isSolvedAlready { return [a.steps[0] + " (solved)"] }
             if a.ignored { return [(a.steps.first ?? "") + " (ignored)"] }
-            let goes = a.steps.count > 1 && advance != .byItself
-            let phrase = (goes && advance == .eachAnagram ? "GO " : "") + a.text
-            let working = a.working.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                .map { (goes && advance == .eachStep ? "GO " : "") + "\u{2026} " + $0 }
-            let answer = a.answer.isEmpty ? "" : (goes && advance == .eachStep ? "GO " : "") + "\u{2192} " + a.answer
-            return [phrase] + working + [answer]
+            let working = a.working.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.map { "\u{2026} " + $0 }
+            return [a.text] + working + [a.answer.isEmpty ? "" : "\u{2192} " + a.answer]
         }
     }
 

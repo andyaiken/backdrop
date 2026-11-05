@@ -122,11 +122,12 @@ public final class CueSheetView: NSView {
         let heights = [
             Self.measure(Self.number(row.number), width: c[0].width),
             typeHeight(row),
-            Self.measure(content(row), width: c[2].width),
+            Self.measure(content(row), width: c[2].width - indent(row)),
             Self.measure(lastColumn(row), width: c[3].width),
         ]
-        // Room to write: the DSM annotates in pencil.
-        let minimum: CGFloat = sheet.layout == .dsm ? 60 : 44
+        // Room to write: the DSM annotates in pencil. A GO's row needs a
+        // cue point and little else.
+        let minimum: CGFloat = sheet.layout == .dsm && row.go == nil ? 60 : 44
         return max(minimum, (heights.max() ?? 0) + 2 * Self.padding).rounded(.up)
     }
 
@@ -164,9 +165,14 @@ public final class CueSheetView: NSView {
         let out = NSMutableAttributedString()
         for (i, line) in row.content.enumerated() {
             if i > 0 { out.append(Self.text("\n", Self.bodyFont)) }
-            out.append(Self.text(line, i == 0 ? Self.leadFont : Self.bodyFont))
+            out.append(Self.text(line, i == 0 && row.go == nil ? Self.leadFont : Self.bodyFont))
         }
         return out
+    }
+
+    /// A GO's content sits in from its cue's, so it reads as part of it.
+    private func indent(_ row: CueSheet.Row) -> CGFloat {
+        row.go == nil ? 0 : 16
     }
 
     /// The cue point, or nothing at all where none is set; or the settings,
@@ -251,7 +257,8 @@ public final class CueSheetView: NSView {
             box.stroke()
             Self.text("AUTO", Self.stampFont).draw(at: NSPoint(x: stamp.minX + 5, y: stamp.minY + 2))
         }
-        content(row).draw(with: NSRect(x: c[2].x, y: y, width: c[2].width, height: height), options: .usesLineFragmentOrigin)
+        content(row).draw(with: NSRect(x: c[2].x + indent(row), y: y, width: c[2].width - indent(row), height: height),
+                          options: .usesLineFragmentOrigin)
         lastColumn(row).draw(with: NSRect(x: c[3].x, y: y, width: c[3].width, height: height), options: .usesLineFragmentOrigin)
 
         NSColor(white: 0, alpha: 0.35).setFill()

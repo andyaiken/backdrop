@@ -12,6 +12,9 @@ final class CueRowView: NSView {
     var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true } } }
     var isLive = false { didSet { if isLive != oldValue { needsDisplay = true } } }
     var hasIssue = false
+    /// How many GOs the cue waits for while they are folded away: shown as a
+    /// count. Zero while its sub-cues are open, or when it has none.
+    var foldedGoes = 0 { didSet { if foldedGoes != oldValue { needsDisplay = true } } }
     /// In edit mode, a picture or clip dropped on an image or video row goes
     /// to that cue.
     var acceptsMedia = false
@@ -69,7 +72,14 @@ final class CueRowView: NSView {
         }
     }
 
+    /// What the cue shows beneath its name, with a count of its GOs while
+    /// they are folded away.
     var subtitle: String {
+        let goes = foldedGoes > 0 ? "\u{25B8} \(foldedGoes) GO\(foldedGoes == 1 ? "" : "s")" : ""
+        return [content, goes].filter { !$0.isEmpty }.joined(separator: "   ")
+    }
+
+    private var content: String {
         switch cue.content {
         case .title(let c): c.sub
         case .anagram(let c):
@@ -229,9 +239,13 @@ final class CueRowView: NSView {
 final class CueListView: NSScrollView {
     private let document = PanelView()
     private var rows: [CueRowView] = []
+    /// The GOs of the cues whose sub-cues are open: live or standing by.
+    private var steps: [UUID: [SubCueRowView]] = [:]
     private var shown: [Cue] = []
     private var shownNotes: [String?] = []
     var onClick: (UUID) -> Void = { _ in }
+    /// A sub-cue clicked: its cue, and which GO.
+    var onStepClick: (UUID, Int) -> Void = { _, _ in }
     var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
     /// A row dragged to a new place: the cue, and how far it moved.
@@ -253,7 +267,11 @@ final class CueListView: NSScrollView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(cues: [Cue], defaults: ShowSettings, standby: UUID?, live: UUID?, issues: Set<UUID>, editing: Bool) {
+    /// - Parameters:
+    ///   - standbyStep: The GO of the standby cue that stands by, if one does.
+    ///   - taken: How many of the live cue's GOs it has reached.
+    func update(cues: [Cue], defaults: ShowSettings, standby: UUID?, standbyStep: Int?, live: UUID?, taken: Int,
+                issues: Set<UUID>, editing: Bool) {
         let notes = cues.map { CueRowView.transitionNote(for: $0, defaults: defaults) }
         if cues != shown || notes != shownNotes {
             rows.forEach { $0.removeFromSuperview() }
@@ -270,16 +288,42 @@ final class CueListView: NSScrollView {
             shownNotes = notes
             needsLayout = true
         }
+        var open: [UUID: [SubCueRowView]] = [:]
         for row in rows {
-            row.isStandby = row.cue.id == standby
-            row.isLive = row.cue.id == live
-            row.hasIssue = issues.contains(row.cue.id)
+            let id = row.cue.id
+            row.isStandby = id == standby && standbyStep == nil
+            row.isLive = id == live
+            row.hasIssue = issues.contains(id)
             row.acceptsMedia = editing
             row.isEditing = editing
+            // A cue's GOs open out while it is live or standing by, and fold
+            // to a count otherwise.
+            let points = row.cue.goPoints(defaults: defaults)
+            let opens = !points.isEmpty && (id == live || id == standby)
+            row.foldedGoes = opens ? 0 : points.count
+            guard opens else { continue }
+            var subRows = steps[id] ?? []
+            if subRows.map(\.point) != points {
+                subRows.forEach { $0.removeFromSuperview() }
+                subRows = points.enumerated().map { i, point in
+                    let sub = SubCueRowView(cue: id, index: i, count: points.count, point: point)
+                    sub.onClick = { [weak self] in self?.onStepClick($0, $1) }
+                    document.addSubview(sub, positioned: .below, relativeTo: insertion)
+                    return sub
+                }
+            }
+            for sub in subRows {
+                sub.isStandby = id == standby && standbyStep == sub.index
+                sub.isTaken = id == live && sub.index < taken
+            }
+            open[id] = subRows
         }
+        for (id, subRows) in steps where open[id] == nil { subRows.forEach { $0.removeFromSuperview() } }
+        steps = open
         layoutRows()
         // Keep the standby row in view, and the live row with it if both fit.
-        if let standbyRow = rows.first(where: \.isStandby) {
+        let standbyRow: NSView? = rows.first(where: \.isStandby) ?? steps.values.joined().first(where: \.isStandby)
+        if let standbyRow {
             var target = standbyRow.frame
             if let liveRow = rows.first(where: \.isLive), target.union(liveRow.frame).height + 48 <= contentSize.height {
                 target = target.union(liveRow.frame)
@@ -334,7 +378,9 @@ final class CueListView: NSScrollView {
     }
 
     private func showInsertion(at slot: Int) {
-        let y = slot < rows.count ? rows[slot].frame.minY - 2.5 : (rows.last.map { $0.frame.maxY + 0.5 } ?? 0)
+        // At the end: below the last cue and any sub-cues open under it.
+        let bottom = rows.last.map { last in (steps[last.cue.id]?.last?.frame ?? last.frame).maxY + 0.5 } ?? 0
+        let y = slot < rows.count ? rows[slot].frame.minY - 2.5 : bottom
         insertion.frame = NSRect(x: 6, y: y, width: document.bounds.width - 12, height: 2)
         insertion.isHidden = false
     }
@@ -345,7 +391,65 @@ final class CueListView: NSScrollView {
         for row in rows {
             row.frame = NSRect(x: 0, y: y, width: width, height: row.preferredHeight)
             y += row.preferredHeight + 3
+            for sub in steps[row.cue.id] ?? [] {
+                sub.frame = NSRect(x: 0, y: y, width: width, height: SubCueRowView.height)
+                y += SubCueRowView.height + 1
+            }
         }
         document.frame = NSRect(x: 0, y: 0, width: width, height: max(y, contentSize.height))
+    }
+}
+
+/// One GO a cue waits for, under its cue: "GO 2 · Dracula? No." It has no
+/// number of its own. GOs already reached are dimmed and ticked; the one
+/// standing by has the brass bar. A click stands it by. It is drawn from
+/// its cue's content, so it can't be dragged or deleted.
+final class SubCueRowView: NSView {
+    let cue: UUID
+    let index: Int
+    let count: Int
+    let point: GoPoint
+    var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true } } }
+    var isTaken = false { didSet { if isTaken != oldValue { needsDisplay = true } } }
+    var onClick: (UUID, Int) -> Void = { _, _ in }
+
+    static let height: CGFloat = 22
+
+    init(cue: UUID, index: Int, count: Int, point: GoPoint) {
+        self.cue = cue
+        self.index = index
+        self.count = count
+        self.point = point
+        super.init(frame: .zero)
+        toolTip = "GO \(index + 1) of \(count): \(point.unit.rawValue) \u{2014} \(point.text)"
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isStandby {
+            Desk.brass.setFill()
+            NSRect(x: 0, y: 3, width: 2, height: bounds.height - 6).fill()
+        }
+        func draw(_ text: String, _ font: NSFont, _ colour: NSColor, x: CGFloat, width: CGFloat, align: NSTextAlignment = .left) {
+            let style = NSMutableParagraphStyle()
+            style.alignment = align
+            style.lineBreakMode = .byTruncatingTail
+            NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: colour, .paragraphStyle: style])
+                .draw(in: NSRect(x: x, y: 2, width: width, height: 18))
+        }
+        let colour = isTaken ? Desk.dim.withAlphaComponent(0.6) : (isStandby ? Desk.brass : Desk.dim)
+        if isTaken { draw("\u{2713}", Desk.sans(11.5, .semibold), colour, x: 56, width: 14) }
+        let go = "GO \(index + 1)"
+        draw(go, Desk.mono(11.5, .semibold), colour, x: 78, width: 44)
+        draw("\u{00B7} " + point.text, Desk.sans(11.5), isTaken ? colour : Desk.text, x: 122, width: bounds.width - 132)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick(cue, index)
     }
 }

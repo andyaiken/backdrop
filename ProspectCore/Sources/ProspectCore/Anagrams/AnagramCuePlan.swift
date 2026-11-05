@@ -11,9 +11,9 @@ import Foundation
 /// beneath it in the order they stood, until a later step takes them up. The
 /// answer takes what it needs and lets the rest fade, as a move always has.
 ///
-/// The cue runs in parts. The first starts when the cue's hold ends; each
-/// after it waits for GO, as the cue's advance says. Within a part, each move
-/// sets off a pause after the one before it lands.
+/// The cue runs in parts, timed by a `GoTimeline`. The first starts when the
+/// cue's hold ends; each after it waits for GO, as the cue's advance says.
+/// Within a part, each move sets off a pause after the one before it lands.
 public struct AnagramCuePlan: Equatable, Sendable {
     /// One step as it stands on stage.
     public struct Step: Equatable, Sendable {
@@ -118,58 +118,14 @@ public struct AnagramCuePlan: Equatable, Sendable {
 }
 
 extension AnagramCuePlan {
-    /// When each part of a cue starts, as GO lets them go. The first starts
-    /// on frame 0, when the hold ends.
-    public struct Timeline: Equatable, Sendable {
-        public private(set) var starts = [0]
-        public let parts: [Int]
-
-        public init(parts: [Int]) {
-            self.parts = parts
-        }
-
-        /// Whether any part still waits for GO.
-        public var hasPartsLeft: Bool { starts.count < parts.count }
-
-        /// When the parts let go so far have all finished.
-        private var end: Int { starts[starts.count - 1] + parts[starts.count - 1] }
-
-        /// Done everything it can by frame `f`, with more still to come on GO.
-        public func isWaiting(at f: Int) -> Bool {
-            hasPartsLeft && f >= end
-        }
-
-        /// Every part has run, and the last has landed.
-        public func isFinished(at f: Int) -> Bool {
-            !hasPartsLeft && f >= end
-        }
-
-        /// GO on frame `f`: the next part starts then, or as soon as the part
-        /// before it has finished, if that is later, so nothing jumps.
-        public mutating func carryOn(at f: Int) {
-            guard hasPartsLeft else { return }
-            starts.append(max(f, end))
-        }
-
-        /// Every part let go, each straight after the one before, as when the
-        /// cue is put up finished.
-        public mutating func carryOnToEnd() {
-            while hasPartsLeft { starts.append(end) }
-        }
-
-        /// The frame a move sets off; nil while its part waits for GO.
-        public func start(of move: Move) -> Int? {
-            starts.indices.contains(move.part) ? starts[move.part] + move.offset : nil
-        }
-    }
-
     /// Which of a track's moves is on stage on frame `f`: the latest to have
     /// set off, or the first, waiting to go. Nil for an anagram that stands
     /// still.
-    public func shown(_ track: Track, at f: Int, timeline: Timeline) -> (index: Int, start: Int?)? {
+    public func shown(_ track: Track, at f: Int, timeline: GoTimeline) -> (index: Int, start: Int?)? {
         guard !track.moves.isEmpty else { return nil }
-        let started = track.moves.indices.last { timeline.start(of: track.moves[$0]).map { $0 <= f } ?? false }
+        func start(_ move: Move) -> Int? { timeline.start(part: move.part, offset: move.offset) }
+        let started = track.moves.indices.last { start(track.moves[$0]).map { $0 <= f } ?? false }
         let index = started ?? 0
-        return (index, timeline.start(of: track.moves[index]))
+        return (index, start(track.moves[index]))
     }
 }

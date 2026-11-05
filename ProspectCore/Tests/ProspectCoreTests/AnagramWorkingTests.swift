@@ -154,28 +154,10 @@ struct AnagramWorkingTests {
         #expect(plan(anagrams).parts == [33 + 10 + 33], "by itself, straight to RATS")
     }
 
-    @Test("GO starts the next part then, or once the part before has finished, so nothing jumps")
-    func timeline() {
-        var t = AnagramCuePlan.Timeline(parts: [0, 76, 39])
-        #expect(!t.isWaiting(at: -5) && t.isWaiting(at: 0), "waiting once the hold is over")
-        t.carryOn(at: 10)
-        #expect(!t.isWaiting(at: 50) && t.isWaiting(at: 86))
-        t.carryOn(at: 60)
-        #expect(t.starts == [0, 10, 86], "a GO before the first anagram is solved waits for it")
-        #expect(!t.isFinished(at: 124) && t.isFinished(at: 125) && !t.isWaiting(at: 125))
-
-        var early = AnagramCuePlan.Timeline(parts: [0, 33])
-        early.carryOn(at: -20)
-        #expect(early.starts == [0, 0], "a GO during the hold goes as the hold ends")
-        var settled = AnagramCuePlan.Timeline(parts: [0, 76, 39])
-        settled.carryOnToEnd()
-        #expect(settled.starts == [0, 0, 76] && settled.isFinished(at: 115))
-    }
-
     @Test("Each anagram shows the latest move to set off, or its first, waiting")
     func shown() {
         let p = plan([Self.rats, Self.listen, Anagram(text: "Rose")], advance: .eachAnagram)
-        var t = AnagramCuePlan.Timeline(parts: p.parts)
+        var t = GoTimeline(parts: p.parts)
         t.carryOn(at: 10)
         #expect(p.shown(p.tracks[0], at: 5, timeline: t)! == (0, 10))
         #expect(p.shown(p.tracks[0], at: 60, timeline: t)! == (1, 53))
@@ -201,21 +183,23 @@ struct AnagramWorkingTests {
         ])
     }
 
-    @Test("The printed sheet lists each anagram, its working and its answer, and marks every GO")
+    @Test("The printed sheet lists each anagram, its working and its answer, and gives every GO a row of its own")
     func sheet() {
-        func content(_ advance: AnagramAdvance?) -> [String] {
-            CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.louvre, Self.lisa], advance: advance)]), title: "T", layout: .dsm)
-                .rows[0].content
+        func rows(_ advance: AnagramAdvance?, _ layout: CueSheet.Layout = .dsm) -> [CueSheet.Row] {
+            CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.louvre, Self.lisa], advance: advance)]), title: "T", layout: layout).rows
         }
-        #expect(content(nil) == ["O, Draconian devil!", "\u{2026} Dracula? No.", "\u{2192} Leonardo da Vinci!",
-                                 "Oh, lame saint!", "\u{2192} The Mona Lisa!"])
-        #expect(content(.eachAnagram) == ["GO O, Draconian devil!", "\u{2026} Dracula? No.", "\u{2192} Leonardo da Vinci!",
-                                          "GO Oh, lame saint!", "\u{2192} The Mona Lisa!"])
-        #expect(content(.eachStep) == ["O, Draconian devil!", "GO \u{2026} Dracula? No.", "GO \u{2192} Leonardo da Vinci!",
-                                       "Oh, lame saint!", "GO \u{2192} The Mona Lisa!"])
+        let lines = ["O, Draconian devil!", "\u{2026} Dracula? No.", "\u{2192} Leonardo da Vinci!", "Oh, lame saint!", "\u{2192} The Mona Lisa!"]
+        #expect(rows(nil).count == 1 && rows(nil)[0].content == lines)
+        let each = rows(.eachAnagram)
+        #expect(each[0].content == lines, "the cue's own row as before")
+        #expect(each.dropFirst().map(\.type) == ["GO 1", "GO 2"] && each.dropFirst().map(\.go) == [1, 2])
+        #expect(each.dropFirst().map(\.content) == [["O, Draconian devil!"], ["Oh, lame saint!"]])
+        #expect(each.dropFirst().allSatisfy { $0.number.isEmpty && $0.cuePoint.isEmpty }, "no number, and a cue point left for pencil")
+        #expect(rows(.eachStep).dropFirst().map(\.content) == [["Dracula? No."], ["Leonardo da Vinci!"], ["The Mona Lisa!"]])
+        #expect(rows(.eachStep, .operatorSettings).count == 1, "the operator's layout keeps one row a cue")
         let skipped = CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Anagram(text: "Leonardo da Vinci!"),
             Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!", ignored: true)], advance: .eachStep)]), title: "T", layout: .dsm)
-        #expect(skipped.rows[0].content == ["Leonardo da Vinci! (solved)", "Oh, lame saint! (ignored)"], "and no GO for either")
+        #expect(skipped.rows.map(\.content) == [["Leonardo da Vinci! (solved)", "Oh, lame saint! (ignored)"]], "and no GO for either")
         let settings = CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.rats], advance: .eachStep)]), title: "T",
                                 layout: .operatorSettings).rows[0].settings
         #expect(settings.first { $0.name == "Advance" } == CueSheet.Setting(name: "Advance", value: "each step on GO", overridden: true))
@@ -246,79 +230,124 @@ struct AnagramWorkingTests {
 
     // MARK: The playhead
 
-    @Test("GO carries a waiting cue on, point by point, before the next cue fires")
+    @Test("GO carries a waiting cue on, step by step, before the next cue fires")
     func goCarriesOn() {
+        let sheet = Show(cues: [titleCue("1"), anagramCue("2", [Self.rats], advance: .eachStep), titleCue("3")])
+        let (two, three) = (sheet.cues[1].id, sheet.cues[2].id)
+        var p = Playhead(show: sheet)
+        _ = p.go(in: sheet)
+        #expect(p.standby == two && p.standbyStep == nil)
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: two, presentation: .run, automatic: false))
+        #expect(p.standby == two && p.standbyStep == 0, "its first step stands by next")
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: two, presentation: .carryOn, automatic: false))
+        #expect(p.standbyStep == 1 && p.live == two)
+        _ = p.go(in: sheet)
+        #expect(p.standby == three && p.standbyStep == nil)
+        #expect(p.go(in: sheet)?.cue == three)
+    }
+
+    @Test("The arrows move a row at a time, through every cue's steps, live or not")
+    func arrows() {
         let sheet = Show(cues: [titleCue("1"), anagramCue("2", [Self.rats], advance: .eachStep), titleCue("3")])
         let (one, two, three) = (sheet.cues[0].id, sheet.cues[1].id, sheet.cues[2].id)
         var p = Playhead(show: sheet)
-        _ = p.go(in: sheet)
-        #expect(p.standingByGoPoint == nil && p.standby == two)
-        #expect(p.go(in: sheet) == Playhead.Fire(cue: two, presentation: .run, automatic: false))
-        #expect(p.standingByGoPoint == 0 && p.standby == three, "the cue after waits behind its GO points")
-        #expect(p.go(in: sheet) == Playhead.Fire(cue: two, presentation: .carryOn, automatic: false))
-        #expect(p.standingByGoPoint == 1 && p.live == two)
-        _ = p.go(in: sheet)
-        #expect(p.standingByGoPoint == nil && p.standby == three)
-        #expect(p.go(in: sheet)?.cue == three)
-        _ = one
+        var rows: [String] = []
+        func row() -> String { [p.standby.map { $0 == one ? "1" : $0 == two ? "2" : $0 == three ? "3" : "?" } ?? "end",
+                                p.standbyStep.map { "/\($0)" } ?? ""].joined() }
+        for _ in 0..<5 {
+            rows.append(row())
+            p.standByNext(in: sheet)
+        }
+        rows.append(row())
+        #expect(rows == ["1", "2", "2/0", "2/1", "3", "end"])
+        rows = []
+        for _ in 0..<5 {
+            p.standByPrevious(in: sheet)
+            rows.append(row())
+        }
+        p.standByPrevious(in: sheet)
+        rows.append(row())
+        #expect(rows == ["3", "2/1", "2/0", "2", "1", "1"], "from the end of the sheet back to the first cue, which stays")
+        p.standBy(two, step: 1, in: sheet)
+        #expect(row() == "2/1")
+        p.standBy(two, step: 5, in: sheet)
+        #expect(row() == "2", "a step the cue doesn't have stands by the cue")
+        p.standBy(two, step: 1, in: sheet)
+        p.standBy(three)
+        #expect(row() == "3", "a click on a cue stands by the cue itself")
     }
 
-    @Test("→ skips a cue's GO points to the cue after it; ← comes back to them")
-    func arrows() {
-        let sheet = Show(cues: [anagramCue("1", [Self.rats], advance: .eachStep), titleCue("2")])
+    @Test("A step of another cue fires that cue there, the steps before it already done")
+    func fireAtStep() {
+        let sheet = Show(cues: [titleCue("1"), anagramCue("2", [Self.rats], advance: .eachStep), titleCue("3")])
+        let two = sheet.cues[1].id
         var p = Playhead(show: sheet)
         _ = p.go(in: sheet)
-        p.standByNext(in: sheet)
-        #expect(p.standingByGoPoint == nil && p.standby == sheet.cues[1].id)
-        p.standByPrevious(in: sheet)
-        #expect(p.standingByGoPoint == 0)
-        p.standByPrevious(in: sheet)
-        #expect(p.standingByGoPoint == nil && p.standby == sheet.cues[0].id, "the live cue itself, to fire again")
-        p.standByNext(in: sheet)
-        #expect(p.standingByGoPoint == 0 && p.standby == sheet.cues[1].id)
-        p.standBy(sheet.cues[1].id)
-        #expect(p.standingByGoPoint == nil, "a click stands by a cue")
-        // The last cue with GO points: ← from the end of the sheet comes back to them.
-        let last = Show(cues: [titleCue("1"), anagramCue("2", [Self.rats], advance: .eachAnagram)])
-        var q = Playhead(show: last)
-        _ = q.go(in: last)
-        _ = q.go(in: last)
-        q.standByNext(in: last)
-        #expect(q.standby == nil && q.standingByGoPoint == nil)
-        q.standByPrevious(in: last)
-        #expect(q.standingByGoPoint == 0)
+        p.standBy(two, step: 1, in: sheet)
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: two, presentation: .run, automatic: false, step: 1))
+        #expect(p.live == two && p.goPointsTaken == 2)
+        #expect(p.standby == sheet.cues[2].id && p.standbyStep == nil)
     }
 
-    @Test("R starts a cue's GO points again; a resume, a redraw or a delete leaves none")
+    @Test("Within the live cue, GO jumps straight to a step, forward or back")
+    func jumps() {
+        let sheet = Show(cues: [anagramCue("1", [Self.rats], advance: .eachStep), titleCue("2")])
+        let one = sheet.cues[0].id
+        var p = Playhead(show: sheet)
+        _ = p.go(in: sheet)
+        p.standBy(one, step: 1, in: sheet)
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: one, presentation: .carryOn, automatic: false, step: 1), "forward, past step 0")
+        #expect(p.goPointsTaken == 2 && p.standby == sheet.cues[1].id)
+        p.standBy(one, step: 0, in: sheet)
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: one, presentation: .carryOn, automatic: false, step: 0), "back to a step done")
+        #expect(p.goPointsTaken == 1 && p.standbyStep == 1)
+        #expect(p.go(in: sheet) == Playhead.Fire(cue: one, presentation: .carryOn, automatic: false), "then on to the next as usual")
+    }
+
+    @Test("R starts a cue's steps again; a resume or a redraw finishes them; a delete clears them")
     func rerunAndResume() {
         let sheet = Show(cues: [anagramCue("1", [Self.rats, Self.listen], advance: .eachAnagram), titleCue("2")])
         let id = sheet.cues[0].id
         var p = Playhead(show: sheet)
         _ = p.go(in: sheet)
         _ = p.go(in: sheet)
-        #expect(p.standingByGoPoint == 1)
+        #expect(p.standbyStep == 1)
         #expect(p.rerun(in: sheet)?.presentation == .run)
-        #expect(p.standingByGoPoint == 0 && p.goPointsTaken == 0)
-        p.liveCueRedrawn()
-        #expect(p.standingByGoPoint == nil && p.go(in: sheet)?.cue == sheet.cues[1].id)
+        #expect(p.standby == id && p.standbyStep == 0 && p.goPointsTaken == 0)
+        p.liveCueRedrawn(in: sheet)
+        #expect(p.goPointsTaken == 2 && p.standby == sheet.cues[1].id, "finished, it waits for nothing")
 
         var resumed = Playhead(show: sheet)
         _ = resumed.resume(at: id, in: sheet)
-        #expect(resumed.standingByGoPoint == nil, "put up finished, it waits for nothing")
+        #expect(resumed.goPointsTaken == 2 && resumed.standby == sheet.cues[1].id, "put up finished, it waits for nothing")
 
         var deleted = Playhead(show: sheet)
         _ = deleted.go(in: sheet)
         let edited = Show(cues: [sheet.cues[1]])
         deleted.reconcile(from: sheet, to: edited)
-        #expect(deleted.live == nil && deleted.standingByGoPoint == nil)
+        #expect(deleted.live == nil && deleted.standbyStep == nil && deleted.standby == sheet.cues[1].id)
     }
 
-    @Test("A cue the show continues into has its GO points too")
+    @Test("A step that an edit takes away gives way to its cue")
+    func editedAway() {
+        let sheet = Show(cues: [anagramCue("1", [Self.rats], advance: .eachStep), titleCue("2")])
+        var p = Playhead(show: sheet)
+        p.standBy(sheet.cues[0].id, step: 1, in: sheet)
+        var edited = sheet
+        if case .anagram(var c) = edited.cues[0].content {
+            c.overrides.advance = .byItself
+            edited.cues[0].content = .anagram(c)
+        }
+        p.reconcile(from: sheet, to: edited)
+        #expect(p.standby == sheet.cues[0].id && p.standbyStep == nil)
+    }
+
+    @Test("A cue the show continues into has its steps too")
     func continuedInto() {
         let sheet = Show(cues: [titleCue("1", continues: .after(ms: 0)), anagramCue("2", [Self.rats], advance: .eachAnagram)])
         var p = Playhead(show: sheet)
         _ = p.go(in: sheet)
         #expect(p.continueAfter(sheet.cues[0].id, in: sheet)?.automatic == true)
-        #expect(p.standingByGoPoint == 0)
+        #expect(p.standby == sheet.cues[1].id && p.standbyStep == 0)
     }
 }

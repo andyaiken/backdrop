@@ -27,8 +27,8 @@ On first launch Prospect opens a new, empty show. To try it:
 
 | Key | In show mode |
 | --- | --- |
-| Space | Fire the standby cue, or carry on an anagram cue waiting for GO. Nothing else fires a cue |
-| → ↓ PageDown, ← ↑ PageUp | Stand by the next or previous cue, or skip a waiting anagram cue's GOs |
+| Space | Fire the standby cue, or go to the step of a cue that stands by. Nothing else fires a cue |
+| → ↓ PageDown, ← ↑ PageUp | Stand by the next or previous row: a cue, or one of the GOs a cue waits for |
 | 0–9 and `.`, then Return | Stand by a cue by number |
 | R | Run the live cue again |
 | B | Blackout |
@@ -95,7 +95,7 @@ Every kind of cue keeps its code in a folder of its own name in each library, so
 
 The projector window and the console's live preview are both surfaces. A renderer paints every surface from one shared plan, so any randomness is rolled once per frame and the two surfaces never disagree. Only `VideoRenderer` treats the two differently: the preview shows a poster and a position readout instead of a second player.
 
-`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram cue set to advance on GO waits partway; while it does, its next GO point stands by ahead of the next cue, and GO carries it on rather than firing anything new.
+`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram cue set to advance on GO waits partway, and each GO it waits for is a step that can stand by like a cue. GO on a step of the live cue carries it on there, or straight there, forward or back; GO on a step of another cue fires that cue at that step, with the steps before it already done.
 
 In edit mode, every change goes through `ShowController.edit`. That makes it one undo step, and slider drags are merged into a single step. If the cue on stage is affected, it is redrawn in its finished state.
 

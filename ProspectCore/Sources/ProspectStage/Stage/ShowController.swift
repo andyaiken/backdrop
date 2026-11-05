@@ -127,6 +127,12 @@ public final class ShowController {
         say(nil)
     }
 
+    /// A click on one of a cue's steps: GO then goes straight to it.
+    public func standBy(_ id: UUID, step: Int) {
+        playhead.standBy(id, step: step, in: show)
+        say(nil)
+    }
+
     /// The Go-to field, which reaches numbers with letters in them.
     public func standBy(number: String) {
         let trimmed = number.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -171,8 +177,8 @@ public final class ShowController {
         say(playhead.blackout ? "Blacked out. Press B to bring the picture back." : nil)
     }
 
-    /// The live cue's next GO point, when that is what stands by: GO carries
-    /// the live cue on to it.
+    /// A step of a cue, when that is what stands by: GO carries the live cue
+    /// on or back to it, or fires another cue straight at it.
     public struct StandingByGoPoint: Equatable, Sendable {
         public var cue: Cue
         public var point: GoPoint
@@ -182,16 +188,16 @@ public final class ShowController {
     }
 
     public var standingByGoPoint: StandingByGoPoint? {
-        guard let index = playhead.standingByGoPoint, let id = playhead.live, let cue = show[id] else { return nil }
+        guard let index = playhead.standbyStep, let id = playhead.standby, let cue = show[id] else { return nil }
         let points = cue.goPoints(defaults: show.settings)
         guard points.indices.contains(index) else { return nil }
         return StandingByGoPoint(cue: cue, point: points[index], number: index + 1, count: points.count)
     }
 
-    /// The cue GO acts on: the live cue when its GO point stands by,
-    /// otherwise the standby cue. The editor and Cue Settings show this one.
+    /// The cue GO acts on, whether it stands by itself or by one of its
+    /// steps. The editor and Cue Settings show this one.
     public var standingByCue: Cue? {
-        standingByGoPoint?.cue ?? playhead.standby.flatMap { show[$0] }
+        playhead.standby.flatMap { show[$0] }
     }
 
     /// What the standby panel says about a video cue standing by: armed and
@@ -330,7 +336,7 @@ public final class ShowController {
         guard cue.kind != .video, cue != unchanged || defaultsChanged else { return }
         runner.redraw(cue, defaults: show.settings, at: now())
         // Finished, it waits for no more GOs.
-        playhead.liveCueRedrawn()
+        playhead.liveCueRedrawn(in: show)
         needsTicks(true)
     }
 
@@ -416,10 +422,11 @@ public final class ShowController {
     private func perform(_ fire: Playhead.Fire) {
         guard let cue = show[fire.cue] else { return }
         if fire.presentation == .carryOn {
-            // The same cue, on from where it waits: no transition, no new
-            // timed continue, and nothing new for the crash record.
+            // The same cue, on from where it waits or straight to another
+            // of its steps: no transition, no new timed continue, and nothing
+            // new for the crash record.
             message = nil
-            runner.carryOn(at: now())
+            if let step = fire.step { runner.goTo(step, at: now()) } else { runner.carryOn(at: now()) }
             needsTicks(true)
             changed()
             return
@@ -430,7 +437,8 @@ public final class ShowController {
         switch fire.presentation {
         case .run:
             let time = now()
-            runner.change(to: cue, defaults: show.settings, transition: cue.transitionIn(defaults: show.settings), at: time)
+            runner.change(to: cue, defaults: show.settings, transition: cue.transitionIn(defaults: show.settings), at: time,
+                          startingAt: fire.step)
             // Timed from GO, whatever the cue's transition.
             if case .after(let ms) = cue.continueMode {
                 continueAt = (cue.id, time + Double(ms) / 1000)

@@ -105,6 +105,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             self.window?.makeFirstResponder(self.root)
             self.controller.standBy(id)
         }
+        cueList.onStepClick = { [weak self] id, step in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.root)
+            self.controller.standBy(id, step: step)
+        }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
         cueList.onMove = { [weak controller] id, offset in controller?.moveCue(id, by: offset) }
@@ -203,8 +208,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let show = controller.show, playhead = controller.playhead, projector = controller.projector
         let live = playhead.live.flatMap { show[$0] }
         let next = playhead.standby.flatMap { show[$0] }
-        // While the live cue waits partway, its next GO point stands by ahead
-        // of the next cue, and GO carries it on.
+        // A step of a cue may stand by rather than the cue itself: GO carries
+        // the live cue on or back to it, or fires another cue straight at it.
         let goPoint = controller.standingByGoPoint
         synchronizeWindowTitleWithDocumentName()
 
@@ -215,12 +220,14 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             live: isLive && !playhead.blackout,
             warn: playhead.blackout || projector.warning != nil,
             projectorOpen: projector.isOpen,
-            goEnabled: next != nil || goPoint != nil,
-            goTip: goPoint.map { "Carry cue \($0.cue.number) on" } ?? next.map { "Fire cue \($0.number)" } ?? "End of the cue sheet"
+            goEnabled: next != nil,
+            goTip: goPoint.map { $0.cue.id == playhead.live ? "Carry cue \($0.cue.number) on" : "Fire cue \($0.cue.number) at GO \($0.number)" }
+                ?? next.map { "Fire cue \($0.number)" } ?? "End of the cue sheet"
         )
         standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState)
-        cueList.update(cues: show.cues, defaults: show.settings, standby: goPoint?.cue.id ?? playhead.standby, live: playhead.live,
-                       issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit)
+        cueList.update(cues: show.cues, defaults: show.settings, standby: playhead.standby, standbyStep: playhead.standbyStep,
+                       live: playhead.live, taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)),
+                       editing: controller.mode == .edit)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing)
         cueSettings.update(cue: editing, defaults: show.settings)

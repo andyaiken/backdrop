@@ -37,7 +37,7 @@ public final class StageRunner {
         /// A whole fade's length. A fade that begins partway takes less.
         var seconds: Double
         /// The cue waiting for the curtain to come down.
-        var next: (cue: Cue, defaults: ShowSettings)?
+        var next: (cue: Cue, defaults: ShowSettings, step: Int?)?
     }
 
     private var change: Change?
@@ -110,20 +110,22 @@ public final class StageRunner {
 
     /// Changes to a cue by its transition: at once for a snap; for a fade,
     /// down to black and up on the cue, whose clock starts as it appears.
-    public func change(to cue: Cue, defaults: ShowSettings, transition: Transition, at time: Double) {
+    /// With a step, the cue comes up at that GO point, the steps before it
+    /// already done.
+    public func change(to cue: Cue, defaults: ShowSettings, transition: Transition, at time: Double, startingAt step: Int? = nil) {
         switch transition.style {
         case .snap:
-            load(cue, defaults: defaults, presentation: .run, at: time)
+            load(cue, defaults: defaults, presentation: .run, at: time, startingAt: step)
         case .fade:
             if self.cue == nil {
                 // Nothing to fade out, so straight up from black.
                 curtain = 1
-                bringUp(cue, defaults: defaults, at: time, seconds: transition.fadeSeconds)
+                bringUp(cue, defaults: defaults, at: time, seconds: transition.fadeSeconds, step: step)
             } else {
                 // Down from wherever the curtain is, so nothing flashes up:
                 // a fade out carries on, and a fade in turns round.
                 change = Change(phase: .out, start: time, from: curtain, seconds: transition.fadeSeconds,
-                                next: (cue, defaults))
+                                next: (cue, defaults, step))
             }
         }
         // A crossfade would be a third style: a second deck of renderers would
@@ -133,18 +135,19 @@ public final class StageRunner {
     /// Puts a cue on stage at once, with no transition. `.run` starts it from
     /// its hold; `.settled` puts it up finished, with nothing animating, as
     /// when resuming after a crash.
-    public func load(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double) {
+    public func load(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double,
+                     startingAt step: Int? = nil) {
         change = nil
         curtain = 0
-        put(cue, defaults: defaults, presentation: presentation, at: time)
+        put(cue, defaults: defaults, presentation: presentation, at: time, step: step)
     }
 
-    private func bringUp(_ cue: Cue, defaults: ShowSettings, at time: Double, seconds: Double) {
-        put(cue, defaults: defaults, presentation: .run, at: time)
+    private func bringUp(_ cue: Cue, defaults: ShowSettings, at time: Double, seconds: Double, step: Int?) {
+        put(cue, defaults: defaults, presentation: .run, at: time, step: step)
         change = Change(phase: .into, start: time, from: curtain, seconds: seconds)
     }
 
-    private func put(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double) {
+    private func put(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double, step: Int?) {
         // Every renderer is wiped on every surface, not just the incoming one.
         for (kind, renderer) in renderers {
             for surface in surfaces {
@@ -179,6 +182,7 @@ public final class StageRunner {
             isRunning = false
             settlePending = true
         case .run, .carryOn:
+            if let step, let waits = renderer as? WaitsForGO, let clock { waits.goTo(step, at: clock.frame(at: time)) }
             isRunning = true
             settlePending = false
             paint(at: time)
@@ -191,6 +195,17 @@ public final class StageRunner {
         guard let cue, let clock, let renderer = renderers[cue.kind] as? WaitsForGO else { return }
         renderer.carryOn(at: clock.frame(at: time))
         isRunning = true
+        lastFrame = nil
+        paint(at: time)
+    }
+
+    /// GO on a step of the cue on stage that isn't simply its next: straight
+    /// there, forward or back, with no transition.
+    public func goTo(_ step: Int, at time: Double) {
+        guard let cue, let clock, let renderer = renderers[cue.kind] as? WaitsForGO else { return }
+        renderer.goTo(step, at: clock.frame(at: time))
+        isRunning = true
+        settlePending = false
         lastFrame = nil
         paint(at: time)
     }
@@ -256,7 +271,7 @@ public final class StageRunner {
             curtain = change.from + (1 - change.from) * Self.ease(done)
             guard done >= 1, let next = change.next else { return }
             // In the dark: the next cue goes up from the moment it went black.
-            bringUp(next.cue, defaults: next.defaults, at: change.start + length, seconds: change.seconds)
+            bringUp(next.cue, defaults: next.defaults, at: change.start + length, seconds: change.seconds, step: next.step)
             advanceChange(to: time)
         case .into:
             let length = change.seconds * change.from

@@ -77,6 +77,10 @@ public protocol WaitsForGO: AnyObject {
     func carryOn(at f: Int)
     /// Lets every part go, as when the cue is put up finished.
     func carryOnToEnd()
+    /// GO straight to GO point `point` on frame `f`, forward or back: the
+    /// stage at once as it stands just before it, with no animation, and the
+    /// part that point lets go running from then.
+    func goTo(_ point: Int, at f: Int)
 }
 
 /// How ready a cue that may fire next is.
