@@ -42,10 +42,27 @@ spec.md                      the specification and every decision taken
 Prospect.xcodeproj           the app project and its shared scheme
 Config/Prospect-Info.plist   document type and the .prospect UTI
 Prospect/                    the app: AppKit windows, menus, documents
+  App/                       launch, menus, keys, preferences, the crash record
+  Document/                  the show document and its display clock
+  Console/                   the console window and its panels
+    Editing/                 edit mode's cue editor and settings panels
+  Projector/                 the projector window and display handling
+  Morph/                     the morph points window
+  Debug/                     the snapshot and document-check launch tools
   AppIcon.icon               the app icon, an Icon Composer document
 ProspectCore/                a Swift package with two libraries
   Sources/ProspectCore       the show model; no AppKit
+    Show/                    shows, cues, settings, the package and the cue sheet
+    Running/                 the playhead, the clock, continues, transitions
+    Decryption/ Anagrams/    one folder per kind of cue that has a model
+    Images/ Morphs/
+    Support/                 colour, random numbers, rounding, small helpers
   Sources/ProspectStage      the renderers and the show controller; no windows
+    Stage/                   the controller, the runner, surfaces and type
+    Decryption/ Anagrams/    one folder per kind of cue: its renderer, and
+    Images/ Morphs/          its layout and drawing where they need their own
+    Video/ Blank/
+    Printing/                the printed cue sheet
   Tests/                     tests for both, including recorded outputs
 tools/package.sh             builds the zip and disk image for another Mac
 ```
@@ -63,11 +80,13 @@ The split follows the spec's architecture, in three layers:
 
   None of it needs a window, so its tests render offscreen.
 - **Prospect**, the app, holds only what needs AppKit. Its main files:
-  - [ShowDocument.swift](Prospect/ShowDocument.swift) and [DocumentController.swift](Prospect/DocumentController.swift): the document, with one show open at a time.
-  - [ConsoleWindow.swift](Prospect/ConsoleWindow.swift): the console window.
-  - [Projector.swift](Prospect/Projector.swift): the projector window and display handling.
-  - [SettingsPanels.swift](Prospect/SettingsPanels.swift) and [ConsoleEditor.swift](Prospect/ConsoleEditor.swift): the editing panels.
-  - [ProspectApp.swift](Prospect/ProspectApp.swift): launch, menus and the crash record.
+  - [ShowDocument.swift](Prospect/Document/ShowDocument.swift) and [DocumentController.swift](Prospect/App/DocumentController.swift): the document, with one show open at a time.
+  - [ConsoleWindow.swift](Prospect/Console/ConsoleWindow.swift): the console window, built from the panels beside it in `Console/`.
+  - [Projector.swift](Prospect/Projector/Projector.swift): the projector window and display handling.
+  - [CueEditor.swift](Prospect/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Prospect/Console/Editing/SettingsPanels.swift): the editing panels.
+  - [ProspectApp.swift](Prospect/App/ProspectApp.swift) and [MainMenu.swift](Prospect/App/MainMenu.swift): launch and the menus.
+
+Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `ProspectCore/Sources/ProspectCore/Anagrams` and `ProspectCore/Sources/ProspectStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.
 
 ### How a cue gets on screen
 
@@ -138,7 +157,7 @@ DaVinciCode.prospect/
   version      the format version
 ```
 
-`show.json` is readable JSON, so a show can be diffed in a repository and repaired by hand if it ever has to be. Prospect autosaves in place and keeps versions with macOS's version history. If a show won't open, the file is left untouched and Prospect offers to restore an earlier version. A show saved by a newer version of Prospect is refused rather than rewritten. See [ShowPackage.swift](ProspectCore/Sources/ProspectCore/ShowPackage.swift).
+`show.json` is readable JSON, so a show can be diffed in a repository and repaired by hand if it ever has to be. Prospect autosaves in place and keeps versions with macOS's version history. If a show won't open, the file is left untouched and Prospect offers to restore an earlier version. A show saved by a newer version of Prospect is refused rather than rewritten. See [ShowPackage.swift](ProspectCore/Sources/ProspectCore/Show/ShowPackage.swift).
 
 ## Copying to another Mac
 
