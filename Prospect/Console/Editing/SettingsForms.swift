@@ -216,7 +216,7 @@ struct ShowDefaultsView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Title", text: Binding(get: { title }, set: onTitle),
+                TextField("Title", text: Binding(get: { title }, set: { onTitle($0) }),
                           prompt: Text("\(fallback) (the file\u{2019}s name)"))
                     // Return and Escape both hand the keyboard back to the
                     // show keys. The title is already saved as it is typed.

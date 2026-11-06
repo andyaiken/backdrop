@@ -64,7 +64,7 @@ struct ProjectionAreaView: View {
             }
 
             Section {
-                Toggle("Alignment guides", isOn: Binding(get: { guidesOn }, set: onGuides))
+                Toggle("Alignment guides", isOn: Binding(get: { guidesOn }, set: { onGuides($0) }))
                     .focusable(false)
                 Button("Fill the Output") { onChange(Geometry()) }
                     .focusable(false)

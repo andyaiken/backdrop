@@ -16,7 +16,16 @@ enum TestClips {
 
     private static var made: Set<String> = []
 
-    static func clip(_ name: String, seconds: Double, red: UInt8 = 200, green: UInt8 = 40, blue: UInt8 = 40) async throws -> String {
+    /// - Parameters:
+    ///   - transform: What the file asks a player to do with the picture.
+    ///   - topHalf: A second colour over the top half, so which way up the
+    ///     picture ends is something a test can see.
+    ///   - firstFrame: A colour for frame 0 alone, to tell the frame playing
+    ///     now apart from the one the poster was made from.
+    static func clip(_ name: String, seconds: Double, red: UInt8 = 200, green: UInt8 = 40, blue: UInt8 = 40,
+                     transform: CGAffineTransform = .identity,
+                     topHalf: (r: UInt8, g: UInt8, b: UInt8)? = nil,
+                     firstFrame: (r: UInt8, g: UInt8, b: UInt8)? = nil) async throws -> String {
         let url = folder.appendingPathComponent(name)
         if made.contains(name) { return name }
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
@@ -24,6 +33,7 @@ enum TestClips {
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 160, AVVideoHeightKey: 90,
         ])
         input.expectsMediaDataInRealTime = false
+        input.transform = transform
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: 160, kCVPixelBufferHeightKey as String: 90,
@@ -42,8 +52,11 @@ enum TestClips {
             let rowBytes = CVPixelBufferGetBytesPerRow(pixels)
             for y in 0..<90 {
                 for x in 0..<160 {
+                    var (r, g, b) = (red, green, blue)
+                    if let topHalf, y < 45 { (r, g, b) = topHalf }
+                    if i == 0, let firstFrame { (r, g, b) = firstFrame }
                     let p = base + y * rowBytes + x * 4
-                    p[0] = blue; p[1] = green; p[2] = red; p[3] = 255
+                    p[0] = b; p[1] = g; p[2] = r; p[3] = 255
                 }
             }
             CVPixelBufferUnlockBaseAddress(pixels, [])
@@ -67,6 +80,21 @@ func eventually(within seconds: Double = 5, _ condition: () -> Bool) async -> Bo
         try? await Task.sleep(for: .milliseconds(20))
     }
     return condition()
+}
+
+/// Draws `image` at a known size and hands back a reader for its pixels.
+func pixels(of image: CGImage, width: Int, height: Int) -> (Int, Int) -> (r: Int, g: Int, b: Int) {
+    let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    let rowBytes = ctx.bytesPerRow
+    let bytes = [UInt8](UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self),
+                                            count: rowBytes * height))
+    return { x, y in
+        let i = y * rowBytes + x * 4
+        return (Int(bytes[i]), Int(bytes[i + 1]), Int(bytes[i + 2]))
+    }
 }
 
 func videoCue(_ src: String, atEnd: VideoEnd = .hold, number: String = "7") -> Cue {
@@ -145,6 +173,58 @@ struct VideoRendererTests {
         // With nothing on stage there is nothing to hand over.
         let empty = VideoRenderer(media: { _ in nil })
         #expect(empty.snapshot(size: CGSize(width: 100, height: 100)) == nil)
+    }
+
+    @Test("A crossfade takes the frame on stage now, not the clip\u{2019}s first")
+    func snapshotIsTheFrameOnStage() async throws {
+        // Green for frame 0 and red from then on: a clip that has been
+        // running for a moment must not hand over its poster.
+        let src = try await TestClips.clip("moving.mov", seconds: 1.5, firstFrame: (40, 200, 40))
+        let cue = videoCue(src)
+        #expect(await armed(cue))
+        renderer.prepare(cue, defaults: ShowSettings())
+        _ = renderer.frame(0)
+        #expect(await eventually { renderer.current!.player.currentTime().seconds > 0.3 })
+        let image = try #require(renderer.snapshot(size: CGSize(width: 400, height: 400)))
+        let centre = pixels(of: image, width: 400, height: 400)(200, 200)
+        #expect(centre.r > centre.g, "the frame playing now, which is red: \(centre)")
+        // And the poster really is the green first frame, so that meant something.
+        let poster = try #require(renderer.current?.poster)
+        let first = pixels(of: poster, width: 160, height: 90)(80, 45)
+        #expect(first.g > first.r, "the poster is the first frame: \(first)")
+    }
+
+    @Test("A clip the file asks to be turned is handed over turned")
+    func snapshotTurnsThePicture() async throws {
+        // 160 x 90 with a green top half, turned a quarter by the file: on
+        // stage it stands 90 x 160, with the green down one side.
+        let src = try await TestClips.clip("turned.mov", seconds: 1.5,
+                                           transform: CGAffineTransform(rotationAngle: .pi / 2),
+                                           topHalf: (40, 200, 40))
+        let cue = videoCue(src)
+        #expect(await armed(cue))
+        renderer.prepare(cue, defaults: ShowSettings())
+        _ = renderer.frame(0)
+        #expect(await eventually { renderer.current!.player.currentTime().seconds > 0.3 })
+
+        // The poster is AVFoundation turning the same picture itself, so
+        // which way round a quarter turn goes isn't worked out twice here.
+        let poster = try #require(renderer.current?.poster)
+        #expect(poster.width < poster.height, "the file asks for a picture on its end")
+        let upright = pixels(of: poster, width: 90, height: 160)
+        let greenToTheRight = upright(70, 80).g > upright(20, 80).g
+
+        let image = try #require(renderer.snapshot(size: CGSize(width: 400, height: 400)))
+        let shot = pixels(of: image, width: 400, height: 400)
+        // 90 x 160 on a 400 x 400 stage: the full height, black down the sides.
+        let top = shot(200, 4)
+        #expect(top.r + top.g + top.b > 0, "a standing picture fills the height: \(top)")
+        #expect(shot(8, 200) == (0, 0, 0), "black down the sides")
+        let right = shot(300, 200), left = shot(100, 200)
+        #expect((right.g > right.r) == greenToTheRight,
+                "turned the way AVFoundation turns it \u{2014} left \(left), right \(right)")
+        #expect((left.g > left.r) != greenToTheRight,
+                "and the other colour down the other side \u{2014} left \(left), right \(right)")
     }
 
     @Test("Hold: settles on reaching the end, frozen on the last frame")

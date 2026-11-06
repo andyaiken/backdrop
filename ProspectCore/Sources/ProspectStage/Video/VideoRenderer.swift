@@ -1,6 +1,7 @@
 import AVFoundation
 import ProspectCore
 import QuartzCore
+import VideoToolbox
 
 /// Video cues: moving footage. Unlike the other cue types a video doesn't
 /// resolve over a frame count, it plays, on AVPlayer's own clock; `frame`
@@ -48,6 +49,23 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
         var lastUsed = Date()
         var endObserver: NSObjectProtocol?
 
+        /// A tap on the picture the projector is being given, so a crossfade
+        /// can have the frame on stage without decoding the file a second
+        /// time. The last frame taken is kept, because a clip that has ended
+        /// is no longer being ticked and nothing more will arrive.
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: any Sendable](),
+        ])
+        /// Whichever item the output is on. A looper plays copies of the
+        /// template, not the template, and a fresh one each time round.
+        weak var outputItem: AVPlayerItem?
+        var lastFrame: CVPixelBuffer?
+        /// How the file says its picture stands up. Frames come off the
+        /// output as they were encoded; the player layer turns them, so
+        /// anything drawn from them has to be turned the same way.
+        var orientation = CGAffineTransform.identity
+
         init(cue: Cue, content: VideoContent) {
             self.cue = cue
             self.content = content
@@ -55,6 +73,8 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
             player.volume = 0
             // A held clip freezes on its last frame rather than emptying.
             player.actionAtItemEnd = .pause
+            // Reading frames off must not take them from the projector.
+            output.suppressesPlayerRendering = false
         }
 
         var elapsed: CMTime { player.currentTime() }
@@ -130,6 +150,9 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
             clip.player.pause()
             clip.playWhenArmed = false
             clip.reachedEnd = false
+            // Back at the start, so the frame it was stopped on is not the
+            // one to hand over if it is brought up again.
+            clip.lastFrame = nil
             clip.player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
         }
         started = false
@@ -154,36 +177,93 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
             started = true
             if f >= StageRunner.settledFrame { putUpFinished(clip) } else { play(clip) }
         }
+        keepCurrentFrame(clip)
         for tree in trees.values where !tree.isLive { updateReadout(tree, clip) }
         if case .failed = clip.state { return true }
         return clip.content.atEnd == .loop ? false : clip.reachedEnd
     }
 
     /// The frame on stage, for a crossfade out of a clip: an AVPlayerLayer
-    /// draws into no bitmap, so the clip's own current frame is read from the
-    /// file and set on black in the shape the player layer shows it.
+    /// draws into no bitmap, so the frame the projector was last given is
+    /// taken off the clip's own video output and set on black in the shape
+    /// the player layer shows it.
     public func snapshot(size: CGSize) -> CGImage? {
         guard let clip = current, clip.state == .armed || started,
-              let asset = clip.player.currentItem?.asset ?? clip.item?.asset,
               size.width >= 1, size.height >= 1 else { return nil }
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
-        generator.maximumSize = size
-        var time = clip.player.currentTime()
-        if !time.isValid || time.seconds.isNaN { time = .zero }
-        guard let frame = try? generator.copyCGImage(at: time, actualTime: nil) else { return nil }
+        // Asked for again here and not only on the tick: a clip that has
+        // ended stops being ticked, and its last frame arrives after that.
+        keepCurrentFrame(clip)
+        // Nothing comes off the output for the first instant of a clip,
+        // before a frame has been handed over. The poster is that clip's own
+        // first frame, decoded at arming and already the right way up, and
+        // the first instant is the only time it is what the projector shows.
+        let frame: CGImage, orientation: CGAffineTransform
+        if let pixels = clip.lastFrame, let picture = Self.image(from: pixels) {
+            (frame, orientation) = (picture, clip.orientation)
+        } else if let poster = clip.poster {
+            (frame, orientation) = (poster, .identity)
+        } else {
+            return nil
+        }
+
         let w = Int(size.width.rounded()), h = Int(size.height.rounded())
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
         ctx.setFillColor(CGColor(gray: 0, alpha: 1))
         ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        let scale = min(Double(w) / Double(frame.width), Double(h) / Double(frame.height))
-        let fw = Double(frame.width) * scale, fh = Double(frame.height) * scale
-        ctx.draw(frame, in: CGRect(x: (Double(w) - fw) / 2, y: (Double(h) - fh) / 2, width: fw, height: fh))
+
+        // The shape the audience sees, which is the encoded frame turned the
+        // way the file asks. The turn is pinned back to the origin first,
+        // since a preferred transform carries its own offset.
+        let encoded = CGRect(x: 0, y: 0, width: Double(frame.width), height: Double(frame.height))
+        let turned = encoded.applying(orientation)
+        guard turned.width >= 1, turned.height >= 1 else { return nil }
+        let upright = orientation.concatenating(CGAffineTransform(translationX: -turned.minX, y: -turned.minY))
+        let scale = min(Double(w) / turned.width, Double(h) / turned.height)
+        let fw = turned.width * scale, fh = turned.height * scale
+
+        // Worked in the film's own coordinates — origin top left, y
+        // downwards — the space a preferred transform is written in.
+        ctx.translateBy(x: 0, y: Double(h))
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.translateBy(x: (Double(w) - fw) / 2, y: (Double(h) - fh) / 2)
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.concatenate(upright)
+        // And back the right way up for the draw itself, which reads a
+        // CGImage as y upwards whatever the space around it does.
+        ctx.translateBy(x: 0, y: encoded.height)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(frame, in: encoded)
         return ctx.makeImage()
+    }
+
+    /// Keeps the output on whatever item is actually playing: a looper runs
+    /// copies of the template, and a fresh copy each time round.
+    private func follow(_ clip: Clip) {
+        guard let item = clip.player.currentItem, clip.outputItem !== item else { return }
+        clip.outputItem?.remove(clip.output)
+        item.add(clip.output)
+        clip.outputItem = item
+    }
+
+    /// Takes the frame being shown now, if the output has one. Held as it
+    /// comes rather than drawn, because drawing every frame would cost on
+    /// every tick what a crossfade costs once.
+    private func keepCurrentFrame(_ clip: Clip) {
+        follow(clip)
+        var time = clip.output.itemTime(forHostTime: CACurrentMediaTime())
+        if !time.isValid || time.seconds.isNaN { time = clip.player.currentTime() }
+        guard time.isValid, !time.seconds.isNaN,
+              let pixels = clip.output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil) else { return }
+        clip.lastFrame = pixels
+    }
+
+    private static func image(from pixels: CVPixelBuffer) -> CGImage? {
+        var image: CGImage?
+        guard VTCreateCGImageFromCVPixelBuffer(pixels, options: nil, imageOut: &image) == noErr else { return nil }
+        return image
     }
 
     public func fit(_ surface: SurfaceLayer) {
@@ -235,6 +315,9 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
         do {
             guard try await asset.load(.isPlayable) else { throw CocoaError(.fileReadCorruptFile) }
             clip.duration = try await asset.load(.duration)
+            if let track = try? await asset.loadTracks(withMediaType: .video).first {
+                clip.orientation = (try? await track.load(.preferredTransform)) ?? .identity
+            }
             let item = AVPlayerItem(asset: asset)
             clip.item = item
             if clip.content.atEnd == .loop {
@@ -267,6 +350,9 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
             clip.poster = try? await generator.image(at: .zero).image
 
             guard clips[clip.cue.id] === clip else { return }
+            // On before GO, so the first frame is already waiting when a
+            // quick second GO crossfades straight back out of it.
+            follow(clip)
             clip.state = .armed
             for tree in trees.values where !tree.isLive && current === clip { show(clip, on: tree) }
             if clip.playWhenArmed { clip.player.play() }
@@ -398,6 +484,9 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
     private func discard(_ clip: Clip) {
         clip.player.pause()
         clip.looper?.disableLooping()
+        clip.outputItem?.remove(clip.output)
+        clip.outputItem = nil
+        clip.lastFrame = nil
         clip.player.removeAllItems()
         if let observer = clip.endObserver { NotificationCenter.default.removeObserver(observer) }
         clips.removeValue(forKey: clip.cue.id)
