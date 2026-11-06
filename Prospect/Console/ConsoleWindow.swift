@@ -27,8 +27,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let warning = WarningBox()
     private let previewHeading = Desk.label("What the audience sees", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
-    private(set) var editor = CueEditorPanel()
-    private let cueSettings = CueSettingsPanel(scope: .settings)
+    private(set) var editor = CueEditorPanel(scope: .common)
+    private(set) var kindEditor = CueEditorPanel(scope: .kind)
     private let cueTransitions = CueSettingsPanel(scope: .transitions)
     private var showSettings: ShowSettingsWindowController?
     /// Edit mode's panels, one at a time beneath the preview.
@@ -36,7 +36,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// kind of cue runs with, named for the kind.
     private let tabs = NSSegmentedControl(labels: ["Cue", "Settings", "Transitions"],
                                           trackingMode: .selectOne, target: nil, action: nil)
-    private var inspectorPanels: [NSView] { [editor, cueSettings, cueTransitions] }
+    private var inspectorPanels: [NSView] { [editor, kindEditor, cueTransitions] }
     /// What the Inspector says with no cue standing by. It takes the tabs'
     /// place rather than sitting under them: with nothing to inspect, tabs
     /// onto empty forms are only noise.
@@ -54,7 +54,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
     /// Where a file in the show is on disk.
     var mediaURL: (String) -> URL? = { _ in nil } {
-        didSet { editor.mediaURL = mediaURL }
+        didSet { editor.mediaURL = mediaURL; kindEditor.mediaURL = mediaURL }
     }
     /// The morph points window, while one is open.
     private var points: MorphPointsWindowController?
@@ -130,16 +130,22 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
         cueList.onRenumberAll = { [weak self] in self?.confirmRenumber() }
-        editor.controller = controller
-        editor.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
-        editor.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
-        editor.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
-        editor.editRoute = { [weak self] id in self?.showRoute(for: id) }
-        editor.finishedEditing = { [weak self] in
-            guard let self else { return }
-            self.window?.makeFirstResponder(self.root)
+        for panel in [editor, kindEditor] {
+            panel.controller = controller
+            panel.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
+            panel.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
+            panel.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
+            panel.editRoute = { [weak self] id in self?.showRoute(for: id) }
+            panel.finishedEditing = { [weak self] in
+                guard let self else { return }
+                self.window?.makeFirstResponder(self.root)
+            }
         }
-        for panel in [cueSettings, cueTransitions] {
+        kindEditor.onSetting = { [weak controller] key, value, continuous in
+            guard let controller, let id = controller.standingByCue?.id else { return }
+            controller.setOverride(key, to: value, for: id, coalescing: continuous)
+        }
+        for panel in [cueTransitions] {
             panel.onChange = { [weak controller] key, value, continuous in
                 guard let controller, let id = controller.standingByCue?.id else { return }
                 controller.setOverride(key, to: value, for: id, coalescing: continuous)
@@ -151,7 +157,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.action = #selector(tabChosen)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, editor, cueSettings, cueTransitions, tabs, inspectorEmpty,
+                     warning, previewHeading, previewFrame, editor, kindEditor, cueTransitions, tabs, inspectorEmpty,
                      keybar] as [NSView] {
             root.addSubview(view)
         }
@@ -253,7 +259,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
                        taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing, goPoint: controller.standingByGoPoint)
-        cueSettings.update(cue: editing, defaults: show.settings)
+        kindEditor.update(cue: editing, goPoint: controller.standingByGoPoint)
         cueTransitions.update(cue: editing, defaults: show.settings)
         // The second tab is named for the kind of cue standing by, so what
         // it holds is plain before it is opened.
@@ -329,7 +335,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // its own, full height, so neither squashes the other and a long
         // panel scrolls rather than shrinking the picture.
         if editing, width >= Self.sideBySideWidth {
-            let editorWidth = max((width * 0.3).rounded(), 300)
+            let editorWidth = CGFloat(350)
             let previewWidth = width - editorWidth - gap
             let editorX = x + previewWidth + gap
             centre(inspectorEmpty, in: NSRect(x: editorX, y: y, width: editorWidth, height: max(0, bottom - 16 - y)))
@@ -346,7 +352,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // height so the preview doesn't jump as the tabs change.
         var available = bottom - 16 - y - headingHeight
         if inspecting {
-            let h = [editor.preferredHeight, cueSettings.preferredHeight, cueTransitions.preferredHeight].max() ?? 0
+            let h = [editor.preferredHeight, kindEditor.preferredHeight, cueTransitions.preferredHeight].max() ?? 0
             let panelFrame = NSRect(x: x, y: bottom - 16 - h, width: width, height: h)
             for panel in inspectorPanels { panel.frame = panelFrame }
             tabs.frame = NSRect(x: x, y: panelFrame.minY - 10 - tabsSize.height, width: tabsSize.width, height: tabsSize.height)

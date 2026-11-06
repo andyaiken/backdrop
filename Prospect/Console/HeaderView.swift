@@ -111,6 +111,7 @@ final class HeaderView: PanelHost<HeaderBar> {
 }
 
 struct HeaderBar: View {
+    @State private var showingAddCue = false
     @ObservedObject var state: HeaderState
 
     var body: some View {
@@ -132,17 +133,8 @@ struct HeaderBar: View {
             rule
 
             if state.editing {
-                Menu("Add Cue") {
-                    ForEach(Cue.Kind.common, id: \.self) { kind in
-                        Button { state.onAddCue(kind) } label: { Label(kind.heading, systemImage: kind.symbol) }
-                    }
-                    Divider()
-                    ForEach(Cue.Kind.others, id: \.self) { kind in
-                        Button { state.onAddCue(kind) } label: { Label(kind.heading, systemImage: kind.symbol) }
-                    }
-                    Divider()
-                    Button { state.onAddTransition() } label: { Label("Transition", systemImage: "arrow.down.to.line") }
-                }
+                Button("Add Cue") { showingAddCue.toggle() }
+                    .popover(isPresented: $showingAddCue, arrowEdge: .bottom) { addCueList }
                 .fixedSize()
                 .focusable(false)
                 .help("Adds a cue after the one standing by")
@@ -187,6 +179,47 @@ struct HeaderBar: View {
         Divider().frame(height: 26)
     }
 
+    /// The Add Cue popover: each kind with its icon, name and a line on what it does.
+    private var addCueList: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Cue.Kind.common, id: \.self) { addCueRow($0) }
+            Divider().padding(.vertical, 4)
+            ForEach(Cue.Kind.others, id: \.self) { addCueRow($0) }
+            Divider().padding(.vertical, 4)
+            addCueButton(symbol: "arrow.down.to.line", title: "Transition",
+                         blurb: "A pause between cues, with its own fade.") { state.onAddTransition() }
+        }
+        .padding(8)
+        .frame(width: 320)
+    }
+
+    private func addCueRow(_ kind: Cue.Kind) -> some View {
+        addCueButton(symbol: kind.symbol, title: kind.heading, blurb: kind.blurb) { state.onAddCue(kind) }
+    }
+
+    private func addCueButton(symbol: String, title: String, blurb: String, action: @escaping () -> Void) -> some View {
+        Button {
+            showingAddCue = false
+            action()
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: symbol)
+                    .frame(width: 22)
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).fontWeight(.semibold)
+                    Text(blurb).font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(AddCueRowStyle())
+    }
+
     private var lampColour: Color {
         state.live ? .green : (state.warn ? .orange : .secondary)
     }
@@ -203,5 +236,26 @@ struct HeaderBar: View {
             out += piece
         }
         return out
+    }
+}
+
+/// A popover row that lights up under the pointer, as a menu item does.
+private struct AddCueRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Row(configuration: configuration)
+    }
+
+    private struct Row: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var hovering = false
+
+        var body: some View {
+            configuration.label
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.accentColor.opacity(configuration.isPressed ? 0.35 : (hovering ? 0.22 : 0)))
+                )
+                .onHover { hovering = $0 }
+        }
     }
 }

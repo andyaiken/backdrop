@@ -280,19 +280,7 @@ struct CueSettingsView: View {
     var body: some View {
         Form {
             if let cue {
-                ForEach(SettingGroup.applying(to: cue.kind).filter { (scope == .transitions) == ($0.id == "Transitions") }) { group in
-                    Section(scope == .transitions ? "Transition in" : group.id) {
-                        ForEach(group.keys, id: \.self) { key in
-                            let (value, overridden) = key.effective(for: cue, defaults: defaults)
-                            let state = SettingState.of(key, in: cue, defaults: defaults)
-                            SettingRowView(key: key, kind: cue.kind, value: value, overridden: overridden,
-                                           annotation: state.annotation, isEnabled: state.enabled,
-                                           onChange: { value, continuous in onChange(key, value, continuous) },
-                                           onReset: { onChange(key, nil, false) })
-                        }
-                    }
-                }
-                Section { Text(scope == .transitions ? Self.transitionNote : note(for: cue)) }
+                CueSettingsSections(transitions: scope == .transitions, cue: cue, defaults: defaults, onChange: onChange)
             } else {
                 Section {
                     Text("Nothing is standing by. Click a cue in the list to see the settings it runs with.")
@@ -300,6 +288,31 @@ struct CueSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// The sections of a cue's settings, for a Form to hold: the Settings groups
+/// that apply to its kind, or its transition, and a note on what they mean.
+struct CueSettingsSections: View {
+    let transitions: Bool
+    let cue: Cue
+    let defaults: ShowSettings
+    let onChange: (SettingKey, SettingValue?, Bool) -> Void
+
+    var body: some View {
+        ForEach(SettingGroup.applying(to: cue.kind).filter { transitions == ($0.id == "Transitions") }) { group in
+            Section(transitions ? "Transition in" : group.id) {
+                ForEach(group.keys, id: \.self) { key in
+                    let (value, overridden) = key.effective(for: cue, defaults: defaults)
+                    let state = SettingState.of(key, in: cue, defaults: defaults)
+                    SettingRowView(key: key, kind: cue.kind, value: value, overridden: overridden,
+                                   annotation: state.annotation, isEnabled: state.enabled,
+                                   onChange: { value, continuous in onChange(key, value, continuous) },
+                                   onReset: { onChange(key, nil, false) })
+                }
+            }
+        }
+        Section { Text(transitions ? Self.transitionNote : note(for: cue)) }
     }
 
     private static let transitionNote = "How the stage changes to this cue, when it fires. A crossfade dissolves from the cue before; "
@@ -309,9 +322,9 @@ struct CueSettingsView: View {
     private func note(for cue: Cue) -> String {
         switch cue.kind {
         case .video:
-            "A video plays on its own clock from GO, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its end behaviour is in the Cue tab."
+            "A video plays on its own clock from GO, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its end behaviour is above."
         case .blank:
-            "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its colour is in the Cue tab."
+            "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its colour is above."
         case .title, .anagram, .image, .morph, .map, .layered:
             SettingKey.timingExplanation
                 + " Values in the accent colour are set for this cue; the rest come from the Show tab. Reset puts a value back on the default."

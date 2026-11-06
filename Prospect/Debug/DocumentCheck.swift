@@ -119,16 +119,16 @@ enum DocumentCheck {
                 controller.standBy(id)
                 console.refresh()
                 console.window?.contentView?.layoutSubtreeIfNeeded()
-                return console.editor.tabStops
+                return console.kindEditor.tabStops
             }
             let decryption = stops(for: titleID), image = stops(for: imageID)
             if let anagramID = controller.addCue(.anagram) {
                 let anagram = stops(for: anagramID)
-                check(anagram == ["number", "line", "anagrams"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
+                check(anagram == ["anagrams"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
                 controller.deleteCue(anagramID)
             }
-            check(decryption == ["number", "line", "text", "sub", "key"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
-            check(image == ["number", "line", "text"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
+            check(decryption == ["text", "sub", "key"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
+            check(image == ["text"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
         }
 
         document.importMedia(from: picture, into: imageID)

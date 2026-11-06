@@ -28,15 +28,21 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     /// Return or Escape in a field gives the keyboard back to the show keys.
     var finishedEditing: () -> Void = {}
 
+    /// Set on the kind's tab: a change to one of the cue's settings.
+    var onSetting: (SettingKey, SettingValue?, Bool) -> Void = { _, _, _ in }
+    private let scope: CueField.Scope
+
     private(set) var cue: Cue?
     private let morphPictures = MorphPicturesState()
     private let layeredStrip = LayeredStripState()
 
-    init() {
-        super.init(rootView: CueEditorView(cue: nil, goPoint: nil, defaults: ShowSettings(),
+    init(scope: CueField.Scope) {
+        self.scope = scope
+        super.init(rootView: CueEditorView(scope: scope, cue: nil, goPoint: nil, defaults: ShowSettings(),
                                            morphPictures: MorphPicturesState(), layeredStrip: LayeredStripState(), edit: { _, _ in }, typing: { _, _ in },
                                            onFinished: {},
-                                           onChooseMedia: {}, onRemoveMedia: {}, onDropMedia: { _ in }, onEditRoute: {}))
+                                           onChooseMedia: {}, onRemoveMedia: {}, onDropMedia: { _ in }, onEditRoute: {},
+                                           onSetting: { _, _, _ in }))
         wireMorphPictures()
         wireLayeredStrip()
     }
@@ -60,6 +66,7 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
             if layeredStrip.cueLayerMs != layerMs { layeredStrip.cueLayerMs = layerMs }
         }
         rootView = CueEditorView(
+            scope: scope,
             cue: cue,
             goPoint: point,
             defaults: settings,
@@ -86,7 +93,8 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
             onEditRoute: { [weak self] in
                 guard let self, let id = self.cue?.id else { return }
                 editRoute(id)
-            }
+            },
+            onSetting: { [weak self] key, value, continuous in self?.onSetting(key, value, continuous) }
         )
     }
 
@@ -174,7 +182,7 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     /// form's own order rather than a walk of it.
     var tabStops: [String] {
         guard let cue else { return [] }
-        return CueField.order(for: cue.kind, continues: cue.continueMode.continues).map(\.rawValue)
+        return CueField.order(for: cue.kind, continues: cue.continueMode.continues, scope: scope).map(\.rawValue)
     }
     #endif
 }

@@ -8,9 +8,17 @@ import SwiftUI
 enum CueField: String, Hashable, CaseIterable {
     case number, line, seconds, text, sub, key, anagrams
 
-    static func order(for kind: Cue.Kind, continues: Bool) -> [CueField] {
-        var fields: [CueField] = [.number, .line]
-        if continues { fields.append(.seconds) }
+    /// Which of the Inspector's tabs a form is: the fields every cue has, or
+    /// the ones this kind of cue adds to them.
+    enum Scope { case common, kind }
+
+    static func order(for kind: Cue.Kind, continues: Bool, scope: Scope) -> [CueField] {
+        if scope == .common {
+            var fields: [CueField] = [.number, .line]
+            if continues { fields.append(.seconds) }
+            return fields
+        }
+        var fields: [CueField] = []
         switch kind {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
@@ -74,10 +82,13 @@ struct CommittingField: View {
     }
 }
 
-/// Edit mode's Cue tab: the cue standing by, and everything about it that
-/// isn't a setting. Every change goes through the show controller as one
+/// Edit mode's Cue tab and its kind's tab. The Cue tab holds what every cue
+/// has: its number, cue point and continue. The kind's tab holds what only
+/// this kind has (its text, pictures and the like), then the settings it
+/// runs with. Every change goes through the show controller as one
 /// undoable edit.
 struct CueEditorView: View {
+    let scope: CueField.Scope
     let cue: Cue?
     /// The GO of the cue that stands by, if one does: its cue point is the
     /// one the Cue point field edits.
@@ -95,19 +106,21 @@ struct CueEditorView: View {
     let onRemoveMedia: () -> Void
     let onDropMedia: (URL) -> Void
     let onEditRoute: () -> Void
+    let onSetting: (SettingKey, SettingValue?, Bool) -> Void
 
     @FocusState private var focus: CueField?
 
     /// The fields this cue shows, in the order Tab walks them.
     private var fieldOrder: [CueField] {
         guard let cue else { return [] }
-        return CueField.order(for: cue.kind, continues: cue.continueMode.continues)
+        return CueField.order(for: cue.kind, continues: cue.continueMode.continues, scope: scope)
     }
 
     var body: some View {
         Form {
             if let cue {
-                Section {
+                if scope == .common {
+                  Section {
                     LabeledContent("Number") {
                         CommittingField(field: .number, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.number,
                                         commit: { v in typing("Change Cue Number") { $0.number = v.trimmingCharacters(in: .whitespaces) } },
@@ -118,11 +131,16 @@ struct CueEditorView: View {
                                         commit: commitCuePoint(cue), onFinished: onFinished)
                     }
                     continueRow(cue)
+                  }
+                } else {
+                    content(cue)
+                    CueSettingsSections(transitions: false, cue: cue, defaults: defaults, onChange: onSetting)
                 }
-                content(cue)
             } else {
                 Section {
-                    Text("Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it.")
+                    Text(scope == .common
+                         ? "Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it."
+                         : "Nothing is standing by. Click a cue in the list to see what it holds.")
                 }
             }
         }

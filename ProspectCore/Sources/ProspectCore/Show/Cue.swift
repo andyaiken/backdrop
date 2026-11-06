@@ -60,6 +60,20 @@ public struct Cue: Identifiable, Equatable, Sendable {
             }
         }
 
+        /// One line on what the cue does, for the Add Cue popover.
+        public var blurb: String {
+            switch self {
+            case .title: "Letters scramble and resolve into a line of text."
+            case .anagram: "Shows a phrase, then rearranges its letters into another."
+            case .image: "Shows a picture, fitted to the projection area."
+            case .morph: "Dissolves one image or text into another."
+            case .map: "Draws a route across a map."
+            case .video: "Plays a video file."
+            case .blank: "Clears the screen to a solid colour."
+            case .layered: "Stacks several images into one composed picture."
+            }
+        }
+
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .video]
         /// The rest, after a separator, by the name they show.
