@@ -35,7 +35,7 @@ struct ShowCodingTests {
 
     @Test func cuesAreFlatWithOnlyTheirKindsFields() throws {
         let json = try JSONSerialization.jsonObject(with: sampleShow().jsonData()) as! [String: Any]
-        #expect(json["version"] as? Int == Show.formatVersion)
+        #expect(json["version"] as? Int == 2, "with no groups, still readable by a version 2 Prospect")
         let cues = json["cues"] as! [[String: Any]]
 
         #expect(Set(cues[0].keys) == ["id", "num", "kind", "line", "text", "sub", "key", "overrides"])
@@ -89,8 +89,9 @@ struct ShowCodingTests {
     }
 
     @Test func refusesNewerFormats() {
-        #expect(throws: ShowFormatError.newerVersion(3)) {
-            try Show(jsonData: Data(#"{ "version": 3, "cues": [] }"#.utf8))
+        let newer = Show.formatVersion + 1
+        #expect(throws: ShowFormatError.newerVersion(newer)) {
+            try Show(jsonData: Data(#"{ "version": \#(newer), "cues": [] }"#.utf8))
         }
     }
 

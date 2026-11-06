@@ -50,7 +50,7 @@ public enum ShowPackage {
     public static func updated(_ existing: FileWrapper?, with show: Show) throws -> FileWrapper {
         let package = existing ?? FileWrapper(directoryWithFileWrappers: [:])
         replaceFile(showFile, in: package, with: try show.jsonData())
-        replaceFile(versionFile, in: package, with: Data("\(Show.formatVersion)\n".utf8))
+        replaceFile(versionFile, in: package, with: Data("\(show.version)\n".utf8))
         _ = media(of: package)
         return package
     }
@@ -127,7 +127,8 @@ extension Cue {
     public var mediaPaths: [String] {
         switch content {
         case .image(let c): [c.src].filter { !$0.isEmpty }
-        case .morph(let c): [c.src, c.into].filter { !$0.isEmpty }
+        case .morph(let c): c.pictures.map(\.src).filter { !$0.isEmpty }
+        case .map(let c): [c.src].filter { !$0.isEmpty }
         case .video(let c): [c.src].filter { !$0.isEmpty }
         case .title, .anagram, .blank: []
         }

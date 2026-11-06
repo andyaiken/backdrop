@@ -3,9 +3,10 @@ import ImageIO
 import ProspectCore
 import ProspectStage
 
-/// Where a morph's points are placed: both pictures side by side, the same
-/// numbered points on each, and beneath them the morph itself, scrubbed
-/// through with a slider. Click either picture to add a point to both, drag
+/// Where a morph's points are placed, a stage at a time: the stage's two
+/// pictures side by side, the same numbered points on each, and beneath them
+/// the stage itself, scrubbed through with a slider. A morph of more than two
+/// pictures chooses its stage at the top. Click either picture to add a point to both, drag
 /// a point to place it on that picture, and Delete removes the one selected.
 /// Find Faces matches two faces' features at once.
 ///
@@ -23,6 +24,10 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
                                   + "Select a point and press Delete to remove it.", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
     private let firstTitle = Desk.label("First picture", font: Desk.sans(12, .semibold), colour: Desk.dim)
     private let secondTitle = Desk.label("Second picture", font: Desk.sans(12, .semibold), colour: Desk.dim)
+    /// Which stage: hidden for a morph of two pictures, which has only one.
+    private let stageChooser = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// The stage whose points are shown: from picture `stage` to the next.
+    private(set) var stage = 0
     private let firstView = MorphPointsView()
     private let secondView = MorphPointsView()
     private let previewTitle = Desk.label("The morph", font: Desk.sans(12, .semibold), colour: Desk.dim)
@@ -41,6 +46,8 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
     /// show's, which only hear when the drag ends.
     private var dragging = false
     private var pictures: (first: String, second: String)?
+    /// The stages the chooser lists, so it is rebuilt only when they change.
+    private var stageNames: [String] = []
     private var images: (first: CGImage, second: CGImage)?
 
     init(controller: ShowController, cueID: UUID, mediaURL: @escaping (String) -> URL?) {
@@ -63,6 +70,9 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             button.target = self
             button.refusesFirstResponder = true
         }
+        stageChooser.target = self
+        stageChooser.action = #selector(stageChosen)
+        stageChooser.toolTip = "The stage whose points these are: from one picture to the next"
         findFaces.action = #selector(findFacesPressed)
         findFaces.toolTip = "Matches the features of the largest face on each picture: eyes, brows, nose, mouth, jaw and the top of the head"
         clearAll.action = #selector(clearAllPressed)
@@ -78,7 +88,7 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             view.onDelete = { [weak self] index in self?.delete(index) }
             view.partner = other
         }
-        for view in [hint, firstTitle, secondTitle, firstView, secondView, previewTitle, preview, scrub, fromLabel, toLabel,
+        for view in [hint, stageChooser, firstTitle, secondTitle, firstView, secondView, previewTitle, preview, scrub, fromLabel, toLabel,
                      findFaces, clearAll, status] as [NSView] {
             root.addSubview(view)
         }
@@ -105,11 +115,26 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         window?.title = "Morph Points \u{2014} Cue \(cue.number.isEmpty ? "(no number)" : cue.number)"
-        if pictures?.first != content.src || pictures?.second != content.into {
-            pictures = (content.src, content.into)
-            load(content)
+        stage = min(stage, max(content.stageCount - 1, 0))
+        let names = content.pictures.map { MorphContent.name(of: $0.src) }
+        let stages = (0..<content.stageCount).map { "Stage \($0 + 1): \(names[$0]) \u{2192} \(names[$0 + 1])" }
+        if stages != stageNames {
+            stageNames = stages
+            stageChooser.removeAllItems()
+            stageChooser.addItems(withTitles: stages)
+            stageChooser.isHidden = stages.count < 2
+            root.needsLayout = true
         }
-        if !dragging { pairs = content.pairs }
+        if !stages.isEmpty { stageChooser.selectItem(at: stage) }
+        firstTitle.stringValue = content.stageCount > 1 ? "Picture \(stage + 1): \(names[stage])" : "First picture"
+        secondTitle.stringValue = content.stageCount > 1 ? "Picture \(stage + 2): \(names[stage + 1])" : "Second picture"
+        let first = content.pictures.indices.contains(stage) ? content.pictures[stage].src : ""
+        let second = content.pictures.indices.contains(stage + 1) ? content.pictures[stage + 1].src : ""
+        if pictures?.first != first || pictures?.second != second {
+            pictures = (first, second)
+            load(first: first, second: second)
+        }
+        if !dragging { pairs = content.pictures.indices.contains(stage + 1) ? content.pictures[stage + 1].pairs : [] }
         if let selected, selected >= pairs.count { self.selected = nil }
         findFaces.isEnabled = images != nil
         clearAll.isEnabled = !pairs.isEmpty
@@ -117,23 +142,35 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         showPreview()
     }
 
+    /// Shows a stage's points, from picture `stage` to the next.
+    func show(stage: Int) {
+        guard stage != self.stage else { return }
+        self.stage = max(stage, 0)
+        selected = nil
+        refresh()
+    }
+
+    @objc private func stageChosen() {
+        show(stage: stageChooser.indexOfSelectedItem)
+    }
+
     /// Both pictures, at a size that keeps placing points quick.
-    private func load(_ content: MorphContent) {
+    private func load(first: String, second: String) {
         func image(_ path: String) -> CGImage? {
             guard !path.isEmpty, let url = mediaURL(path), let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 2048,
                                             kCGImageSourceCreateThumbnailWithTransform: true]
             return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         }
-        firstView.image = image(content.src)
-        secondView.image = image(content.into)
+        firstView.image = image(first)
+        secondView.image = image(second)
         if let first = firstView.image, let second = secondView.image {
             images = (first, second)
             morph.setPictures(first: first, second: second)
             status.stringValue = morph.isAvailable ? "" : "This Mac can\u{2019}t draw morphs: it has no Metal graphics."
         } else {
             images = nil
-            status.stringValue = "The morph needs both pictures. Add them in the Cue tab."
+            status.stringValue = "The morph needs two pictures at least. Add them in the Cue tab."
         }
     }
 
@@ -156,10 +193,10 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
     // MARK: Editing
 
     private func commit(_ name: String) {
-        let pairs = self.pairs
+        let pairs = self.pairs, into = stage + 1
         controller?.updateCue(cueID, name) { cue in
-            if case .morph(var c) = cue.content {
-                c.pairs = pairs
+            if case .morph(var c) = cue.content, c.pictures.indices.contains(into) {
+                c.pictures[into].pairs = pairs
                 cue.content = .morph(c)
             }
         }
@@ -204,11 +241,12 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         guard let images, let window else { return }
         findFaces.isEnabled = false
         status.stringValue = "Looking for faces\u{2026}"
-        let (first, second) = images
+        let (first, second) = images, forStage = stage
         Task.detached(priority: .userInitiated) {
             let found = (FacePoints.find(in: first), FacePoints.find(in: second))
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                // Another stage chosen meanwhile: these faces aren't its.
+                guard let self, stage == forStage else { return }
                 findFaces.isEnabled = true
                 switch found {
                 case (nil, nil): status.stringValue = "Neither picture has a face the Mac can find."
@@ -260,7 +298,13 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
     private func layout() {
         let b = root.bounds, margin: CGFloat = 20, gap: CGFloat = 16
         let width = b.width - 2 * margin
-        hint.frame = NSRect(x: margin, y: 14, width: width, height: Desk.height(of: hint, width: width))
+        var y: CGFloat = 14
+        if !stageChooser.isHidden {
+            let chooserWidth = min(width, max(260, stageChooser.fittingSize.width))
+            stageChooser.frame = NSRect(x: margin, y: y, width: chooserWidth, height: 26)
+            y += 34
+        }
+        hint.frame = NSRect(x: margin, y: y, width: width, height: Desk.height(of: hint, width: width))
         let bottomHeight: CGFloat = 250
         let top = hint.frame.maxY + 12, pictureBottom = b.height - bottomHeight - margin
         let half = (width - gap) / 2

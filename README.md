@@ -1,6 +1,6 @@
 # Prospect
 
-Prospect is a native macOS app for running projections in live theatre. Text decrypts out of ciphertext, anagrams rearrange themselves letter by letter, scene images turn into place tile by tile, one picture morphs into another, and video clips play. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
+Prospect is a native macOS app for running projections in live theatre. Text decrypts out of ciphertext, anagrams rearrange themselves letter by letter, scene images turn into place tile by tile, one picture morphs into another and on through more, a red dot is tracked across a police map, and video clips play. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
 
 ## Requirements
 
@@ -35,6 +35,8 @@ On first launch Prospect opens a new, empty show. To try it:
 
 Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
 
+Groups organise the sheet into acts, scenes and anything else, nested as deep as needed. Add Group, in the header's Add Cue menu or the Edit menu, puts a heading above the cue standing by, and its name can be typed at once. In edit mode a heading can be renamed by double-clicking it, moved a level in or out, deleted (keeping everything in it), or dragged with everything in it; a cue dropped just under a heading joins that group. Right-clicking a cue or a heading in edit mode renumbers a group's cues from a number you choose, so Act Two can start at 100; it asks first, and warns if a new number is already used elsewhere. During a show, the standby panel names the groups the standby cue is in, in brass when GO crosses into another group. Also during a show, the groups around the live and standby cues open themselves and the rest fold away. Groups never change how the show runs: GO, standby and the arrow keys go straight through them. On the printed sheet each group is a heading, with everything in it indented beneath it.
+
 Nothing takes the keyboard in show mode except the Go-to field, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
 
 ## Repository layout
@@ -49,6 +51,7 @@ Prospect/                    the app: AppKit windows, menus, documents
     Editing/                 edit mode's cue editor and settings panels
   Projector/                 the projector window and display handling
   Morph/                     the morph points window
+  Map/                       the map route window
   Debug/                     the snapshot and document-check launch tools
   AppIcon.icon               the app icon, an Icon Composer document
 ProspectCore/                a Swift package with two libraries
@@ -56,12 +59,12 @@ ProspectCore/                a Swift package with two libraries
     Show/                    shows, cues, settings, the package and the cue sheet
     Running/                 the playhead, the clock, continues, transitions
     Decryption/ Anagrams/    one folder per kind of cue that has a model
-    Images/ Morphs/
+    Images/ Morphs/ Maps/
     Support/                 colour, random numbers, rounding, small helpers
   Sources/ProspectStage      the renderers and the show controller; no windows
     Stage/                   the controller, the runner, surfaces and type
     Decryption/ Anagrams/    one folder per kind of cue: its renderer, and
-    Images/ Morphs/          its layout and drawing where they need their own
+    Images/ Morphs/ Maps/    its layout and drawing where they need their own
     Video/ Blank/
     Printing/                the printed cue sheet
   Tests/                     tests for both, including recorded outputs
@@ -73,7 +76,7 @@ The code is in three layers:
 - **ProspectCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.prospect` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
 - **ProspectStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
   - `SurfaceLayer`: a surface to paint into.
-  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `MorphRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal and conforms to `PaintsBetweenFrames`, so it paints on every display refresh. `AnagramRenderer` also conforms to `WaitsForGO`, because an anagram cue can stop partway for GO.
+  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `MorphRenderer`, `MapRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `MorphRenderer` and `MapRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a morph cue of several pictures before each stage, and a map cue's dot at each stop.
   - `StageRunner`: drives the renderers on every tick.
   - `ShowController`: the keys, the playhead, modes and editing.
   - `ProjectorState`: where the projector window goes.
@@ -95,7 +98,7 @@ Every kind of cue keeps its code in a folder of its own name in each library, so
 
 The projector window and the console's live preview are both surfaces. A renderer paints every surface from one shared plan, so any randomness is rolled once per frame and the two surfaces never disagree. Only `VideoRenderer` treats the two differently: the preview shows a poster and a position readout instead of a second player.
 
-`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram cue set to advance on GO waits partway, and each GO it waits for is a step that can stand by like a cue. GO on a step of the live cue carries it on there, or straight there, forward or back; GO on a step of another cue fires that cue at that step, with the steps before it already done.
+`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram, morph or map cue set to advance on GO waits partway, and each GO it waits for is a step that can stand by like a cue, with a cue point of its own: in edit mode, stand the GO by and the Cue tab's cue point field edits it. Advance and Pause are one show default for both kinds: on a morph, either GO choice waits for GO before each stage, and on a map before the dot leaves for each stop. GO on a step of the live cue carries it on there, or straight there, forward or back; GO on a step of another cue fires that cue at that step, with the steps before it already done.
 
 In edit mode, every change goes through `ShowController.edit`. That makes it one undo step, and slider drags are merged into a single step. If the cue on stage is affected, it is redrawn in its finished state.
 

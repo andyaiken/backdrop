@@ -3,20 +3,25 @@ import Metal
 import ProspectCore
 import QuartzCore
 
-/// Morph cues: one picture becoming another. Matched points slide from
-/// their places on the first picture to their places on the second, the
-/// pictures stretch with them, and the first dissolves into the second.
+/// Morph cues: one picture becoming another, and that one the next, a stage
+/// at a time. Matched points slide from their places on one picture to their
+/// places on the next, the pictures stretch with them, and the one dissolves
+/// into the other.
 ///
-/// Drawn with Metal: the model's triangle mesh (`MorphMesh`), each vertex
+/// Drawn with Metal: each stage's triangle mesh (`MorphMesh`), each vertex
 /// carrying where it falls on both pictures, so one pass draws both, warped,
 /// and mixes them. It paints on every display refresh, not just on the
 /// clock's frames, so the stretch is smooth.
+///
+/// The stages run on a `GoTimeline`, so a cue can wait for GO before each,
+/// and jump to any. Only the two pictures of the stage on stage are kept,
+/// with the next loading ahead, however many the cue has.
 ///
 /// Each picture is fitted to 90% of the stage, keeping its shape, as an
 /// image cue fits its grid: a morph from a picture an image cue has just
 /// shown starts exactly where that picture is.
 @MainActor
-public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
+public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO {
     public let isInstant = false
     public var onProblem: ((String) -> Void)?
 
@@ -26,15 +31,16 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
     /// Draws to the surfaces' own layers. Tests draw offscreen instead.
     private let onScreen: Bool
 
-    /// What a prepared cue draws: its mesh, timing, and both pictures once
-    /// they are decoded.
+    /// What a prepared cue draws: its stages, where each picture comes from,
+    /// and when each stage was let go.
     struct Plan {
-        let mesh: MorphMesh
-        let clockMs: Int
-        let morphMs: Int
-        var first: Picture?
-        var second: Picture?
-        var isReady: Bool { first != nil && second != nil }
+        let cue: MorphCuePlan
+        /// Each picture's source, and how problems name it.
+        let sources: [ImageSource]
+        let paths: [String]
+        let label: String
+        let number: String
+        var timeline: GoTimeline
     }
 
     struct Picture {
@@ -44,10 +50,21 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
     }
 
     private(set) var plan: Plan?
-    /// How far through the morph the stage is, from 0 to 1.
-    private(set) var progress = 0.0
+    /// The pictures loaded, by their place in the cue.
+    private var pictures: [Int: Picture] = [:]
+    /// Those on their way.
+    private var loading: Set<Int> = []
+    /// Those already said to be unreadable, so going back doesn't say so again.
+    private var reported: Set<Int> = []
+    /// What is on stage: the stage, and how far through it is.
+    private(set) var shown = MorphCuePlan.Shown(stage: nil, progress: 0)
+    /// How far through its stage the stage is, from 0 to 1.
+    var progress: Double { shown.progress }
+    /// Counts prepares, so a picture arriving for an earlier cue is dropped.
     private var token = 0
     private var trees: [ObjectIdentifier: Tree] = [:]
+    /// A mesh with no points, for the first picture standing alone.
+    private static let still = MorphMesh(pairs: [])
 
     /// - Parameters:
     ///   - media: Where a path in the show's package is on disk.
@@ -107,59 +124,100 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
 
     /// The last cue's last frame must never show while the next one loads.
     public func clear(_ surface: SurfaceLayer) {
+        reset()
+        tree(for: surface)?.metal.isHidden = true
+    }
+
+    private func reset() {
         token += 1
         plan = nil
-        progress = 0
-        tree(for: surface)?.metal.isHidden = true
+        pictures = [:]
+        loading = []
+        reported = []
+        shown = MorphCuePlan.Shown(stage: nil, progress: 0)
     }
 
     public func prepare(_ cue: Cue, defaults: ShowSettings) {
         guard case .morph(let content) = cue.content else { return }
-        token += 1
+        reset()
         let settings = defaults.resolved(content.overrides)
-        plan = Plan(mesh: MorphMesh(pairs: content.pairs), clockMs: settings.clockMs, morphMs: settings.morphMs)
-        progress = 0
-        guard let gpu else {
+        let cuePlan = MorphCuePlan(content, settings: settings)
+        // With no pictures at all, the label on black, standing.
+        let paths = content.pictures.isEmpty ? [""] : content.pictures.map(\.src)
+        var sources: [ImageSource] = []
+        for (i, path) in paths.enumerated() {
+            let (source, problem) = source(path, label: content.text, number: cue.number, which: Self.ordinal(i))
+            if let problem { onProblem?(problem) }
+            sources.append(source)
+        }
+        plan = Plan(cue: cuePlan, sources: sources, paths: paths, label: content.text, number: cue.number,
+                    timeline: GoTimeline(parts: cuePlan.parts))
+        guard gpu != nil else {
             onProblem?("This Mac can\u{2019}t draw morphs: it has no Metal graphics.")
             return
         }
+        keep(around: shown)
+    }
+
+    /// Which picture "first", "second" and on, for problems to name it by.
+    static func ordinal(_ i: Int) -> String {
+        let words = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"]
+        return i < words.count ? words[i] : "\(i + 1)th"
+    }
+
+    /// The two pictures a moment shows, and the one after, loaded; any
+    /// others let go.
+    private func keep(around shown: MorphCuePlan.Shown) {
+        guard let plan, let gpu else { return }
+        let wanted = Set([shown.from, shown.to, shown.to + 1].filter(plan.sources.indices.contains))
+        pictures = pictures.filter { wanted.contains($0.key) }
+        for i in wanted.subtracting(pictures.keys).subtracting(loading).sorted() {
+            loading.insert(i)
+            load(i, from: plan.sources[i], gpu: gpu)
+        }
+    }
+
+    private func load(_ i: Int, from source: ImageSource, gpu: MorphGPU) {
         let token = self.token
-        for (path, isFirst) in [(content.src, true), (content.into, false)] {
-            let which = isFirst ? "first" : "second"
-            let (source, problem) = source(path, label: content.text, cue: cue, which: which)
-            if let problem { onProblem?(problem) }
-            loader.load(source, maxPixels: maxPixels) { [weak self] result in
-                guard let self, token == self.token else { return }
-                switch result {
-                case .success(let image):
-                    self.received(image, first: isFirst, gpu: gpu)
-                case .failure:
-                    // Unreadable: the label on black, as an image cue does.
-                    let name = (path as NSString).lastPathComponent
-                    self.onProblem?("Cue \(cue.number)\u{2019}s \(which) picture, \(name), couldn\u{2019}t be read, so it is showing its label on black.")
-                    self.loader.load(.label(content.text), maxPixels: self.maxPixels) { [weak self] result in
-                        guard let self, token == self.token, case .success(let image) = result else { return }
-                        self.received(image, first: isFirst, gpu: gpu)
-                    }
+        loader.load(source, maxPixels: maxPixels) { [weak self] result in
+            guard let self, token == self.token, let plan = self.plan else { return }
+            switch result {
+            case .success(let image):
+                self.received(image, at: i, gpu: gpu)
+            case .failure:
+                // Unreadable: the label on black, as an image cue does.
+                if !self.reported.contains(i) {
+                    self.reported.insert(i)
+                    let name = (plan.paths[i] as NSString).lastPathComponent
+                    self.onProblem?("Cue \(plan.number)\u{2019}s \(Self.ordinal(i)) picture, \(name), couldn\u{2019}t be read, so it is showing its label on black.")
                 }
+                self.load(i, from: .label(plan.label), gpu: gpu)
             }
         }
     }
 
-    private func received(_ image: CGImage, first isFirst: Bool, gpu: MorphGPU) {
+    private func received(_ image: CGImage, at i: Int, gpu: MorphGPU) {
+        loading.remove(i)
         guard let texture = gpu.texture(from: image) else { return }
-        let picture = Picture(texture: texture, aspect: Double(image.width) / Double(max(image.height, 1)))
-        if isFirst { plan?.first = picture } else { plan?.second = picture }
-        if plan?.isReady == true {
+        // Let go while it was on its way.
+        guard Set([shown.from, shown.to, shown.to + 1]).contains(i) else { return }
+        let wasReady = isReady
+        pictures[i] = Picture(texture: texture, aspect: Double(image.width) / Double(max(image.height, 1)))
+        if isReady, !wasReady {
             drawAll()
             onReady?()
         }
     }
 
+    /// Both pictures of what is on stage are here to draw.
+    var isReady: Bool {
+        plan != nil && pictures[shown.from] != nil && pictures[shown.to] != nil
+    }
+
     public func preload(_ cue: Cue, defaults: ShowSettings) {
         guard case .morph(let content) = cue.content else { return }
-        for path in [content.src, content.into] {
-            loader.load(source(path, label: content.text, cue: cue, which: "").source, maxPixels: maxPixels) { _ in }
+        for (i, picture) in content.pictures.prefix(3).enumerated() {
+            loader.load(source(picture.src, label: content.text, number: cue.number, which: Self.ordinal(i)).source, maxPixels: maxPixels) { _ in }
         }
     }
 
@@ -169,15 +227,36 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
 
     public func paint(at position: Double) -> Bool {
         guard let plan else { return true }
-        let ms = max(0, position) * Double(plan.clockMs)
-        let t = MorphTiming.progress(ms: ms, morphMs: plan.morphMs)
-        if t != progress || trees.values.contains(where: { $0.metal.isHidden }) {
-            progress = t
+        let now = plan.cue.shown(at: position, timeline: plan.timeline)
+        let moved = now.stage != shown.stage
+        if now != shown || trees.values.contains(where: { $0.metal.isHidden }) {
+            shown = now
+            if moved { keep(around: now) }
             drawAll()
         }
         // Not finished while its pictures are still on their way, so nothing
         // continues from a black stage.
-        return plan.isReady && ms >= Double(plan.morphMs)
+        return isReady && plan.cue.isFinished(at: position, timeline: plan.timeline)
+    }
+
+    // MARK: WaitsForGO
+
+    public func isWaiting(at f: Int) -> Bool {
+        plan?.timeline.isWaiting(at: f) == true
+    }
+
+    public func carryOn(at f: Int) {
+        plan?.timeline.carryOn(at: f)
+    }
+
+    public func carryOnToEnd() {
+        plan?.timeline.carryOnToEnd()
+    }
+
+    /// GO point k lets go stage k, in part k + 1; part 0 is the first
+    /// picture standing.
+    public func goTo(_ point: Int, at f: Int) {
+        plan?.timeline.jump(toPart: point + 1, at: f)
     }
 
     public func fit(_ surface: SurfaceLayer) {
@@ -197,28 +276,29 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
         for tree in trees.values { draw(tree) }
     }
 
+    /// What is on stage, ready to draw: the mesh, and both pictures.
+    private var current: (mesh: MorphMesh, first: Picture, second: Picture)? {
+        guard let plan, let first = pictures[shown.from], let second = pictures[shown.to] else { return nil }
+        return (shown.stage.map { plan.cue.stages[$0].mesh } ?? Self.still, first, second)
+    }
+
     /// Draws the current moment into a surface's layer.
     private func draw(_ tree: Tree) {
-        guard onScreen, let gpu, let plan, let first = plan.first, let second = plan.second else { return }
+        guard onScreen, let gpu, let (mesh, first, second) = current else { return }
         let size = tree.surface.inset.bounds.size
         guard size.width > 0, size.height > 0, let drawable = tree.metal.nextDrawable() else { return }
-        gpu.draw(vertices: vertices(plan, in: size), indices: plan.mesh.triangles, first: first.texture,
-                 second: second.texture, mix: progress, into: drawable.texture, present: drawable)
+        gpu.draw(vertices: Self.vertices(mesh, first: first.aspect, second: second.aspect, at: progress, in: size), indices: mesh.triangles,
+                 first: first.texture, second: second.texture, mix: progress, into: drawable.texture, present: drawable)
         tree.metal.isHidden = false
     }
 
     /// The current moment, drawn offscreen at a size, for tests.
     func image(size: CGSize) -> CGImage? {
-        guard let gpu, let plan, let first = plan.first, let second = plan.second else { return nil }
+        guard let gpu, let (mesh, first, second) = current else { return nil }
         return gpu.image(width: Int(size.width), height: Int(size.height)) { target in
-            gpu.draw(vertices: vertices(plan, in: size), indices: plan.mesh.triangles, first: first.texture,
-                     second: second.texture, mix: progress, into: target, present: nil)
+            gpu.draw(vertices: Self.vertices(mesh, first: first.aspect, second: second.aspect, at: progress, in: size), indices: mesh.triangles,
+                     first: first.texture, second: second.texture, mix: progress, into: target, present: nil)
         }
-    }
-
-    private func vertices(_ plan: Plan, in size: CGSize) -> [MorphVertex] {
-        guard let first = plan.first, let second = plan.second else { return [] }
-        return Self.vertices(plan.mesh, first: first.aspect, second: second.aspect, at: progress, in: size)
     }
 
     /// Each vertex `t` of the way through, in Metal's clip space, with where
@@ -248,12 +328,12 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems {
 
     // MARK: Pictures
 
-    private func source(_ path: String, label: String, cue: Cue, which: String) -> (source: ImageSource, problem: String?) {
+    private func source(_ path: String, label: String, number: String, which: String) -> (source: ImageSource, problem: String?) {
         let fallback = ImageSource.label(label)
         guard !path.isEmpty else { return (fallback, nil) }
         guard let url = media(path) else {
             let name = (path as NSString).lastPathComponent
-            return (fallback, "Cue \(cue.number)\u{2019}s \(which) picture, \(name), is missing from the show, so it is showing its label on black.")
+            return (fallback, "Cue \(number)\u{2019}s \(which) picture, \(name), is missing from the show, so it is showing its label on black.")
         }
         return (.file(url), nil)
     }

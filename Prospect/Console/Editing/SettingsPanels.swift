@@ -6,6 +6,8 @@ import ProspectStage
 /// settings a Reset that puts it back on the show's default.
 final class SettingRow: NSView {
     let key: SettingKey
+    /// The kind of cue it sets, or nil for the show's default.
+    private let kind: Cue.Kind?
     private let label: NSTextField
     private let value = Desk.label("", font: Desk.mono(12), colour: Desk.dim)
     private var slider: NSSlider?
@@ -17,8 +19,9 @@ final class SettingRow: NSView {
     var onChange: (SettingValue, _ continuous: Bool) -> Void = { _, _ in }
     var onReset: () -> Void = {}
 
-    init(key: SettingKey, resettable: Bool) {
+    init(key: SettingKey, kind: Cue.Kind? = nil, resettable: Bool) {
         self.key = key
+        self.kind = kind
         label = Desk.label(key.label, font: Desk.sans(12.5), colour: Desk.dim)
         reset = resettable ? NSButton(title: "Reset", target: nil, action: nil) : nil
         super.init(frame: .zero)
@@ -41,9 +44,9 @@ final class SettingRow: NSView {
             toggle.refusesFirstResponder = true
             addSubview(toggle)
             self.toggle = toggle
-        case .choice(let options):
+        case .choice:
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-            popup.addItems(withTitles: options)
+            popup.addItems(withTitles: key.choices(for: kind).map(\.label))
             popup.target = self
             popup.action = #selector(chosen(_:))
             popup.refusesFirstResponder = true
@@ -85,10 +88,10 @@ final class SettingRow: NSView {
         switch v {
         case .number(let n): slider?.integerValue = n
         case .flag(let on): toggle?.state = on ? .on : .off
-        case .order, .reveal, .letters, .bars, .style, .advance: popup?.selectItem(at: key.choiceIndex(of: v) ?? 0)
+        case .order, .reveal, .letters, .bars, .style, .advance, .camera: popup?.selectItem(at: key.choiceIndex(of: v, for: kind) ?? 0)
         case .font(let family): select(family: family)
         }
-        value.stringValue = key.format(v)
+        value.stringValue = key.format(v, for: kind)
         value.textColor = overridden == true ? Desk.brass : (overridden == false ? Desk.dim : Desk.text)
         label.textColor = overridden == true ? Desk.brass : Desk.dim
         reset?.isHidden = overridden != true
@@ -103,7 +106,7 @@ final class SettingRow: NSView {
     @objc private func slid(_ sender: NSSlider) {
         let snapped = key.snapped(.number(sender.integerValue))
         if case .number(let n) = snapped { sender.integerValue = n }
-        value.stringValue = key.format(snapped)
+        value.stringValue = key.format(snapped, for: kind)
         onChange(snapped, true)
     }
 
@@ -116,7 +119,9 @@ final class SettingRow: NSView {
             onChange(.font(sender.selectedItem?.representedObject as? String ?? ""), false)
             return
         }
-        guard let value = key.choice(at: sender.indexOfSelectedItem) else { return }
+        let choices = key.choices(for: kind)
+        guard choices.indices.contains(sender.indexOfSelectedItem) else { return }
+        let value = choices[sender.indexOfSelectedItem].value
         onChange(value, false)
     }
 
@@ -363,7 +368,7 @@ final class CueSettingsPanel: PanelView {
                 let heading = Desk.label(group.name, font: Desk.sans(12, .semibold), colour: Desk.dim)
                 addSubview(heading)
                 let rows = keys.map { key -> SettingRow in
-                    let row = SettingRow(key: key, resettable: true)
+                    let row = SettingRow(key: key, kind: kind, resettable: true)
                     row.onChange = { [weak self] value, continuous in self?.onChange(key, value, continuous) }
                     row.onReset = { [weak self] in self?.onChange(key, nil, false) }
                     addSubview(row)
@@ -385,7 +390,7 @@ final class CueSettingsPanel: PanelView {
             note.stringValue = "A video plays on its own clock from GO, so it has only its transition in to set. Its end behaviour is in the Cue tab."
         case .blank:
             note.stringValue = "A blank is instant, so it has only its transition in to set. Its colour is in the Cue tab."
-        case .title, .anagram, .image, .morph:
+        case .title, .anagram, .image, .morph, .map:
             note.stringValue = SettingKey.timingExplanation + " Values in brass are set for this cue; the rest come from the Show tab. Reset puts a value back on the default."
         }
         let timing = cue.timing(defaults: defaults)
@@ -401,12 +406,24 @@ final class CueSettingsPanel: PanelView {
                 row.annotate(SettingKey.holdLength(holdTicks: s.pauseTicks, clockMs: s.clockMs))
                 row.isEnabled = s.advance != .eachStep
             }
+            // Nor does each stop on GO.
+            if row.key == .pause, case .map(let c) = cue.content {
+                let s = defaults.resolved(c.overrides)
+                row.annotate(SettingKey.holdLength(holdTicks: s.pauseTicks, clockMs: s.clockMs))
+                row.isEnabled = !s.eachStopOnGO
+            }
+            // Nor does each stage on GO.
+            if row.key == .pause, case .morph(let c) = cue.content {
+                let s = defaults.resolved(c.overrides)
+                row.annotate(SettingKey.holdLength(holdTicks: s.pauseTicks, clockMs: s.clockMs))
+                row.isEnabled = !s.eachStageOnGO
+            }
         }
     }
 
-    /// Room for the most a cue can set, an image cue's groups, and the note.
+    /// Room for the most a cue can set, an anagram cue's five timings, and the note.
     var preferredHeight: CGFloat {
-        46 + SettingGroups.height(of: [3, 4, 2]) + 10 + 54 + 12
+        46 + SettingGroups.height(of: [5, 4, 2]) + 10 + 54 + 12
     }
 
     override func layout() {

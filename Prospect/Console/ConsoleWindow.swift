@@ -19,7 +19,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let header = HeaderView()
     private let standby = StandbyPanel()
     private let cuesHeading = Desk.label("Cues", font: Desk.sans(12.5, .semibold), colour: Desk.text)
-    private let cueList = CueListView()
+    let cueList = CueListView()
     private let gotoLabel = Desk.label("Go to cue", font: Desk.sans(12.5), colour: Desk.dim)
     private let gotoField = NSTextField(string: "")
     private let status = Desk.label("", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
@@ -42,9 +42,13 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Offers an open panel for a cue's picture or clip.
     var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
     /// Where a file in the show is on disk.
-    var mediaURL: (String) -> URL? = { _ in nil }
+    var mediaURL: (String) -> URL? = { _ in nil } {
+        didSet { editor.mediaURL = mediaURL }
+    }
     /// The morph points window, while one is open.
     private var points: MorphPointsWindowController?
+    /// The map route window, while one is open.
+    private var route: MapRouteWindowController?
 
     /// Open Projector, from the header button.
     var openProjector: () -> Void = {}
@@ -112,11 +116,24 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
-        cueList.onMove = { [weak controller] id, offset in controller?.moveCue(id, by: offset) }
+        cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
+        cueList.onMoveGroup = { [weak controller] id, row in controller?.moveGroup(id, before: row) }
+        cueList.onGroupLevel = { [weak controller] id, delta in controller?.moveGroupLevel(id, by: delta) }
+        cueList.onDeleteGroup = { [weak controller] id in controller?.deleteGroup(id) }
+        cueList.onRenumber = { [weak self] id in
+            if let id { self?.confirmRenumber(group: id) } else { self?.confirmRenumber() }
+        }
+        // A rename hands the keyboard back to the show keys.
+        cueList.onRenameGroup = { [weak self] id, name in
+            guard let self else { return }
+            self.controller.renameGroup(id, to: name)
+            self.window?.makeFirstResponder(self.root)
+        }
         editor.controller = controller
         editor.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
         editor.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
-        editor.editPoints = { [weak self] id in self?.showPoints(for: id) }
+        editor.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
+        editor.editRoute = { [weak self] id in self?.showRoute(for: id) }
         editor.finishedEditing = { [weak self] in
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
@@ -189,8 +206,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
     #endif
 
-    /// Opens a morph's points, in its own window.
-    func showPoints(for id: UUID) {
+    /// Opens a morph's points on one of its stages, in its own window.
+    func showPoints(for id: UUID, stage: Int = 0) {
         guard controller.mode == .edit, let cue = controller.show[id], cue.kind == .morph else { return }
         if points?.cueID != id {
             points?.close()
@@ -198,13 +215,28 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             window.undoManagerSource = { [weak self] in self?.document?.undoManager }
             points = window
         }
+        points?.show(stage: stage)
         points?.showWindow(nil)
+    }
+
+    /// Opens a map's route, in its own window.
+    func showRoute(for id: UUID) {
+        guard controller.mode == .edit, let cue = controller.show[id], cue.kind == .map else { return }
+        if route?.cueID != id {
+            route?.close()
+            let window = MapRouteWindowController(controller: controller, cueID: id, mediaURL: mediaURL)
+            window.undoManagerSource = { [weak self] in self?.document?.undoManager }
+            route = window
+        }
+        route?.showWindow(nil)
     }
 
     func refresh() {
         refreshPending = false
         points?.refresh()
         if points?.window?.isVisible == false { points = nil }
+        route?.refresh()
+        if route?.window?.isVisible == false { route = nil }
         let show = controller.show, playhead = controller.playhead, projector = controller.projector
         let live = playhead.live.flatMap { show[$0] }
         let next = playhead.standby.flatMap { show[$0] }
@@ -224,12 +256,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             goTip: goPoint.map { $0.cue.id == playhead.live ? "Carry cue \($0.cue.number) on" : "Fire cue \($0.cue.number) at GO \($0.number)" }
                 ?? next.map { "Fire cue \($0.number)" } ?? "End of the cue sheet"
         )
-        standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState)
-        cueList.update(cues: show.cues, defaults: show.settings, standby: playhead.standby, standbyStep: playhead.standbyStep,
-                       live: playhead.live, taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)),
-                       editing: controller.mode == .edit)
+        // The groups GO goes to, and those of what is on screen, to see
+        // whether GO crosses from one group into another.
+        let nextID = goPoint?.cue.id ?? next?.id
+        standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState,
+                       groups: nextID.map { show.groups(around: $0) } ?? [], liveGroups: live.map { show.groups(around: $0.id) } ?? [])
+        cueList.update(show: show, standby: playhead.standby, standbyStep: playhead.standbyStep, live: playhead.live,
+                       taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
-        editor.update(cue: editing)
+        editor.update(cue: editing, goPoint: controller.standingByGoPoint)
         cueSettings.update(cue: editing, defaults: show.settings)
         showDefaults.update(title: show.title, fallback: document?.displayName ?? "Untitled", settings: show.settings)
         status.stringValue = controller.message ?? ""
@@ -319,6 +354,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// A new cue stands by, and the Cue tab opens on it to be filled in.
     @objc private func addCueChosen() {
         let index = header.addCue.indexOfSelectedItem - 1
+        if index == Cue.Kind.allCases.count { return addGroup() }
         guard Cue.Kind.allCases.indices.contains(index), controller.addCue(Cue.Kind.allCases[index]) != nil else { return }
         showEditTab(0)
         window?.makeFirstResponder(root)
@@ -333,6 +369,14 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     @objc private func tabChosen() {
         root.needsLayout = true
         window?.makeFirstResponder(root)
+    }
+
+    /// Add Group, from the header or the Edit menu: a heading above the cue
+    /// standing by, its name ready to type.
+    func addGroup() {
+        guard let id = controller.addGroup() else { return }
+        refresh()
+        cueList.beginRename(id)
     }
 
     /// For the snapshot tool: shows one of edit mode's tabs.
@@ -374,6 +418,52 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertSecondButtonReturn else { return }
             MainActor.assumeIsolated { self?.controller.renumberAll() }
+        }
+    }
+
+    /// A group's cues numbered from a start the operator chooses, the next
+    /// whole number after the cues before it unless changed: so Act Two can
+    /// start at 100. It asks first, and again if any new number is already
+    /// used outside the group.
+    func confirmRenumber(group id: UUID) {
+        let show = controller.show
+        guard let window, let group = show.groups.first(where: { $0.id == id }) else { return }
+        let count = show.cues(inGroup: id).count
+        guard count > 0 else { return }
+        let alert = NSAlert()
+        alert.messageText = "Renumber the \(count) cue\(count == 1 ? "" : "s") in \u{201C}\(group.name)\u{201D}?"
+        alert.informativeText = "They are numbered in running order from the number below, one apart, groups inside it included. Cue numbers are what the DSM writes in the book, so the book will need rewriting to match."
+        let start = NSTextField(string: String(show.renumberStart(forGroup: id)))
+        start.frame = NSRect(x: 0, y: 0, width: 120, height: 24)
+        start.font = Desk.mono(13)
+        start.placeholderString = "100"
+        alert.accessoryView = start
+        alert.addButton(withTitle: "Cancel")
+        let renumber = alert.addButton(withTitle: "Renumber")
+        renumber.hasDestructiveAction = true
+        alert.window.initialFirstResponder = start
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertSecondButtonReturn else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard let from = Int(start.stringValue.trimmingCharacters(in: .whitespaces)), from >= 0 else {
+                    self.controller.say("\u{201C}\(start.stringValue)\u{201D} isn\u{2019}t a whole number to start from, so nothing was renumbered.")
+                    return
+                }
+                let clashes = self.controller.show.renumberClashes(group: id, from: from)
+                guard !clashes.isEmpty else { return self.controller.renumber(group: id, from: from) }
+                let again = NSAlert()
+                let listed = clashes.prefix(6).joined(separator: ", ") + (clashes.count > 6 ? " and \(clashes.count - 6) more" : "")
+                again.messageText = "Cues outside \u{201C}\(group.name)\u{201D} already use \(listed)."
+                again.informativeText = "Renumbering anyway leaves those numbers on two cues each, flagged on the sheet until one of each is changed."
+                again.addButton(withTitle: "Cancel")
+                let anyway = again.addButton(withTitle: "Renumber Anyway")
+                anyway.hasDestructiveAction = true
+                again.beginSheetModal(for: window) { [weak self] response in
+                    guard response == .alertSecondButtonReturn else { return }
+                    MainActor.assumeIsolated { self?.controller.renumber(group: id, from: from) }
+                }
+            }
         }
     }
 

@@ -174,8 +174,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func addAnagramCue(_ sender: Any?) { current?.controller?.addCue(.anagram) }
     @objc func addImageCue(_ sender: Any?) { current?.controller?.addCue(.image) }
     @objc func addMorphCue(_ sender: Any?) { current?.controller?.addCue(.morph) }
+    @objc func addMapCue(_ sender: Any?) { current?.controller?.addCue(.map) }
     @objc func addVideoCue(_ sender: Any?) { current?.controller?.addCue(.video) }
     @objc func addBlankCue(_ sender: Any?) { current?.controller?.addCue(.blank) }
+    @objc func addGroup(_ sender: Any?) { current?.console?.addGroup() }
     @objc func renumberAllCues(_ sender: Any?) { current?.console?.confirmRenumber() }
 
     // MARK: Show
@@ -208,7 +210,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let controller = current?.controller
         let editing = controller?.mode == .edit
         switch item.action {
-        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addMorphCue(_:)), #selector(addVideoCue(_:)), #selector(addBlankCue(_:)):
+        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addMorphCue(_:)), #selector(addMapCue(_:)), #selector(addVideoCue(_:)), #selector(addBlankCue(_:)),
+             #selector(addGroup(_:)):
             return editing
         case #selector(renumberAllCues(_:)):
             return editing && controller?.show.cues.isEmpty == false

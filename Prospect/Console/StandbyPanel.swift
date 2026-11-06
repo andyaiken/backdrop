@@ -5,6 +5,9 @@ import ProspectStage
 /// What GO fires next, large; what is on screen, small.
 final class StandbyPanel: PanelView {
     private let standingBy = Desk.label("Standing by", font: Desk.sans(11.5), colour: Desk.dim)
+    /// The groups the cue standing by is in, outermost first, on the same
+    /// line: brass when GO goes into another group from the one on screen.
+    private let group = Desk.label("", font: Desk.sans(11.5), colour: Desk.dim)
     private let number = Desk.label("\u{2014}", font: Desk.mono(30), colour: Desk.brass)
     private let name = Desk.label("\u{2014}", font: Desk.mono(13), colour: Desk.text)
     private let arm = Desk.label("", font: Desk.sans(11.5, .medium), colour: Desk.dim)
@@ -23,7 +26,11 @@ final class StandbyPanel: PanelView {
         cuePointBox.addSubview(cuePointBar)
         cuePointBox.addSubview(cuePoint)
         arm.alignment = .right
-        for view in [standingBy, number, name, arm, cuePointBox, divider, onScreen, liveNumber, liveName] as [NSView] { addSubview(view) }
+        group.alignment = .right
+        // Too long, it loses the outer groups first: the innermost is the
+        // one that says where GO goes.
+        group.lineBreakMode = .byTruncatingHead
+        for view in [standingBy, group, number, name, arm, cuePointBox, divider, onScreen, liveNumber, liveName] as [NSView] { addSubview(view) }
     }
 
     required init?(coder: NSCoder) {
@@ -32,7 +39,13 @@ final class StandbyPanel: PanelView {
 
     /// For a video cue standing by: whether it is armed, said plainly. While
     /// the live cue waits partway, its GO point stands by in the cue's place.
-    func update(standby: Cue?, live: Cue?, goPoint: ShowController.StandingByGoPoint?, entry: String, arm armState: ArmState?) {
+    func update(standby: Cue?, live: Cue?, goPoint: ShowController.StandingByGoPoint?, entry: String, arm armState: ArmState?,
+                groups: [CueGroup] = [], liveGroups: [CueGroup] = []) {
+        group.stringValue = entry.isEmpty ? groups.map(\.name).joined(separator: " \u{203A} ") : ""
+        let crosses = live != nil && groups.map(\.id) != liveGroups.map(\.id)
+        group.textColor = crosses ? Desk.brass : Desk.dim
+        group.toolTip = group.stringValue.isEmpty ? nil
+            : crosses ? "GO goes into \(group.stringValue), out of the group on screen" : "In \(group.stringValue)"
         switch armState {
         case .armed:
             arm.stringValue = "Video armed"
@@ -59,8 +72,11 @@ final class StandbyPanel: PanelView {
             number.stringValue = standby?.number ?? "\u{2014}"
             name.stringValue = standby.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "end of sheet"
         }
-        let line = goPoint == nil ? standby?.line.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" : ""
-        if let goPoint {
+        // A GO of a cue waits for its own cue point, if it has one.
+        let line = (goPoint?.point.cuePoint ?? standby?.line ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !line.isEmpty {
+            cuePoint.stringValue = line
+        } else if let goPoint {
             // No cue point of its own: what GO does here.
             cuePoint.stringValue = goPoint.cue.id == live?.id
                 ? "GO carries cue \(goPoint.cue.number) on to this step."
@@ -87,7 +103,10 @@ final class StandbyPanel: PanelView {
         super.layout()
         let x: CGFloat = 16, inner = bounds.width - 32
         var y: CGFloat = 15
-        standingBy.frame = NSRect(x: x, y: y, width: inner, height: 16); y += 18
+        // The group takes what the label leaves of the line.
+        let label = ceil(standingBy.attributedStringValue.size().width) + 12
+        standingBy.frame = NSRect(x: x, y: y, width: label, height: 16)
+        group.frame = NSRect(x: x + label, y: y, width: max(0, inner - label), height: 16); y += 18
         number.frame = NSRect(x: x, y: y, width: inner * 0.5, height: 36)
         name.frame = NSRect(x: x + inner * 0.35, y: y + 14, width: inner * 0.65, height: 18); y += 46
         arm.isHidden = arm.stringValue.isEmpty

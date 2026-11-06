@@ -110,6 +110,7 @@ final class ShowDocument: NSDocument {
                 .anagram: AnagramRenderer(),
                 .image: ImageRenderer(media: media),
                 .morph: MorphRenderer(media: media),
+                .map: MapRenderer(media: media),
                 .video: VideoRenderer(media: media),
                 .blank: BlankRenderer(),
             ]
@@ -194,25 +195,26 @@ final class ShowDocument: NSDocument {
 
     // MARK: Media
 
-    /// Which of a morph's two pictures a file is for. Every other cue has
-    /// only the one.
-    enum MediaSlot {
-        case first, second
+    /// Where in a morph's pictures a file goes. Every other cue has only the
+    /// one.
+    enum MediaSlot: Equatable {
+        /// In the place of the picture at this index.
+        case picture(Int)
+        /// A new picture at the end.
+        case add
     }
 
     /// Copies a picture or clip into the show and gives it to a cue. The
     /// original can then be moved or deleted without breaking the show.
     ///
-    /// - Parameter slot: For a morph, which picture. Without one, as when a
-    ///   file is dropped on its row, the first if it has none, else the second.
+    /// - Parameter slot: For a morph, where the picture goes. Without one, as
+    ///   when a file is dropped on its row, it is added at the end.
     func importMedia(from url: URL, into cueID: UUID, slot: MediaSlot? = nil) {
         guard let controller, controller.mode == .edit, let cue = controller.show[cueID] else { return }
         guard Self.accepts(url, for: cue.kind) else {
             controller.say("\(url.lastPathComponent) isn\u{2019}t \(cue.kind == .video ? "a clip" : "a picture") this cue can use.")
             return
         }
-        var second = slot == .second
-        if slot == nil, case .morph(let m) = cue.content { second = !m.src.isEmpty }
         do {
             let package = try ShowPackage.updated(self.package, with: controller.show)
             self.package = package
@@ -222,8 +224,15 @@ final class ShowDocument: NSDocument {
                 switch cue.content {
                 case .image(var c): c.src = path; cue.content = .image(c)
                 case .morph(var c):
-                    if second { c.into = path } else { c.src = path }
+                    // In a picture's place, keeping its points, or added
+                    // at the end.
+                    if case .picture(let i) = slot, c.pictures.indices.contains(i) {
+                        c.pictures[i].src = path
+                    } else {
+                        c.pictures.append(MorphPicture(src: path))
+                    }
                     cue.content = .morph(c)
+                case .map(var c): c.src = path; cue.content = .map(c)
                 case .video(var c): c.src = path; cue.content = .video(c)
                 default: break
                 }
@@ -236,7 +245,7 @@ final class ShowDocument: NSDocument {
     static func accepts(_ url: URL, for kind: Cue.Kind) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
         switch kind {
-        case .image, .morph: return type.conforms(to: .image)
+        case .image, .morph, .map: return type.conforms(to: .image)
         case .video: return type.conforms(to: .movie)
         default: return false
         }
@@ -248,13 +257,19 @@ final class ShowDocument: NSDocument {
         panel.allowedContentTypes = cue.kind == .video ? [.movie] : [.image]
         panel.message = switch (cue.kind, slot) {
         case (.video, _): "Choose a clip for cue \(cue.number)."
-        case (.morph, .second): "Choose the picture cue \(cue.number) becomes."
-        case (.morph, _): "Choose the picture cue \(cue.number) starts from."
+        case (.morph, .picture(let i)): "Choose a picture to take the place of picture \(i + 1) in cue \(cue.number)."
+        case (.morph, _): "Choose pictures to add to cue \(cue.number). Several at once are added in order of their names."
+        case (.map, _): "Choose a map for cue \(cue.number): a street map, light or dark, as large as you have."
         default: "Choose a picture for cue \(cue.number)."
         }
+        // Adding to a morph may take several at once.
+        panel.allowsMultipleSelection = cue.kind == .morph && slot == .add
         panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated { self?.importMedia(from: url, into: cueID, slot: slot ?? .first) }
+            guard response == .OK else { return }
+            let urls = panel.urls.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            MainActor.assumeIsolated {
+                for url in urls { self?.importMedia(from: url, into: cueID, slot: slot) }
+            }
         }
     }
 

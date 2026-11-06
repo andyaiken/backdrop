@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ProspectCore
 
@@ -76,5 +77,36 @@ struct NumberingTests {
         var show = sheet(["1", "1.5", "P12", "40"])
         show.renumberAll()
         #expect(show.cues.map(\.number) == ["1", "2", "3", "4"])
+    }
+
+    /// A preshow cue, Act One with a scene inside it, then Act Two.
+    func acts() -> (Show, act1: UUID, scene: UUID, act2: UUID) {
+        var show = sheet(["0.5", "1", "1.5", "2", "7", "8", "8.5"])
+        let act1 = CueGroup(name: "Act One", level: 0, before: show.cues[1].id)
+        let scene = CueGroup(name: "Scene 2", level: 1, before: show.cues[3].id)
+        let act2 = CueGroup(name: "Act Two", level: 0, before: show.cues[5].id)
+        show.groups = [act1, scene, act2]
+        return (show, act1.id, scene.id, act2.id)
+    }
+
+    @Test("A group's cues are those under its heading, groups inside it included")
+    func cuesInGroup() {
+        let (show, act1, scene, act2) = acts()
+        #expect(show.cues(inGroup: act1).compactMap { show[$0]?.number } == ["1", "1.5", "2", "7"])
+        #expect(show.cues(inGroup: scene).compactMap { show[$0]?.number } == ["2", "7"])
+        #expect(show.cues(inGroup: act2).compactMap { show[$0]?.number } == ["8", "8.5"])
+    }
+
+    @Test("Renumbering a group starts after the cues before it, unless told to start elsewhere")
+    func renumberGroup() {
+        var (show, act1, scene, act2) = acts()
+        #expect(show.renumberStart(forGroup: act2) == 8, "the next whole number after 7")
+        #expect(show.renumberStart(forGroup: act1) == 1)
+        show.renumber(group: act2, from: 100)
+        #expect(show.cues.map(\.number) == ["0.5", "1", "1.5", "2", "7", "100", "101"])
+        show.renumber(group: act1, from: 1)
+        #expect(show.cues.map(\.number) == ["0.5", "1", "2", "3", "4", "100", "101"], "the scene with it")
+        #expect(show.renumberClashes(group: scene, from: 100) == ["100", "101"])
+        #expect(show.renumberClashes(group: scene, from: 3).isEmpty, "its own numbers don't clash")
     }
 }

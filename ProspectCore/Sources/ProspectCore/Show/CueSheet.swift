@@ -48,6 +48,10 @@ public struct CueSheet: Equatable, Sendable {
         /// its own under it in the DSM layout: no number, its content what
         /// the GO brings on, and its cue point left for pencil.
         public var go: Int? = nil
+        /// A group's heading: its name is the content, and nothing else is set.
+        public var heading = false
+        /// How many groups the row is inside, for its indent.
+        public var depth = 0
     }
 
     public let title: String
@@ -63,19 +67,25 @@ public struct CueSheet: Equatable, Sendable {
     public init(show: Show, title: String, layout: Layout) {
         self.title = title
         self.layout = layout
-        rows = show.cues.enumerated().flatMap { i, cue in
+        rows = show.outline.flatMap { entry -> [Row] in
+            guard case .cue(let cue, let depth) = entry else {
+                guard case .group(let group, let depth, _) = entry else { return [] }
+                return [Row(number: "", type: "", auto: false, content: [group.name], cuePoint: "", settings: [], heading: true, depth: depth)]
+            }
+            let i = show.index(of: cue.id) ?? 0
             let row = Row(
                 number: cue.number,
                 type: cue.kind.heading,
                 auto: i > 0 && show.cues[i - 1].continueMode.continues,
                 content: Self.content(of: cue),
                 cuePoint: layout == .dsm ? cue.line.trimmingCharacters(in: .whitespacesAndNewlines) : "",
-                settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : []
+                settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : [],
+                depth: depth
             )
             // Every GO the DSM calls gets a row, so none is missed in the book.
             guard layout == .dsm else { return [row] }
             let goes = cue.goPoints(defaults: show.settings).enumerated().map { n, point in
-                Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: "", settings: [], go: n + 1)
+                Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: point.cuePoint, settings: [], go: n + 1, depth: depth)
             }
             return [row] + goes
         }
@@ -87,7 +97,15 @@ public struct CueSheet: Equatable, Sendable {
         case .title(let c): lines = [c.text, c.sub]
         case .anagram(let c): lines = anagramLines(c)
         case .image(let c): lines = [c.text]
-        case .morph(let c): lines = [c.text]
+        case .morph(let c): lines = [c.text, c.pictures.map { MorphContent.name(of: $0.src) }.joined(separator: " \u{2192} ")]
+        case .map(let c):
+            // The stops in turn, a jump marked as one.
+            let stops = c.stops.enumerated().map { n, i in
+                let stop = c.stop(at: i)
+                let name = [stop.place, stop.status].first { !$0.isEmpty } ?? (n == 0 ? "start" : "stop \(n)")
+                return n > 0 && stop.arrival == .jump ? "\u{21AF} " + name : name
+            }
+            lines = [c.text, stops.joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
         case .blank(let c): lines = [c.text, c.colour.hex.uppercased()]
         }
@@ -112,7 +130,7 @@ public struct CueSheet: Equatable, Sendable {
         func timing(_ keys: [SettingKey]) -> [Setting] {
             keys.map { key in
                 let (value, overridden) = key.effective(for: cue, defaults: defaults)
-                var reading = key.format(value)
+                var reading = key.format(value, for: cue.kind)
                 // A hold also in seconds, as the panels show it.
                 let t = cue.timing(defaults: defaults)
                 if key == .hold, let length = SettingKey.holdLength(holdTicks: t.holdTicks, clockMs: t.clockMs) {
@@ -145,10 +163,22 @@ public struct CueSheet: Equatable, Sendable {
         case .image(let c):
             return timing(SettingKey.image) + [Setting(name: "Picture", value: file(c.src, "none"), overridden: false)]
         case .morph(let c):
-            return timing(SettingKey.morph) + [
-                Setting(name: "First picture", value: file(c.src, "none"), overridden: false),
-                Setting(name: "Second picture", value: file(c.into, "none"), overridden: false),
-                Setting(name: "Points", value: "\(c.pairs.count)", overridden: false),
+            guard !c.pictures.isEmpty else { return timing(SettingKey.morph) + [Setting(name: "Pictures", value: "none", overridden: false)] }
+            // Each picture, and how the stage into it goes: its points, and
+            // its own morph time if it has one.
+            let pictures = c.pictures.enumerated().map { i, picture in
+                let points = i == 0 ? [] : [picture.pairs.isEmpty ? "a dissolve" : "\(picture.pairs.count) point\(picture.pairs.count == 1 ? "" : "s")"]
+                let time = picture.morphMs.map { [SettingKey.morphTime.format(.number($0))] } ?? []
+                return Setting(name: "Picture \(i + 1)", value: ([file(picture.src, "none")] + points + time).joined(separator: " \u{00B7} "),
+                               overridden: picture.morphMs != nil)
+            }
+            return timing(SettingKey.morph) + pictures
+        case .map(let c):
+            let stops = c.stops.count - 1, jumps = c.stops.dropFirst().filter { c.stop(at: $0).arrival == .jump }.count
+            let route = stops < 1 ? "no stops" : "\(stops) stop\(stops == 1 ? "" : "s")" + (jumps > 0 ? ", \(jumps) by a jump" : "")
+            return timing(SettingKey.map) + [
+                Setting(name: "Map", value: file(c.src, "none"), overridden: false),
+                Setting(name: "Route", value: route, overridden: false),
             ]
         case .video(let c):
             let end = switch c.atEnd {

@@ -92,9 +92,9 @@ struct MorphTests {
         #expect(cue.finishes && !cue.isInstant)
     }
 
-    @Test("A morph has a clock, a hold and its own time, but no wave")
+    @Test("A morph has a clock, a hold, Advance, Pause and its own time, but no wave")
     func settings() {
-        #expect(SettingKey.allCases.filter { $0.applies(to: .morph) } == [.clock, .hold, .morphTime, .transition, .fade])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .morph) } == [.clock, .hold, .advance, .pause, .morphTime, .transition, .fade])
         var cue = Cue(content: .morph(MorphContent()))
         SettingKey.morphTime.setOverride(.number(4250), in: &cue)
         #expect(SettingKey.morphTime.override(in: cue) == .number(4300), "snapped to a tenth of a second")
@@ -106,14 +106,17 @@ struct MorphTests {
         #expect(try! JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).morphMs == 5000)
     }
 
-    @Test("The sheet flags a morph missing a picture, and prints both with the number of points")
+    @Test("The sheet flags a morph missing a picture, and prints each picture with the points into it")
     func sheet() {
         let half = Cue(number: "9", content: .morph(MorphContent(text: "LEONARDO", src: "media/leonardo.jpg")))
         let show = Show(title: "T", cues: [half])
         #expect(show.issues == [.morphWithoutPictures(cue: half.id)])
-        #expect(show.message(for: show.issues[0]) == "Cue 9 needs both pictures: the one it starts from and the one it becomes.")
+        #expect(show.message(for: show.issues[0]) == "Cue 9 needs two pictures at least: the one it starts from and one it becomes.")
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[0].settings
-        #expect(settings.map(\.name) == ["Clock", "Hold", "Morph", "First picture", "Second picture", "Points", "Transition", "Fade"])
-        #expect(settings[3].value == "leonardo.jpg" && settings[4].value == "none" && settings[5].value == "0")
+        #expect(settings.map(\.name) == ["Clock", "Hold", "Advance", "Pause", "Morph", "Picture 1", "Transition", "Fade"])
+        #expect(settings[5].value == "leonardo.jpg")
+        let whole = Cue(number: "9", content: .morph(MorphContent(text: "LEONARDO", src: "media/leonardo.jpg", into: "media/mona-lisa.jpg", pairs: Self.face)))
+        let rows = CueSheet(show: Show(title: "T", cues: [whole]), title: "T", layout: .operatorSettings).rows[0].settings
+        #expect(rows.filter { $0.name.hasPrefix("Picture") }.map(\.value) == ["leonardo.jpg", "mona-lisa.jpg \u{00B7} \(Self.face.count) points"])
     }
 }

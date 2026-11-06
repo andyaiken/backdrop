@@ -1,6 +1,7 @@
 import AppKit
 import ProspectCore
 import ProspectStage
+import SwiftUI
 
 /// Edit mode's cue editor. It edits the cue standing by: click a cue in the
 /// list to edit it. Every change goes through the show controller as one
@@ -9,12 +10,21 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
     weak var controller: ShowController?
     var importMedia: (URL, UUID, ShowDocument.MediaSlot?) -> Void = { _, _, _ in }
     var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
-    /// Opens a morph's points.
-    var editPoints: (UUID) -> Void = { _ in }
+    /// Opens a morph's points, on one of its stages.
+    var editPoints: (UUID, Int) -> Void = { _, _ in }
+    /// Opens a map's route.
+    var editRoute: (UUID) -> Void = { _ in }
+    /// Where a file in the show is on disk, for the morph's thumbnails.
+    var mediaURL: (String) -> URL? = { _ in nil } {
+        didSet { morphPictures.thumbnails.mediaURL = mediaURL }
+    }
     /// Return or Escape in a field gives the keyboard back to the show keys.
     var finishedEditing: () -> Void = {}
 
     private(set) var cue: Cue?
+    /// The GO of the cue that stands by, if one does: its cue point is the
+    /// one the Cue point field edits.
+    private var goPoint: ShowController.StandingByGoPoint?
 
     private let heading = Desk.label("", font: Desk.sans(12.5, .semibold), colour: Desk.text)
     private let empty = Desk.label("Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it.",
@@ -48,14 +58,14 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
     private let well = MediaWell()
     private let choose = CueEditorPanel.button("Choose\u{2026}")
     private let removeMedia = CueEditorPanel.button("Remove")
-    // A morph's second picture, and its points.
-    private let secondLabel = Desk.label("Second", font: Desk.sans(12.5), colour: Desk.dim)
-    private let secondWell = MediaWell()
-    private let chooseSecond = CueEditorPanel.button("Choose\u{2026}")
-    private let removeSecond = CueEditorPanel.button("Remove")
-    private let pointsLabel = Desk.label("Points", font: Desk.sans(12.5), colour: Desk.dim)
-    private let pointsCount = Desk.label("", font: Desk.sans(12.5), colour: Desk.text)
-    private let editPointsButton = CueEditorPanel.button("Edit Points\u{2026}")
+    // A morph's pictures in turn, and the stages between them.
+    private let picturesLabel = Desk.label("Pictures", font: Desk.sans(12.5), colour: Desk.dim)
+    private let morphPictures = MorphPicturesState()
+    private lazy var picturesView = NSHostingView(rootView: MorphPicturesView(state: morphPictures))
+    // A map's route.
+    private let routeLabel = Desk.label("Route", font: Desk.sans(12.5), colour: Desk.dim)
+    private let routeSummary = Desk.label("", font: Desk.sans(12.5), colour: Desk.text)
+    private let editRouteButton = CueEditorPanel.button("Edit Route\u{2026}")
     private let atEndLabel = Desk.label("At the end", font: Desk.sans(12.5), colour: Desk.dim)
     private let atEnd = NSPopUpButton(frame: .zero, pullsDown: false)
     private let colourLabel = Desk.label("Colour", font: Desk.sans(12.5), colour: Desk.dim)
@@ -74,8 +84,7 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         anagrams.text.toolTip = "Each anagram is a paragraph: its phrase, then any working, a step to a line, then its answer. Working may be partial or wrong; the letters a step doesn\u{2019}t use dim beneath it. A paragraph of one line stands solved from the start, and one whose phrase starts with ~ stands unsolved; the cue skips both. Return starts a new line; Tab moves on, and Escape puts it back as it was."
 
         for (button, action) in [(choose, #selector(choosePressed)), (removeMedia, #selector(removePressed)),
-                                 (chooseSecond, #selector(chooseSecondPressed)), (removeSecond, #selector(removeSecondPressed)),
-                                 (editPointsButton, #selector(editPointsPressed))] {
+                                 (editRouteButton, #selector(editRoutePressed))] {
             button.target = self
             button.action = action
         }
@@ -95,16 +104,13 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         colour.action = #selector(colourChosen)
         well.onDrop = { [weak self] url in
             guard let self, let cue else { return }
-            importMedia(url, cue.id, .first)
+            importMedia(url, cue.id, nil)
         }
-        secondWell.onDrop = { [weak self] url in
-            guard let self, let cue else { return }
-            importMedia(url, cue.id, .second)
-        }
+        wireMorphPictures()
         let views: [NSView] = [heading, empty, numberLabel, number, lineLabel, line,
                                continueLabel, continueMode, continueSeconds, secondsLabel,
                                textLabel, text, subLabel, sub, keyLabel, key, anagramsLabel, anagrams, mediaLabel, well, choose, removeMedia,
-                               secondLabel, secondWell, chooseSecond, removeSecond, pointsLabel, pointsCount, editPointsButton,
+                               picturesLabel, picturesView, routeLabel, routeSummary, editRouteButton,
                                atEndLabel, atEnd, colourLabel, colour]
         views.forEach(addSubview)
     }
@@ -145,8 +151,9 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
 
     // MARK: Showing a cue
 
-    func update(cue: Cue?) {
+    func update(cue: Cue?, goPoint: ShowController.StandingByGoPoint? = nil) {
         self.cue = cue
+        self.goPoint = cue != nil && goPoint?.cue.id == cue?.id ? goPoint : nil
         let kind = cue?.kind
         empty.isHidden = cue != nil
         for view in [numberLabel, number, lineLabel, line, continueLabel, continueMode] as [NSView] {
@@ -156,14 +163,14 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         text.isHidden = textLabel.isHidden
         anagramsLabel.isHidden = kind != .anagram
         anagrams.isHidden = anagramsLabel.isHidden
-        subLabel.isHidden = kind == nil || kind == .blank || kind == .image || kind == .anagram || kind == .morph
+        subLabel.isHidden = kind == nil || kind == .blank || kind == .image || kind == .anagram || kind == .morph || kind == .map
         sub.isHidden = subLabel.isHidden
         keyLabel.isHidden = kind != .title
         key.isHidden = keyLabel.isHidden
-        for view in [mediaLabel, well, choose, removeMedia] as [NSView] { view.isHidden = ![.image, .video, .morph].contains(kind) }
-        for view in [secondLabel, secondWell, chooseSecond, removeSecond, pointsLabel, pointsCount, editPointsButton] as [NSView] {
-            view.isHidden = kind != .morph
-        }
+        for view in [mediaLabel, well, choose, removeMedia] as [NSView] { view.isHidden = ![.image, .video, .map].contains(kind) }
+        for view in [routeLabel, routeSummary, editRouteButton] as [NSView] { view.isHidden = kind != .map }
+        picturesLabel.isHidden = kind != .morph
+        picturesView.isHidden = picturesLabel.isHidden
         atEndLabel.isHidden = kind != .video
         atEnd.isHidden = atEndLabel.isHidden
         colourLabel.isHidden = kind != .blank
@@ -178,8 +185,18 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         }
 
         heading.stringValue = "Cue \(cue.number.isEmpty ? "(no number)" : cue.number) \u{2014} \(cue.kind.name)"
+            + (self.goPoint.map { " \u{00B7} GO \($0.number) of \($0.count): \($0.point.text)" } ?? "")
         set(number, cue.number)
-        set(line, cue.line)
+        // With one of its GOs standing by, the cue point is that GO's.
+        if let goPoint = self.goPoint {
+            lineLabel.stringValue = "GO \(goPoint.number)"
+            if line.currentEditor() == nil { Self.hint(line, "The line or action GO \(goPoint.number) waits for") }
+            set(line, goPoint.point.cuePoint)
+        } else {
+            lineLabel.stringValue = "Cue point"
+            if line.currentEditor() == nil { Self.hint(line, "The line or action to wait for") }
+            set(line, cue.line)
+        }
         var continuesWhenFinished = false
         switch cue.continueMode {
         case .whenCued: continueMode.selectItem(at: 0)
@@ -211,13 +228,19 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
             removeMedia.isEnabled = !c.src.isEmpty
         case .morph(let c):
             textLabel.stringValue = "Label"
-            mediaLabel.stringValue = "First"
-            well.show(path: c.src, kind: .morph, empty: "The picture it starts from \u{2014} drop one here")
+            if morphPictures.pictures != c.pictures { morphPictures.pictures = c.pictures }
+            let morphMs = (controller?.show.settings ?? ShowSettings()).resolved(c.overrides).morphMs
+            if morphPictures.cueMorphMs != morphMs { morphPictures.cueMorphMs = morphMs }
+        case .map(let c):
+            textLabel.stringValue = "Header"
+            mediaLabel.stringValue = "Map"
+            well.show(path: c.src, kind: .map, empty: "No map \u{2014} drop one here")
             removeMedia.isEnabled = !c.src.isEmpty
-            secondWell.show(path: c.into, kind: .morph, empty: "The picture it becomes \u{2014} drop one here")
-            removeSecond.isEnabled = !c.into.isEmpty
-            pointsCount.stringValue = c.pairs.isEmpty ? "None: a plain dissolve" : "\(c.pairs.count) matched"
-            editPointsButton.isEnabled = !c.src.isEmpty && !c.into.isEmpty
+            let stops = c.stops.count - 1, jumps = c.stops.dropFirst().filter { c.stop(at: $0).arrival == .jump }.count
+            routeSummary.stringValue = c.route.isEmpty ? "None yet: set it in the route window"
+                : stops < 1 ? "A start, and no stops yet"
+                : "\(stops) stop\(stops == 1 ? "" : "s")" + (jumps > 0 ? ", \(jumps) by a jump" : "")
+                    + (c.reference == nil ? "" : ", with coordinates")
         case .video(let c):
             textLabel.stringValue = "Label"
             subLabel.stringValue = "Caption"
@@ -246,7 +269,12 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         case number:
             controller.updateCue(cue.id, "Change Cue Number") { $0.number = value.trimmingCharacters(in: .whitespaces) }
         case line:
-            controller.updateCue(cue.id, "Change Cue Point") { $0.line = value }
+            if let step = goPoint?.number.advanced(by: -1) {
+                let defaults = controller.show.settings
+                controller.updateCue(cue.id, "Change GO Cue Point") { $0.setCuePoint(value, ofGoPoint: step, defaults: defaults) }
+            } else {
+                controller.updateCue(cue.id, "Change Cue Point") { $0.line = value }
+            }
         case text:
             controller.updateCue(cue.id, cue.kind == .title ? "Change Text" : "Change Label") { $0.text = value }
         case sub:
@@ -310,7 +338,11 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         guard !revertingAnagrams, let id = anagramsCue ?? cue?.id else { return }
         let read = Anagram.anagrams(fromParagraphs: anagrams.text.string)
         controller?.updateCue(id, "Change Anagrams") { cue in
-            if case .anagram(var c) = cue.content { c.anagrams = read; cue.content = .anagram(c) }
+            // Each GO's cue point stays with the step it moves to.
+            if case .anagram(var c) = cue.content {
+                c.anagrams = Anagram.carryingCuePoints(from: c.anagrams, into: read)
+                cue.content = .anagram(c)
+            }
         }
     }
 
@@ -365,14 +397,39 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         }
     }
 
-    @objc private func choosePressed() { if let cue { chooseMedia(cue.id, .first) } }
-    @objc private func chooseSecondPressed() { if let cue { chooseMedia(cue.id, .second) } }
-    @objc private func editPointsPressed() { if let cue { editPoints(cue.id) } }
+    @objc private func choosePressed() { if let cue { chooseMedia(cue.id, nil) } }
+    @objc private func editRoutePressed() { if let cue { editRoute(cue.id) } }
 
-    @objc private func removeSecondPressed() {
-        guard let cue else { return }
-        controller?.updateCue(cue.id, "Remove Picture") { cue in
-            if case .morph(var c) = cue.content { c.into = ""; cue.content = .morph(c) }
+    // MARK: A morph's pictures
+
+    /// Every change to the list is one undoable edit, to the cue the strip
+    /// shows.
+    private func wireMorphPictures() {
+        func change(_ name: String, _ body: @escaping (inout MorphContent) -> Void) {
+            guard let id = cue?.id else { return }
+            controller?.updateCue(id, name) { cue in
+                if case .morph(var c) = cue.content { body(&c); cue.content = .morph(c) }
+            }
+        }
+        morphPictures.onAdd = { [weak self] urls in
+            guard let self, let id = cue?.id else { return }
+            for url in urls { importMedia(url, id, .add) }
+        }
+        morphPictures.onChoose = { [weak self] index in
+            guard let self, let id = cue?.id else { return }
+            chooseMedia(id, index.map(ShowDocument.MediaSlot.picture) ?? .add)
+        }
+        morphPictures.onRemove = { index in change("Remove Picture") { $0.removePicture(at: index) } }
+        morphPictures.onMove = { from, to in change("Move Picture") { $0.movePicture(from: from, to: to) } }
+        morphPictures.onTime = { index, ms in
+            change("Change Stage Time") { c in
+                guard c.pictures.indices.contains(index) else { return }
+                c.pictures[index].morphMs = ms.map { min(max($0, SettingRange.morphMs.lowerBound), SettingRange.morphMs.upperBound) }
+            }
+        }
+        morphPictures.onPoints = { [weak self] stage in
+            guard let self, let id = cue?.id else { return }
+            editPoints(id, stage)
         }
     }
 
@@ -382,7 +439,7 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
         controller?.updateCue(cue.id, cue.kind == .video ? "Remove Clip" : "Remove Picture") { cue in
             switch cue.content {
             case .image(var c): c.src = ""; cue.content = .image(c)
-            case .morph(var c): c.src = ""; cue.content = .morph(c)
+            case .map(var c): c.src = ""; cue.content = .map(c)
             case .video(var c): c.src = ""; cue.content = .video(c)
             default: break
             }
@@ -451,13 +508,18 @@ final class CueEditorPanel: PanelView, NSTextFieldDelegate, NSTextViewDelegate {
             ly += 32
         }
         if !well.isHidden { media(mediaLabel, well, choose, removeMedia) }
-        if !secondWell.isHidden {
-            media(secondLabel, secondWell, chooseSecond, removeSecond)
-            pointsLabel.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
-            let buttonWidth = editPointsButton.fittingSize.width
-            pointsCount.frame = NSRect(x: x + labelWidth, y: ly + 3, width: leftWidth - labelWidth - buttonWidth - 8, height: 18)
-            editPointsButton.frame = NSRect(x: x + leftWidth - buttonWidth, y: ly, width: buttonWidth, height: 24)
+        if !routeSummary.isHidden {
+            routeLabel.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
+            let buttonWidth = editRouteButton.fittingSize.width
+            routeSummary.frame = NSRect(x: x + labelWidth, y: ly + 3, width: leftWidth - labelWidth - buttonWidth - 8, height: 18)
+            editRouteButton.frame = NSRect(x: x + leftWidth - buttonWidth, y: ly, width: buttonWidth, height: 24)
             ly += 32
+        }
+        if !picturesView.isHidden {
+            // The rest of the column: three rows' room for the strip.
+            picturesLabel.frame = NSRect(x: x, y: ly + 3, width: labelWidth - 6, height: 18)
+            picturesView.frame = NSRect(x: x + labelWidth, y: ly, width: leftWidth - labelWidth, height: 3 * 32 - 8)
+            ly += 3 * 32
         }
         if !atEnd.isHidden { left(atEndLabel, atEnd, controlWidth: min(220, leftWidth - labelWidth)) }
         if !colour.isHidden { left(colourLabel, colour, controlWidth: 60) }

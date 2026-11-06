@@ -11,6 +11,7 @@ public enum SettingValue: Equatable, Sendable {
     case font(String)
     case style(TransitionStyle)
     case advance(AnagramAdvance)
+    case camera(MapCamera)
 }
 
 /// Every setting a show holds a default for, and that a cue may override.
@@ -18,7 +19,7 @@ public enum SettingValue: Equatable, Sendable {
 /// and the printed sheet: its range and step, how it reads, and where it
 /// lives in the model.
 public enum SettingKey: String, CaseIterable, Sendable {
-    case clock, wave, hold, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, advance, pause, font, morphTime
+    case clock, wave, hold, advance, pause, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, font, morphTime, camera, zoom, trail
     case transition, fade
 
     /// What a title cue can override.
@@ -26,18 +27,23 @@ public enum SettingKey: String, CaseIterable, Sendable {
     /// What an anagram cue can override.
     public static let anagram: [SettingKey] = [.clock, .wave, .hold, .advance, .pause, .font]
     /// What a morph cue can override: it has no wave.
-    public static let morph: [SettingKey] = [.clock, .hold, .morphTime]
+    public static let morph: [SettingKey] = [.clock, .hold, .advance, .pause, .morphTime]
+    /// What a map cue can override: it has no wave.
+    public static let map: [SettingKey] = [.clock, .hold, .advance, .pause, .camera, .zoom, .trail]
     /// What an image cue can override.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
     /// The transition into a cue, which every cue can override.
     public static let transitions: [SettingKey] = [.transition, .fade]
     /// The show-default panels, in their groups.
     public static let groups: [(name: String, keys: [SettingKey])] = [
-        ("Timing", [.clock, .wave, .hold]),
+        // Advance and Pause belong to every cue that runs in steps, anagrams
+        // and morphs alike.
+        ("Timing", [.clock, .wave, .hold, .advance, .pause]),
         ("Decryption cues", [.textScale, .histogram, .sceneLine, .letters, .bars]),
         ("Image cues", [.grid, .flip, .order, .reveal]),
-        ("Anagram cues", [.advance, .pause, .font]),
+        ("Anagram cues", [.font]),
         ("Morph cues", [.morphTime]),
+        ("Map cues", [.camera, .zoom, .trail]),
         ("Transitions", transitions),
     ]
 
@@ -59,6 +65,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .pause: "Pause"
         case .font: "Font"
         case .morphTime: "Morph"
+        case .camera: "View"
+        case .zoom: "Zoom"
+        case .trail: "Trail"
         case .transition: "Transition"
         case .fade: "Fade"
         }
@@ -75,9 +84,12 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .histogram: "The letter-frequency bars and readouts beneath the text."
         case .sceneLine: "The smaller line of text beneath the main one."
         case .bars: "What the histogram counts: single letters, or the commonest pairs of letters, which tell more on a long text."
-        case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. GO carries the cue on rather than firing the next one."
-        case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves."
-        case .morphTime: "How long the first picture takes to become the second, after the hold."
+        case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. A morph cue of several pictures, or a map cue's dot, moves on by itself, or waits for GO before each stage or stop on either GO choice. GO carries the cue on rather than firing the next one."
+        case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves; a morph on each picture before it becomes the next; and a map's dot at each stop."
+        case .morphTime: "How long each picture takes to become the next, after the hold. A stage can have its own, set in the Cue tab."
+        case .camera: "Whether a map follows its dot, the dot fixed at the middle and the map sliding under it, or holds still, framed round the whole route, with the dot moving across it."
+        case .zoom: "Following the dot, how many stage widths across a map is drawn; holding still, the closest the frame comes. The map's picture should be about this many times the stage's width in pixels, or it softens."
+        case .trail: "How long the red trail behind a map's dot lasts before it fades away. None leaves no trail."
         case .font: "The typeface an anagram is set in. Each letter keeps its own shape as it travels, so a printed hand suits; a joined-up script loses its joins."
         case .letters: "How each letter finds its way home: cycling through random glyphs and rolling back into place, or spinning on a dial, like a cryptex's, and settling."
         case .grid: "How many tiles across the picture is cut into."
@@ -126,9 +138,39 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .bars: .choice(["Letters", "Digraphs"])
         case .font: .font
         case .morphTime: .slider(SettingRange.morphMs, step: 100)
+        case .camera: .choice(["Follows the dot", "Holds still"])
+        case .zoom: .slider(SettingRange.mapZoom, step: 1)
+        case .trail: .slider(SettingRange.trailSeconds, step: 1)
         case .transition: .choice(["Fade through black", "Snap"])
         case .fade: .slider(SettingRange.fadeMs, step: 100)
         }
+    }
+
+    /// For a choice, what its menu offers on a kind of cue, or as the show's
+    /// default with no kind. A morph's Advance has two choices: Each stage
+    /// on GO stands for both of the default's GO choices.
+    public func choices(for kind: Cue.Kind? = nil) -> [(label: String, value: SettingValue)] {
+        if self == .advance, kind == .morph {
+            return [("By itself", .advance(.byItself)), ("Each stage on GO", .advance(.eachStep))]
+        }
+        if self == .advance, kind == .map {
+            return [("By itself", .advance(.byItself)), ("Each stop on GO", .advance(.eachStep))]
+        }
+        guard case .choice(let options) = control else { return [] }
+        return options.indices.compactMap { i in choice(at: i).map { (options[i], $0) } }
+    }
+
+    /// Where a value sits in the menu `choices(for:)` gives.
+    public func choiceIndex(of value: SettingValue, for kind: Cue.Kind?) -> Int? {
+        if self == .advance, kind == .morph || kind == .map, case .advance(let a) = value { return a == .byItself ? 0 : 1 }
+        return choiceIndex(of: value)
+    }
+
+    /// How a value reads beside its control, on a kind of cue.
+    public func format(_ value: SettingValue, for kind: Cue.Kind?) -> String {
+        if self == .advance, kind == .morph, case .advance(let a) = value { return a == .byItself ? "by itself" : "each stage on GO" }
+        if self == .advance, kind == .map, case .advance(let a) = value { return a == .byItself ? "by itself" : "each stop on GO" }
+        return format(value)
     }
 
     /// For a choice, the value at each place in its menu.
@@ -137,6 +179,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .order: [SettingValue.order(.diagonal), .order(.random), .order(.spiral)][safe: index]
         case .reveal: [SettingValue.reveal(.flip), .reveal(.sharpen)][safe: index]
         case .advance: [SettingValue.advance(.byItself), .advance(.eachAnagram), .advance(.eachStep)][safe: index]
+        case .camera: [SettingValue.camera(.follow), .camera(.still)][safe: index]
         case .letters: [SettingValue.letters(.cycle), .letters(.dials)][safe: index]
         case .bars: [SettingValue.bars(.letters), .bars(.digraphs)][safe: index]
         case .transition: [SettingValue.style(.fade), .style(.snap)][safe: index]
@@ -156,6 +199,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.clock, .number(let n)), (.flip, .number(let n)): "\(n) ms"
         case (.wave, .number(let n)), (.hold, .number(let n)), (.pause, .number(let n)): n == 0 ? "none" : "\(n)"
         case (.textScale, .number(let n)): "\(n)%"
+        case (.zoom, .number(let n)): "\(n)\u{00D7}"
+        case (.trail, .number(let n)): n == 0 ? "none" : "\(n) s"
         case (.fade, .number(let n)), (.morphTime, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
         case (.grid, .number(let n)): "\(n) wide"
         case (_, .flag(let on)): on ? "on" : "off"
@@ -170,6 +215,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (_, .advance(.byItself)): "by itself"
         case (_, .advance(.eachAnagram)): "each anagram on GO"
         case (_, .advance(.eachStep)): "each step on GO"
+        case (_, .camera(.follow)): "follows the dot"
+        case (_, .camera(.still)): "holds still"
         case (_, .number(let n)): "\(n)"
         }
     }
@@ -201,6 +248,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .pause: .number(s.pauseTicks)
         case .font: .font(s.anagramFont)
         case .morphTime: .number(s.morphMs)
+        case .camera: .camera(s.mapCamera)
+        case .zoom: .number(s.mapZoom)
+        case .trail: .number(s.trailSeconds)
         case .transition: .style(s.transition)
         case .fade: .number(s.fadeMs)
         }
@@ -224,6 +274,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.pause, .number(let n)): s.pauseTicks = n
         case (.font, .font(let family)): s.anagramFont = family
         case (.morphTime, .number(let n)): s.morphMs = n
+        case (.camera, .camera(let camera)): s.mapCamera = camera
+        case (.zoom, .number(let n)): s.mapZoom = n
+        case (.trail, .number(let n)): s.trailSeconds = n
         case (.transition, .style(let style)): s.transition = style
         case (.fade, .number(let n)): s.fadeMs = n
         default: break
@@ -239,6 +292,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .title: Self.title.contains(self)
         case .anagram: Self.anagram.contains(self)
         case .morph: Self.morph.contains(self)
+        case .map: Self.map.contains(self)
         case .image: Self.image.contains(self)
         case .video, .blank: false
         }
@@ -281,7 +335,21 @@ public enum SettingKey: String, CaseIterable, Sendable {
             switch self {
             case .clock: return o.clockMs.map(SettingValue.number)
             case .hold: return o.holdTicks.map(SettingValue.number)
+            case .advance: return o.advance.map(SettingValue.advance)
+            case .pause: return o.pauseTicks.map(SettingValue.number)
             case .morphTime: return o.morphMs.map(SettingValue.number)
+            default: return nil
+            }
+        case .map(let c):
+            let o = c.overrides
+            switch self {
+            case .clock: return o.clockMs.map(SettingValue.number)
+            case .hold: return o.holdTicks.map(SettingValue.number)
+            case .advance: return o.advance.map(SettingValue.advance)
+            case .pause: return o.pauseTicks.map(SettingValue.number)
+            case .camera: return o.camera.map(SettingValue.camera)
+            case .zoom: return o.zoom.map(SettingValue.number)
+            case .trail: return o.trailSeconds.map(SettingValue.number)
             default: return nil
             }
         case .image(let c):
@@ -314,6 +382,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         func bars() -> TitleBars? { if case .bars(let b) = value { b } else { nil } }
         func style() -> TransitionStyle? { if case .style(let s) = value { s } else { nil } }
         func advance() -> AnagramAdvance? { if case .advance(let a) = value { a } else { nil } }
+        func camera() -> MapCamera? { if case .camera(let c) = value { c } else { nil } }
         switch self {
         case .transition:
             cue.transition.style = style()
@@ -351,10 +420,24 @@ public enum SettingKey: String, CaseIterable, Sendable {
             switch self {
             case .clock: c.overrides.clockMs = number()
             case .hold: c.overrides.holdTicks = number()
+            case .advance: c.overrides.advance = advance()
+            case .pause: c.overrides.pauseTicks = number()
             case .morphTime: c.overrides.morphMs = number()
             default: return
             }
             cue.content = .morph(c)
+        case .map(var c):
+            switch self {
+            case .clock: c.overrides.clockMs = number()
+            case .hold: c.overrides.holdTicks = number()
+            case .advance: c.overrides.advance = advance()
+            case .pause: c.overrides.pauseTicks = number()
+            case .camera: c.overrides.camera = camera()
+            case .zoom: c.overrides.zoom = number()
+            case .trail: c.overrides.trailSeconds = number()
+            default: return
+            }
+            cue.content = .map(c)
         case .image(var c):
             switch self {
             case .clock: c.overrides.clockMs = number()

@@ -116,7 +116,7 @@ final class HeaderView: PanelView {
         openProjector.bezelStyle = .rounded
         openProjector.refusesFirstResponder = true
         // A pull-down's first item is its title; the kinds follow.
-        addCue.addItems(withTitles: ["Add Cue"] + Cue.Kind.allCases.map(\.heading))
+        addCue.addItems(withTitles: ["Add Cue"] + Cue.Kind.allCases.map(\.heading) + ["Group"])
         addCue.controlSize = .small
         addCue.font = Desk.sans(11.5)
         addCue.refusesFirstResponder = true

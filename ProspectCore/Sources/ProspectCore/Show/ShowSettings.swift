@@ -16,15 +16,24 @@ public struct ShowSettings: Equatable, Sendable {
     public var flipMs = 420
     public var order = TileOrder.diagonal
     public var reveal = TileReveal.flip
-    /// How an anagram cue moves on from each step: by itself, or on GO.
+    /// How an anagram cue moves on from each step, and a morph cue from each
+    /// picture: by itself, or on GO. For a morph, either GO choice waits for
+    /// GO before each stage.
     public var advance = AnagramAdvance.byItself
-    /// Frames an anagram rests on each step before the next moves.
+    /// Frames an anagram rests on each step before the next moves, and a
+    /// morph on each picture.
     public var pauseTicks = 44
     /// The font family anagram letters are set in. Empty is the stage's own
     /// type, SF Mono.
     public var anagramFont = ""
     /// How long a morph takes, from the first picture to the second.
     public var morphMs = 3000
+    /// Whether a map cue's view follows its dot, or holds still.
+    public var mapCamera = MapCamera.follow
+    /// How many stage widths a map cue's map is drawn across.
+    public var mapZoom = 3
+    /// How long the trail behind a map cue's dot lasts.
+    public var trailSeconds = 8
     /// How the stage changes to each cue, and how long each fade takes.
     public var transition = Transition.standard.style
     public var fadeMs = Transition.standard.fadeMs
@@ -56,7 +65,14 @@ public struct ShowSettings: Equatable, Sendable {
     }
 
     public func resolved(_ o: MorphOverrides) -> MorphSettings {
-        MorphSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, morphMs: o.morphMs ?? morphMs)
+        MorphSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, morphMs: o.morphMs ?? morphMs,
+                      advance: o.advance ?? advance, pauseTicks: o.pauseTicks ?? pauseTicks)
+    }
+
+    public func resolved(_ o: MapOverrides) -> MapSettings {
+        MapSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, advance: o.advance ?? advance,
+                    pauseTicks: o.pauseTicks ?? pauseTicks, camera: o.camera ?? mapCamera, zoom: o.zoom ?? mapZoom,
+                    trailSeconds: o.trailSeconds ?? trailSeconds)
     }
 
     public func resolved(_ o: ImageOverrides) -> ImageSettings {
@@ -119,12 +135,22 @@ public struct MorphSettings: Equatable, Sendable {
     public var clockMs: Int
     public var holdTicks: Int
     public var morphMs: Int
+    /// Either GO choice waits for GO before each stage.
+    public var advance: AnagramAdvance
+    /// Frames each picture rests before the next stage, when the cue moves
+    /// on by itself.
+    public var pauseTicks: Int
 
-    public init(clockMs: Int, holdTicks: Int, morphMs: Int) {
+    public init(clockMs: Int, holdTicks: Int, morphMs: Int, advance: AnagramAdvance = .byItself, pauseTicks: Int = 44) {
         self.clockMs = clockMs
         self.holdTicks = holdTicks
         self.morphMs = morphMs
+        self.advance = advance
+        self.pauseTicks = pauseTicks
     }
+
+    /// Whether each stage waits for GO.
+    public var eachStageOnGO: Bool { advance != .byItself }
 }
 
 /// The settings an image cue runs with, once its overrides are applied.
@@ -172,6 +198,9 @@ extension Cue {
         case .morph(let c):
             let s = defaults.resolved(c.overrides)
             return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
+        case .map(let c):
+            let s = defaults.resolved(c.overrides)
+            return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
         case .video, .blank:
             // A video plays on its own clock from GO, and a blank is instant.
             return CueTiming(clockMs: defaults.clockMs, holdTicks: 0, isInstant: true)
@@ -190,6 +219,8 @@ public enum SettingRange {
     public static let gridColumns = 4...28
     public static let flipMs = 150...1200
     public static let morphMs = 500...15000
+    public static let mapZoom = 1...8
+    public static let trailSeconds = 0...30
     public static let fadeMs = 100...3000
     public static let geometrySize = 20...100
     public static let geometryOffset = -40...40
@@ -198,7 +229,7 @@ public enum SettingRange {
 extension ShowSettings: Codable {
     private enum CodingKeys: String, CodingKey {
         case clockMs, waveTicks, holdTicks, histogram, sceneLine, letters, bars, gridColumns, flipMs, order
-        case reveal, advance, pauseTicks, anagramFont, morphMs, transition, fadeMs, textScale, geometry, projector
+        case reveal, advance, pauseTicks, anagramFont, morphMs, mapCamera, mapZoom, trailSeconds, transition, fadeMs, textScale, geometry, projector
     }
 
     public init(from decoder: Decoder) throws {
@@ -222,6 +253,9 @@ extension ShowSettings: Codable {
         pauseTicks = try int(.pauseTicks, d.pauseTicks, SettingRange.pauseTicks)
         anagramFont = try c.decodeIfPresent(String.self, forKey: .anagramFont) ?? d.anagramFont
         morphMs = try int(.morphMs, d.morphMs, SettingRange.morphMs)
+        mapCamera = try c.decodeIfPresent(MapCamera.self, forKey: .mapCamera) ?? d.mapCamera
+        mapZoom = try int(.mapZoom, d.mapZoom, SettingRange.mapZoom)
+        trailSeconds = try int(.trailSeconds, d.trailSeconds, SettingRange.trailSeconds)
         transition = try c.decodeIfPresent(TransitionStyle.self, forKey: .transition) ?? d.transition
         fadeMs = try int(.fadeMs, d.fadeMs, SettingRange.fadeMs)
         textScale = try int(.textScale, d.textScale, SettingRange.textScale)
@@ -246,6 +280,11 @@ extension ShowSettings: Codable {
         try c.encode(pauseTicks, forKey: .pauseTicks)
         try c.encode(anagramFont, forKey: .anagramFont)
         try c.encode(morphMs, forKey: .morphMs)
+        // Only when changed, so a show without maps reads as it did.
+        let d = ShowSettings()
+        if mapCamera != d.mapCamera { try c.encode(mapCamera, forKey: .mapCamera) }
+        if mapZoom != d.mapZoom { try c.encode(mapZoom, forKey: .mapZoom) }
+        if trailSeconds != d.trailSeconds { try c.encode(trailSeconds, forKey: .trailSeconds) }
         try c.encode(transition, forKey: .transition)
         try c.encode(fadeMs, forKey: .fadeMs)
         try c.encode(textScale, forKey: .textScale)

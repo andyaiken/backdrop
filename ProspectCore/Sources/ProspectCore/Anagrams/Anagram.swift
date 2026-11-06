@@ -14,12 +14,17 @@ public struct Anagram: Equatable, Sendable {
     /// Left as it stands, its phrase jumbled, and skipped when the cue
     /// solves its anagrams.
     public var ignored: Bool
+    /// The cue point of each GO it waits for, by the step that GO moves to:
+    /// so a GO keeps its cue point whether the cue waits before each step or
+    /// only before each anagram, which waits before its first move.
+    public var cuePoints: [String: String]
 
-    public init(text: String = "", working: [String] = [], answer: String = "", ignored: Bool = false) {
+    public init(text: String = "", working: [String] = [], answer: String = "", ignored: Bool = false, cuePoints: [String: String] = [:]) {
         self.text = text
         self.working = working
         self.answer = answer
         self.ignored = ignored
+        self.cuePoints = cuePoints
     }
 
     /// What it shows, in order: the phrase, the working, then the answer.
@@ -70,6 +75,20 @@ public struct Anagram: Equatable, Sendable {
         finish()
         return anagrams
     }
+
+    /// Anagrams read back from the text box, keeping the cue points the old
+    /// ones had for steps still there: first the same anagram's, then any.
+    public static func carryingCuePoints(from old: [Anagram], into new: [Anagram]) -> [Anagram] {
+        let any = old.reduce(into: [String: String]()) { all, a in all.merge(a.cuePoints) { first, _ in first } }
+        return new.enumerated().map { i, anagram in
+            var anagram = anagram
+            let own = old.indices.contains(i) ? old[i].cuePoints : [:]
+            for step in anagram.steps.dropFirst() {
+                if let line = own[step] ?? any[step] { anagram.cuePoints[step] = line }
+            }
+            return anagram
+        }
+    }
 }
 
 /// In show.json, each anagram is `{"text": …, "working": […], "answer": …}`,
@@ -77,7 +96,7 @@ public struct Anagram: Equatable, Sendable {
 /// that is.
 extension Anagram: Codable {
     private enum CodingKeys: String, CodingKey {
-        case text, working, answer, ignored
+        case text, working, answer, ignored, cuePoints
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,6 +105,7 @@ extension Anagram: Codable {
         working = try c.decodeIfPresent([String].self, forKey: .working) ?? []
         answer = try c.decodeIfPresent(String.self, forKey: .answer) ?? ""
         ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+        cuePoints = try c.decodeIfPresent([String: String].self, forKey: .cuePoints) ?? [:]
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -94,6 +114,7 @@ extension Anagram: Codable {
         if !working.isEmpty { try c.encode(working, forKey: .working) }
         try c.encode(answer, forKey: .answer)
         if ignored { try c.encode(true, forKey: .ignored) }
+        if !cuePoints.isEmpty { try c.encode(cuePoints, forKey: .cuePoints) }
     }
 }
 
@@ -116,8 +137,8 @@ extension AnagramContent {
         let solved = anagrams.filter(\.isSolvedOnStage)
         return switch advance {
         case .byItself: []
-        case .eachAnagram: solved.map { GoPoint(unit: .anagram, text: $0.steps[0]) }
-        case .eachStep: solved.flatMap { $0.steps.dropFirst().map { GoPoint(unit: .step, text: $0) } }
+        case .eachAnagram: solved.map { GoPoint(unit: .anagram, text: $0.steps[0], cuePoint: $0.cuePoints[$0.steps[1]] ?? "") }
+        case .eachStep: solved.flatMap { a in a.steps.dropFirst().map { GoPoint(unit: .step, text: $0, cuePoint: a.cuePoints[$0] ?? "") } }
         }
     }
 }

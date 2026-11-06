@@ -4,12 +4,12 @@ import QuartzCore
 import Testing
 @testable import ProspectStage
 
-/// Two 400 x 200 pictures, each a white dot on black: the first with its dot
-/// left of centre, the second right of it.
+/// Three 400 x 200 pictures, each a white dot on black: left of centre, in
+/// the middle, and right of it.
 private let media: URL = {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent("prospect-morph-\(ProcessInfo.processInfo.processIdentifier)")
     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    for (name, x) in [("left.png", 100), ("right.png", 300)] {
+    for (name, x) in [("left.png", 100), ("middle.png", 200), ("right.png", 300)] {
         let ctx = CGContext(data: nil, width: 400, height: 200, bitsPerComponent: 8, bytesPerRow: 0,
                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         ctx.setFillColor(CGColor(gray: 0, alpha: 1))
@@ -115,13 +115,76 @@ struct MorphRendererTests {
         #expect(renderer.progress > a, "10 ms on, inside one 44 ms frame")
     }
 
+    /// Left, middle, right: the dot travels a quarter of the way at each
+    /// stage, waiting for GO before each.
+    func threeStages() -> Cue {
+        let half = MorphPair(from: PicturePoint(x: 0.25, y: 0.5), to: PicturePoint(x: 0.5, y: 0.5))
+        let rest = MorphPair(from: PicturePoint(x: 0.5, y: 0.5), to: PicturePoint(x: 0.75, y: 0.5))
+        return Cue(number: "9", content: .morph(MorphContent(text: "DOT", pictures: [
+            MorphPicture(src: "media/left.png"), MorphPicture(src: "media/middle.png", pairs: [half]), MorphPicture(src: "media/right.png", pairs: [rest]),
+        ], overrides: MorphOverrides(advance: .eachStep))))
+    }
+
+    /// Until both pictures of what is on stage have loaded.
+    func ready() async throws {
+        while !renderer.isReady { try await Task.sleep(for: .milliseconds(5)) }
+    }
+
+    @Test("Each stage on GO: the first picture waits, GO morphs to the next, and GO straight to a stage starts from the picture before it")
+    func stagesOnGO() async throws {
+        await prepare(threeStages())
+        _ = renderer.paint(at: 0)
+        #expect(renderer.isWaiting(at: 0), "the first picture stands until GO")
+        #expect(!renderer.paint(at: 500), "and the cue hasn't finished")
+        #expect(try samples().left > 200)
+        renderer.carryOn(at: 500)
+        _ = renderer.paint(at: 500 + 3000.0 / 44)
+        try await ready()
+        _ = renderer.paint(at: 500 + 3000.0 / 44 + 0.01)
+        let middle = try samples()
+        #expect(middle.middle > 200 && middle.left < 30 && middle.right < 30, "on the middle picture: \(middle)")
+        #expect(renderer.isWaiting(at: 600), "and waiting again")
+
+        renderer.goTo(0, at: 1000)
+        _ = renderer.paint(at: 1000)
+        try await ready()
+        _ = renderer.paint(at: 1000.01)
+        #expect(try samples().left > 200, "back to the first picture, to run the first stage again")
+
+        renderer.goTo(1, at: 2000)
+        _ = renderer.paint(at: 2000)
+        try await ready()
+        _ = renderer.paint(at: 2000.01)
+        #expect(try samples().middle > 200, "the middle picture, put up at once")
+        #expect(renderer.paint(at: 2000 + 3000.0 / 44 + 1))
+        let end = try samples()
+        #expect(end.right > 200 && end.middle < 30, "and on to the last: \(end)")
+    }
+
+    @Test("The runner rests while a morph waits for GO, and fires a cue straight to a stage")
+    func runnerWaits() async throws {
+        let runner = StageRunner(renderers: [.morph: renderer])
+        runner.attach(surface(width: 960, height: 540))
+        let cue = threeStages()
+        await prepare(cue)
+        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 0)
+        _ = runner.tick(at: 3)
+        #expect(!runner.isRunning, "waiting for the first GO")
+        runner.carryOn(at: 3)
+        #expect(runner.isRunning)
+        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 10, startingAt: 1)
+        try await ready()
+        _ = runner.tick(at: 10 + 0.044 * 44 + 0.01)
+        #expect(renderer.shown.stage == 1, "the second stage, the first already done")
+    }
+
     @Test("A missing picture shows the label on black, and says so")
     func missingPicture() async throws {
         var said: [String] = []
         renderer.onProblem = { said.append($0) }
-        await prepare(Cue(number: "9", content: .morph(MorphContent(text: "DOT", src: "", into: "media/gone.png"))))
+        await prepare(Cue(number: "9", content: .morph(MorphContent(text: "DOT", src: "media/left.png", into: "media/gone.png"))))
         #expect(said == ["Cue 9\u{2019}s second picture, gone.png, is missing from the show, so it is showing its label on black."])
-        #expect(renderer.plan?.isReady == true)
+        #expect(renderer.isReady)
     }
 
     @Test("Each picture sits where an image cue would put it: 90% of the stage, its own shape")

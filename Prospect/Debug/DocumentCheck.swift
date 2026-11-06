@@ -97,10 +97,27 @@ enum DocumentCheck {
         }
         check(controller.show.cues.map(\.number) == ["1", "2"], "added cues are numbered 1 and 2")
 
-        // A row dragged by its grip lands where it's dropped; dropped next to
-        // itself, it doesn't move.
-        let landings = [(0, 0), (0, 1), (0, 2), (0, 3), (2, 0), (2, 3), (3, 1)].map { CueListView.offset(moving: $0, toSlot: $1) }
-        check(landings == [0, 0, 1, 2, -2, 0, -2], "dragging a cue moves it by \(landings)")
+        // A cue dropped just under a group's heading joins that group, keeping
+        // its number and its place in the running order.
+        controller.standBy(imageID)
+        if let group = controller.addGroup(named: "Act One"), let row = controller.show.span(of: group)?.lowerBound {
+            controller.moveCue(titleID, before: row + 1)
+            check(controller.show.groups(around: titleID).map(\.name) == ["Act One"] && controller.show.cues.map(\.number) == ["1", "2"],
+                  "a cue dropped under a heading joins its group")
+            // Right-clicking a cue in edit mode offers to renumber its group.
+            if let console = document.console {
+                console.refresh()
+                let cueMenu = console.cueList.menuTitles(forCue: titleID), groupMenu = console.cueList.menuTitles(forGroup: group)
+                check(cueMenu == ["Renumber Cues in \u{201C}Act One\u{201D}\u{2026}", "Renumber All Cues\u{2026}"]
+                      && groupMenu.contains("Renumber Cues in \u{201C}Act One\u{201D}\u{2026}"),
+                      "a cue's right-click menu renumbers its group: \(cueMenu.joined(separator: " | "))")
+            }
+            controller.renumber(group: group, from: 100)
+            let numbers = controller.show.cues(inGroup: group).compactMap { controller.show[$0]?.number }
+            check(numbers.first == "100" && numbers.count == controller.show.cues.count, "a group renumbers from where it is told: \(numbers)")
+            controller.renumberAll()
+            controller.deleteGroup(group)
+        }
 
         // Tab runs down what the cue shows, then where it comes in the book,
         // skipping what this kind of cue doesn't have.

@@ -34,7 +34,7 @@ public struct AnagramContent: Equatable, Sendable {
 
     /// One anagram with no working, not ignored, or none at all, which
     /// show.json keeps flat as it always has.
-    var isPlain: Bool { anagrams.count < 2 && anagrams.first.map { $0.working.isEmpty && !$0.ignored } ?? true }
+    var isPlain: Bool { anagrams.count < 2 && anagrams.first.map { $0.working.isEmpty && !$0.ignored && $0.cuePoints.isEmpty } ?? true }
 }
 
 public struct ImageContent: Equatable, Sendable {
@@ -54,20 +54,99 @@ public struct ImageContent: Equatable, Sendable {
 public struct MorphContent: Equatable, Sendable {
     /// The cue's name, and what the stage shows for a missing picture.
     public var text: String
-    /// The first picture, and the second it becomes: relative paths inside
-    /// the package.
-    public var src: String
-    public var into: String
-    /// The features matched across the two.
-    public var pairs: [MorphPair]
+    /// The pictures in turn, each becoming the next: a stage for each change.
+    /// The first comes up with the cue's transition.
+    public var pictures: [MorphPicture]
     public var overrides: MorphOverrides
 
-    public init(text: String = "", src: String = "", into: String = "", pairs: [MorphPair] = [], overrides: MorphOverrides = .init()) {
+    public init(text: String = "", pictures: [MorphPicture] = [], overrides: MorphOverrides = .init()) {
         self.text = text
-        self.src = src
-        self.into = into
-        self.pairs = pairs
+        self.pictures = pictures
         self.overrides = overrides
+    }
+
+    /// One picture becoming another, as a morph cue first was.
+    public init(text: String = "", src: String, into: String = "", pairs: [MorphPair] = [], overrides: MorphOverrides = .init()) {
+        var pictures = [MorphPicture(src: src), MorphPicture(src: into, pairs: pairs)].filter { !$0.src.isEmpty }
+        if !pictures.isEmpty { pictures[0].pairs = [] }
+        self.init(text: text, pictures: pictures, overrides: overrides)
+    }
+
+    /// Each change from one picture to the next: stage k becomes picture k + 1.
+    public var stageCount: Int { max(pictures.count - 1, 0) }
+
+    /// Whether show.json can hold it as one picture becoming another, the
+    /// shape a version 2 reader knows.
+    public var isPlain: Bool {
+        pictures.count <= 2 && pictures.dropFirst().allSatisfy { $0.morphMs == nil && $0.cuePoint.isEmpty }
+    }
+
+    /// Picture `from` moved to `to`, as dragging it in the list does.
+    public mutating func movePicture(from: Int, to: Int) {
+        guard pictures.indices.contains(from), pictures.indices.contains(to), from != to else { return }
+        var order = Array(pictures.indices)
+        order.insert(order.remove(at: from), at: to)
+        rearrange(order)
+    }
+
+    public mutating func removePicture(at index: Int) {
+        guard pictures.indices.contains(index) else { return }
+        rearrange(pictures.indices.filter { $0 != index })
+    }
+
+    /// The pictures in a new order. A stage keeps its matched points only
+    /// while it still joins the same two pictures: points matched from one
+    /// picture mean nothing on another. Its own morph time stays with the
+    /// picture it becomes.
+    private mutating func rearrange(_ order: [Int]) {
+        pictures = order.enumerated().map { i, old in
+            var picture = pictures[old]
+            if i == 0 || order[i - 1] != old - 1 { picture.pairs = [] }
+            if i == 0 { picture.morphMs = nil }
+            return picture
+        }
+    }
+}
+
+/// One of a morph cue's pictures, and the stage that becomes it.
+public struct MorphPicture: Codable, Equatable, Sendable {
+    /// Relative path inside the package.
+    public var src: String
+    /// The features matched from the picture before onto this one. The first
+    /// picture has none.
+    public var pairs: [MorphPair]
+    /// How long the change into this picture takes, if not the cue's morph
+    /// time.
+    public var morphMs: Int?
+    /// The cue point of the GO before the change into it, when the cue waits
+    /// for one.
+    public var cuePoint: String
+
+    public init(src: String, pairs: [MorphPair] = [], morphMs: Int? = nil, cuePoint: String = "") {
+        self.src = src
+        self.pairs = pairs
+        self.morphMs = morphMs
+        self.cuePoint = cuePoint
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case src, pairs, morphMs, cuePoint
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        src = try c.decodeIfPresent(String.self, forKey: .src) ?? ""
+        pairs = try c.decodeIfPresent([MorphPair].self, forKey: .pairs) ?? []
+        morphMs = try c.decodeIfPresent(Int.self, forKey: .morphMs).map { SettingRange.morphMs.clamp($0) }
+        cuePoint = try c.decodeIfPresent(String.self, forKey: .cuePoint) ?? ""
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(src, forKey: .src)
+        if !pairs.isEmpty { try c.encode(pairs, forKey: .pairs) }
+        try c.encodeIfPresent(morphMs, forKey: .morphMs)
+        if !cuePoint.isEmpty { try c.encode(cuePoint, forKey: .cuePoint) }
     }
 }
 
@@ -182,11 +261,16 @@ public struct MorphOverrides: Codable, Equatable, Sendable {
     public var clockMs: Int?
     public var holdTicks: Int?
     public var morphMs: Int?
+    /// Either GO choice waits for GO before each stage.
+    public var advance: AnagramAdvance?
+    public var pauseTicks: Int?
 
-    public init(clockMs: Int? = nil, holdTicks: Int? = nil, morphMs: Int? = nil) {
+    public init(clockMs: Int? = nil, holdTicks: Int? = nil, morphMs: Int? = nil, advance: AnagramAdvance? = nil, pauseTicks: Int? = nil) {
         self.clockMs = clockMs
         self.holdTicks = holdTicks
         self.morphMs = morphMs
+        self.advance = advance
+        self.pauseTicks = pauseTicks
     }
 
     public var isEmpty: Bool { self == MorphOverrides() }
@@ -196,6 +280,7 @@ public struct MorphOverrides: Codable, Equatable, Sendable {
         o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
         o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
         o.morphMs = morphMs.map { SettingRange.morphMs.clamp($0) }
+        o.pauseTicks = pauseTicks.map { SettingRange.pauseTicks.clamp($0) }
         return o
     }
 }

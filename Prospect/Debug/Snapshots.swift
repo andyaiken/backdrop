@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import ProspectCore
+import ProspectStage
 import QuartzCore
 
 /// Debug builds only: renders the console offscreen to PNGs and quits, so its
@@ -114,6 +115,16 @@ enum Snapshots {
             // its working, and the second standing by in the cue's place.
             controller.setOverride(.advance, to: .advance(.eachAnagram), for: anagram)
             controller.setOverride(.font, to: nil, for: anagram)
+            // Each GO with its own cue point, the second typed in the Cue tab
+            // with that GO standing by.
+            let defaults = controller.show.settings
+            controller.updateCue(anagram, "Change GO Cue Point") { cue in
+                cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0, defaults: defaults)
+                cue.setCuePoint("LANGDON: \u{201C}The Mona Lisa\u{2026}\u{201D}", ofGoPoint: 1, defaults: defaults)
+            }
+            console.showEditTab(0)
+            controller.standBy(anagram, step: 1)
+            save(console, "console-edit-go-cue-point", to: directory)
             controller.enterShowMode()
             controller.standBy(anagram)
             let fired = CACurrentMediaTime()
@@ -122,25 +133,47 @@ enum Snapshots {
             controller.go()
             for i in 1...1200 { controller.tick(at: fired + 1 + Double(i) / 60) }
             save(console, "console-show-anagram-waiting", to: directory)
+
+            // Groups: Act One holding two scenes, then Act Two. In edit mode
+            // with their controls; then in show mode, where only the group
+            // holding the standby cue is open.
+            let cues = controller.show.cues.map(\.id)
+            controller.enterEditMode()
+            controller.standBy(cues[0])
+            controller.addGroup(named: "Act One")
+            controller.addGroup(named: "Scene 1")
+            controller.standBy(cues[3])
+            if let scene = controller.addGroup(named: "Scene 2") { controller.moveGroupLevel(scene, by: -1) }
+            controller.standBy(cues[6])
+            if let act = controller.addGroup(named: "Act Two") { controller.moveGroupLevel(act, by: -2) }
+            controller.standBy(cues[1])
+            save(console, "console-edit-groups", to: directory)
+            controller.enterShowMode()
+            controller.standBy(cues[4])
+            save(console, "console-show-groups", to: directory)
         }
 
-        // A morph between two drawn faces, five points matched, in the Cue
-        // tab and in its points window.
+        // A morph through three drawn faces, five points matched into the
+        // second, in the Cue tab and in its points window.
         controller.enterEditMode()
         console.showEditTab(0)
         if let morph = controller.addCue(.morph) {
             controller.updateCue(morph, "Change Label") { $0.text = "LEONARDO" }
-            let faces = [(name: "first.png", wide: 0.30, eyes: 0.40), (name: "second.png", wide: 0.36, eyes: 0.46)]
+            let faces = [(name: "first.png", wide: 0.30, eyes: 0.40), (name: "second.png", wide: 0.36, eyes: 0.46),
+                         (name: "third.png", wide: 0.42, eyes: 0.50)]
             for (i, face) in faces.enumerated() {
                 let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(face.name)
                 try? Self.face(wide: face.wide, eyes: face.eyes, warm: i == 1).write(to: url)
-                document.importMedia(from: url, into: morph, slot: i == 0 ? .first : .second)
+                document.importMedia(from: url, into: morph, slot: .add)
             }
             let pairs = [(0.40, 0.40, 0.38, 0.46), (0.60, 0.40, 0.62, 0.46), (0.50, 0.62, 0.50, 0.68), (0.50, 0.20, 0.50, 0.22),
                          (0.50, 0.80, 0.50, 0.84)].map { MorphPair(from: PicturePoint(x: $0.0, y: $0.1), to: PicturePoint(x: $0.2, y: $0.3)) }
             controller.updateCue(morph, "Add Point") { cue in
-                if case .morph(var c) = cue.content { c.pairs = pairs; cue.content = .morph(c) }
+                if case .morph(var c) = cue.content { c.pictures[1].pairs = pairs; c.pictures[2].morphMs = 1500; cue.content = .morph(c) }
             }
+            // The strip's thumbnails are made in the background.
+            console.refresh()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
             save(console, "console-edit-morph", to: directory)
             console.showPoints(for: morph)
             for window in NSApp.windows where window.title.hasPrefix("Morph Points") {
@@ -149,6 +182,76 @@ enum Snapshots {
                     view.cacheDisplay(in: view.bounds, to: rep)
                     try? rep.representation(using: .png, properties: [:])?
                         .write(to: URL(fileURLWithPath: directory).appendingPathComponent("morph-points.png"))
+                }
+            }
+        }
+
+        // A map cue on a drawn street map: a start, a stop reached by road
+        // through a corner, and one by a jump, with coordinates. In the Cue
+        // tab, and in its route window.
+        if let map = controller.addCue(.map) {
+            controller.updateCue(map, "Change Header") { $0.text = "OPERATION NIGHTJAR \u{2014} LIVE TRACK" }
+            let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("streets.png")
+            try? Self.streets().write(to: url)
+            document.importMedia(from: url, into: map)
+            func at(_ x: Double, _ y: Double) -> PicturePoint { PicturePoint(x: x, y: y) }
+            controller.updateCue(map, "Set Route") { cue in
+                guard case .map(var c) = cue.content else { return }
+                c.route = [
+                    RoutePoint(at: at(0.2, 0.3), stop: MapStop(status: "PARKED", place: "SOHO SQUARE")),
+                    RoutePoint(at: at(0.5, 0.3)),
+                    RoutePoint(at: at(0.5, 0.6), stop: MapStop(travelMs: 6000, place: "KING\u{2019}S CROSS")),
+                    RoutePoint(at: at(0.8, 0.75), stop: MapStop(arrival: .jump, status: "STOPPED", place: "CANARY WHARF")),
+                ]
+                c.reference = MapReference(a: MapAnchor(at: at(0.1, 0.1), latitude: 51.53, longitude: -0.16),
+                                           b: MapAnchor(at: at(0.9, 0.9), latitude: 51.49, longitude: -0.06))
+                cue.content = .map(c)
+            }
+            console.refresh()
+            RunLoop.main.run(until: Date().addingTimeInterval(1.0))
+            console.refresh()
+            save(console, "console-edit-map", to: directory)
+            // The stage itself, full size, partway along the road: following
+            // the dot, and held still.
+            var still = controller.show[map]
+            if var cue = still { SettingKey.camera.setOverride(.camera(.still), in: &cue); still = cue }
+            for (cue, name) in [(controller.show[map], "map-stage"), (still, "map-stage-still")] {
+                guard let cue else { continue }
+                let stage = SurfaceLayer(role: .live)
+                stage.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+                stage.contentsScale = 1
+                stage.updateInset()
+                let renderer = MapRenderer(media: { [weak document] in document?.mediaURL($0) })
+                renderer.mount(on: stage)
+                renderer.setVisible(true, on: stage)
+                var ready = false
+                renderer.onReady = { ready = true }
+                renderer.prepare(cue, defaults: controller.show.settings)
+                let deadline = Date().addingTimeInterval(10)
+                while !ready, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+                // 4.2 s into the drive, just as the dot lights.
+                _ = renderer.paint(at: 4200.0 / Double(controller.show.settings.clockMs))
+                func display(_ layer: CALayer) {
+                    layer.displayIfNeeded()
+                    layer.sublayers?.forEach(display)
+                }
+                display(stage)
+                if let ctx = CGContext(data: nil, width: 1920, height: 1080, bitsPerComponent: 8, bytesPerRow: 0,
+                                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
+                    stage.render(in: ctx)
+                    if let image = ctx.makeImage() {
+                        try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                            .write(to: URL(fileURLWithPath: directory).appendingPathComponent(name + ".png"))
+                    }
+                }
+            }
+            console.showRoute(for: map)
+            for window in NSApp.windows where window.title.hasPrefix("Map Route") {
+                window.contentView?.layoutSubtreeIfNeeded()
+                if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: directory).appendingPathComponent("map-route.png"))
                 }
             }
         }
@@ -165,6 +268,37 @@ enum Snapshots {
         }
 
         exit(0)
+    }
+
+    /// A printed street map, light, 2400 x 1500: a grid of streets of two
+    /// widths, a river across the bottom, and a park.
+    private static func streets() -> Data {
+        let w = 2400, h = 1500
+        let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(red: 0.96, green: 0.94, blue: 0.89, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        ctx.setFillColor(CGColor(red: 0.78, green: 0.86, blue: 0.74, alpha: 1))
+        ctx.fill(CGRect(x: 1500, y: 900, width: 300, height: 260))
+        ctx.setStrokeColor(CGColor(red: 0.55, green: 0.70, blue: 0.85, alpha: 1))
+        ctx.setLineWidth(70)
+        ctx.move(to: CGPoint(x: 0, y: 260))
+        ctx.addCurve(to: CGPoint(x: CGFloat(w), y: 180), control1: CGPoint(x: 800, y: 500), control2: CGPoint(x: 1600, y: 0))
+        ctx.strokePath()
+        ctx.setStrokeColor(CGColor(gray: 0.35, alpha: 1))
+        for (i, x) in stride(from: 120, to: w, by: 240).enumerated() {
+            ctx.setLineWidth(i % 3 == 0 ? 16 : 7)
+            ctx.move(to: CGPoint(x: x, y: 0))
+            ctx.addLine(to: CGPoint(x: x + (i % 2 == 0 ? 60 : -40), y: h))
+            ctx.strokePath()
+        }
+        for (i, y) in stride(from: 150, to: h, by: 225).enumerated() {
+            ctx.setLineWidth(i % 2 == 0 ? 16 : 7)
+            ctx.move(to: CGPoint(x: 0, y: y))
+            ctx.addLine(to: CGPoint(x: w, y: y + (i % 3 == 0 ? 50 : -30)))
+            ctx.strokePath()
+        }
+        return NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!
     }
 
     /// A simple drawn face for a morph: a head, two eyes and a mouth.

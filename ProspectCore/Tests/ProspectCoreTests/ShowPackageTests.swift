@@ -37,7 +37,7 @@ struct ShowPackageTests {
 
         let names = try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
         #expect(names == ["media", "show.json", "version"])
-        #expect(try String(contentsOf: url.appendingPathComponent("version"), encoding: .utf8) == "\(Show.formatVersion)\n")
+        #expect(try String(contentsOf: url.appendingPathComponent("version"), encoding: .utf8) == "\(show.version)\n")
         #expect(try ShowPackage.read(FileWrapper(url: url, options: .immediate)) == show)
     }
 

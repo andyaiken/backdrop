@@ -297,6 +297,9 @@ public final class StageRunner {
             if TickClock.hasSettled(rendererDone: smooth.paint(at: clock.position(at: time)), frame: f) {
                 isRunning = false
                 settlePending = true
+            } else if f >= 0, (renderer as? WaitsForGO)?.isWaiting(at: f) == true {
+                // As below: nothing more until GO.
+                isRunning = false
             }
             return
         }
