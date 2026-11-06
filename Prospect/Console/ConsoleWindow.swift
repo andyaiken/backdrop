@@ -36,6 +36,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
                                           trackingMode: .selectOne, target: nil, action: nil)
     private var inspectorPanels: [NSView] { [editor, cueSettings] }
+    /// What the Inspector says with no cue standing by. It takes the tabs'
+    /// place rather than sitting under them: with nothing to inspect, tabs
+    /// onto empty forms are only noise.
+    private let inspectorEmpty: NSTextField = {
+        let label = Desk.label("No cue selected.",
+                               font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
+        label.alignment = .center
+        return label
+    }()
     private let keybar = KeyBar()
 
     /// Copies a dropped or chosen file into the show for a cue.
@@ -97,6 +106,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.state.onOpenProjector = { [weak self] in self?.openProjectorPressed() }
         header.state.onMode = { [weak self] editing in self?.modeChosen(editing) }
         header.state.onAddCue = { [weak self] kind in self?.addCueChosen(kind) }
+        header.state.onShowSettings = { [weak self] in self?.showShowSettings() }
         // An edit still open is finished first, so it lands on the cue it was
         // made for rather than the one the click stands by.
         cueList.onClick = { [weak self] id in
@@ -132,7 +142,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.action = #selector(tabChosen)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, editor, cueSettings, tabs, keybar] as [NSView] {
+                     warning, previewHeading, previewFrame, editor, cueSettings, tabs, inspectorEmpty,
+                     keybar] as [NSView] {
             root.addSubview(view)
         }
         refresh()
@@ -296,17 +307,22 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         let headingHeight: CGFloat = 27, gap: CGFloat = 24
         let editing = controller.mode == .edit
-        tabs.isHidden = !editing
-        for (i, panel) in inspectorPanels.enumerated() { panel.isHidden = !editing || i != tabs.selectedSegment }
+        // In edit mode with nothing standing by there is no cue to inspect,
+        // so the message stands alone where the tabs would be.
+        let inspecting = editing && controller.standingByCue != nil
+        tabs.isHidden = !inspecting
+        for (i, panel) in inspectorPanels.enumerated() { panel.isHidden = !inspecting || i != tabs.selectedSegment }
+        inspectorEmpty.isHidden = !editing || inspecting
         let tabsSize = tabs.fittingSize
 
         // Given the room, the editor stands beside the preview in a column of
         // its own, full height, so neither squashes the other and a long
         // panel scrolls rather than shrinking the picture.
         if editing, width >= Self.sideBySideWidth {
-            let editorWidth = min(max((width * 0.42).rounded(), 420), 560)
+            let editorWidth = max((width * 0.3).rounded(), 300)
             let previewWidth = width - editorWidth - gap
             let editorX = x + previewWidth + gap
+            centre(inspectorEmpty, in: NSRect(x: editorX, y: y, width: editorWidth, height: max(0, bottom - 16 - y)))
             tabs.frame = NSRect(x: editorX, y: y, width: tabsSize.width, height: tabsSize.height)
             let panelTop = y + tabsSize.height + 10
             let panelFrame = NSRect(x: editorX, y: panelTop, width: editorWidth, height: max(0, bottom - 16 - panelTop))
@@ -319,15 +335,31 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // Narrower, the editor sits beneath the preview, every panel the same
         // height so the preview doesn't jump as the tabs change.
         var available = bottom - 16 - y - headingHeight
-        if editing {
+        if inspecting {
             let h = [editor.preferredHeight, cueSettings.preferredHeight].max() ?? 0
             let panelFrame = NSRect(x: x, y: bottom - 16 - h, width: width, height: h)
             for panel in inspectorPanels { panel.frame = panelFrame }
             tabs.frame = NSRect(x: x, y: panelFrame.minY - 10 - tabsSize.height, width: tabsSize.width, height: tabsSize.height)
             available -= h + 16 + tabsSize.height + 10
+        } else if editing {
+            let h = Self.emptyInspectorHeight
+            centre(inspectorEmpty, in: NSRect(x: x, y: bottom - 16 - h, width: width, height: h))
+            available -= h + 16
         }
         placePreview(x: x, y: y, width: width, available: available, headingHeight: headingHeight)
     }
+
+    /// Centres a wrapping label in the space it is given, across and down.
+    private func centre(_ label: NSTextField, in rect: NSRect) {
+        // Narrow enough that a line of it doesn't run the whole column.
+        let width = min(rect.width, 320)
+        let h = label.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude)).height
+        label.frame = NSRect(x: rect.midX - width / 2, y: rect.midY - h / 2, width: width, height: h)
+    }
+
+    /// The band the Inspector keeps under the preview with nothing standing
+    /// by: room enough for its message to sit in rather than cling to an edge.
+    private static let emptyInspectorHeight: CGFloat = 120
 
     /// How wide the space right of the cue list must be before the editor
     /// moves alongside the preview rather than under it.

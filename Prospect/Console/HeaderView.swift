@@ -22,11 +22,12 @@ final class HeaderState: ObservableObject {
     var onGo: () -> Void = {}
     var onMode: (Bool) -> Void = { _ in }
     var onAddCue: (Cue.Kind) -> Void = { _ in }
+    var onShowSettings: () -> Void = {}
     var onOpenProjector: () -> Void = {}
 }
 
-/// The console's header: the wordmark, the mode switch and Add Cue at the
-/// left; the projector lamp and GO at the right.
+/// The console's header: the wordmark and the mode switch, then the cue sheet's
+/// own controls, then the projector's lamp and button, with GO at the right.
 ///
 /// Nothing here takes the keyboard. Space fires the standby cue through the
 /// show keys, and a focused GO button would fire it twice.
@@ -114,7 +115,7 @@ struct HeaderBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Text(wordmark)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.system(size: 18, design: .monospaced))
                 .accessibilityLabel(HeaderState.name)
 
             Picker("Mode", selection: Binding(get: { state.editing }, set: { state.onMode($0) })) {
@@ -126,6 +127,8 @@ struct HeaderBar: View {
             .fixedSize()
             .focusable(false)
             .help("Show mode locks the cue sheet; edit mode unlocks it")
+
+            rule
 
             if state.editing {
                 Menu("Add Cue") {
@@ -142,7 +145,12 @@ struct HeaderBar: View {
                 .help("Adds a cue after the one standing by")
             }
 
-            Spacer(minLength: 16)
+            Button("Show Settings\u{2026}") { state.onShowSettings() }
+                .fixedSize()
+                .focusable(false)
+                .help("Opens the show's defaults and its projection area")
+
+            rule
 
             Circle()
                 .fill(lampColour)
@@ -156,7 +164,7 @@ struct HeaderBar: View {
                     .focusable(false)
             }
 
-            Divider().frame(height: 26)
+            Spacer(minLength: 16)
 
             Button("GO") { state.onGo() }
                 .buttonStyle(.borderedProminent)
@@ -169,6 +177,11 @@ struct HeaderBar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    /// The rule between one group of controls and the next.
+    private var rule: some View {
+        Divider().frame(height: 26)
     }
 
     private var lampColour: Color {
