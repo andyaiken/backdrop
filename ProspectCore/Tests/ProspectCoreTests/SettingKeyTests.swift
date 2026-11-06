@@ -71,9 +71,10 @@ struct SettingKeyTests {
         #expect(SettingKey.textScale.format(.number(100)) == "100%")
         #expect(SettingKey.grid.format(.number(12)) == "12 wide")
         #expect(SettingKey.histogram.format(.flag(true)) == "on")
-        #expect(SettingKey.order.format(.order(.diagonal)) == "diagonal sweep")
+        #expect(SettingKey.order.format(.order(.diagonal)) == "wave")
         #expect(SettingKey.order.format(.order(.spiral)) == "golden spiral")
         #expect(SettingKey.order.choice(at: 2) == .order(.spiral) && SettingKey.order.choiceIndex(of: .order(.spiral)) == 2)
+        #expect(SettingKey.order.format(.order(.quarters)) == "quarters" && SettingKey.order.choice(at: 3) == .order(.quarters))
     }
 
     @Test("Every setting explains itself, and a hold says how long it lasts")
@@ -103,11 +104,12 @@ struct SettingKeyTests {
         #expect(try JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).letters == .dials)
     }
 
-    @Test("Reveal by: flipping or sharpening, a show default any image cue can override")
+    @Test("Reveal: just show it, sharpen from one colour, or flip from black; a show default any image cue can override")
     func revealBy() throws {
         #expect(ShowSettings().reveal == .flip)
-        #expect(SettingKey.reveal.format(.reveal(.sharpen)) == "sharpening")
-        #expect(SettingKey.reveal.choice(at: 1) == .reveal(.sharpen))
+        #expect(SettingKey.reveal.format(.reveal(.sharpen)) == "sharpen from one colour")
+        #expect(SettingKey.reveal.format(.reveal(.flip)) == "flip from black" && SettingKey.reveal.format(.reveal(.show)) == "just show it")
+        #expect([0, 1, 2].compactMap { SettingKey.reveal.choice(at: $0) } == [.reveal(.show), .reveal(.sharpen), .reveal(.flip)])
         var cue = Cue(content: .image(ImageContent(text: "GALLERY")))
         SettingKey.reveal.setOverride(.reveal(.sharpen), in: &cue)
         guard case .image(let content) = cue.content else { return }

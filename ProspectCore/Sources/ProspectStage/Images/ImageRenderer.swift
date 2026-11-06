@@ -44,7 +44,23 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         let reveal: TileReveal
         /// For a sharpen: the picture in ever finer blocks, coarsest first.
         let levels: [CGImage]
-        var settleFrame: Int { schedule.lastStart + flipFrames }
+        /// What a sharpening reveal opens on: the whole picture's average colour.
+        let average: RGB
+        /// For quarters: when each rectangle splits, and the colour of each.
+        let quarters: Quarters?
+
+        struct Quarters {
+            let schedule: QuarterSchedule
+            let colours: [RGB]
+            /// The frame the finished picture starts to come up over the pieces.
+            var finalStart: Int { schedule.lastStart + 1 }
+        }
+
+        /// A picture just shown is settled before it starts.
+        var settleFrame: Int {
+            if reveal == .show { return Int.min }
+            return (quarters?.finalStart ?? schedule.lastStart) + flipFrames
+        }
     }
 
     final class Tree {
@@ -52,6 +68,10 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         let root = StillLayer()
         let grid = StillLayer()
         var tiles: [TileLayer] = []
+        /// For quarters: a layer for every rectangle that can ever show, and the
+        /// finished picture over them.
+        var blocks: [StillLayer] = []
+        let picture = StillLayer()
 
         init(surface: SurfaceLayer) {
             self.surface = surface
@@ -168,6 +188,17 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         func edge(_ i: Int, of n: Int, across length: CGFloat) -> CGFloat {
             (CGFloat(i) * length / CGFloat(n) * scale).rounded() / scale
         }
+        if let quarters = plan.quarters {
+            for (node, block) in tree.blocks.enumerated() {
+                let r = QuarterSchedule.rect(of: node)
+                // Rectangle edges on whole device pixels, so the pieces meet.
+                let left = (CGFloat(r.x) * w * scale).rounded() / scale, right = (CGFloat(r.x + r.width) * w * scale).rounded() / scale
+                let top = (CGFloat(r.y) * h * scale).rounded() / scale, bottom = (CGFloat(r.y + r.height) * h * scale).rounded() / scale
+                block.frame = CGRect(x: left, y: h - bottom, width: right - left, height: bottom - top)
+            }
+            _ = quarters
+            tree.picture.frame = CGRect(x: 0, y: 0, width: w, height: h)
+        }
         for (i, tile) in tree.tiles.enumerated() {
             let x = i % grid.columns, y = i / grid.columns
             let left = edge(x, of: grid.columns, across: w), right = edge(x + 1, of: grid.columns, across: w)
@@ -219,14 +250,27 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
     private func ready(_ image: CGImage) {
         guard let settings else { return }
         let grid = TileGrid(imageWidth: Double(image.width), imageHeight: Double(image.height), columns: settings.gridColumns)
-        let schedule = TileSchedule(grid: grid, order: settings.order, wave: settings.waveTicks, random: &random)
+        // Quarters belongs to a reveal that sharpens; a flip has no quarters.
+        let sharpens = settings.reveal == .sharpen
+        let quartered = sharpens && settings.order == .quarters
+        let tileOrder = settings.order == .quarters ? TileOrder.random : settings.order
+        let schedule = TileSchedule(grid: grid, order: tileOrder, wave: settings.waveTicks, random: &random)
+        let average = Self.averages(of: image, columns: 1, rows: 1).first ?? Palette.slate
+        var quarters: Plan.Quarters?
+        if quartered {
+            let depth = QuarterSchedule.depth(forColumns: settings.gridColumns)
+            let split = QuarterSchedule(depth: depth, step: settings.waveTicks, random: &random)
+            quarters = Plan.Quarters(schedule: split, colours: Self.quarterColours(of: image, depth: depth))
+        }
         plan = Plan(
             image: image,
             schedule: schedule,
             flipFrames: schedule.settleFrame(flipMs: settings.flipMs, clockMs: settings.clockMs) - schedule.lastStart,
             flipDuration: CFTimeInterval(settings.flipMs) / 1000,
             reveal: settings.reveal,
-            levels: settings.reveal == .sharpen ? Self.sharpeningLevels(of: image, grid: grid) : []
+            levels: sharpens && !quartered ? Self.sharpeningLevels(of: image, grid: grid) : [],
+            average: average,
+            quarters: quarters
         )
         for tree in trees.values {
             build(tree)
@@ -236,6 +280,46 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
             _ = frame(lastFrame)
         }
         onReady?()
+    }
+
+    /// The average colour of each cell of a grid laid over the picture, from
+    /// the picture drawn at a whole multiple of the grid's size: every pixel
+    /// counts equally. Row by row from the top left.
+    static func averages(of image: CGImage, columns: Int, rows: Int) -> [RGB] {
+        let k = 8, w = columns * k, h = rows * k
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return Array(repeating: Palette.slate, count: columns * rows)
+        }
+        // Without interpolation, so a smoothing filter doesn't bleed
+        // neighbours into a cell's average.
+        ctx.interpolationQuality = .none
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        // Bitmap memory holds the top row first.
+        let bytes = Array(UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: w * h * 4))
+        let averages = TileFaces.blockAverages(rgba: bytes, width: w, height: h, columns: columns, rows: rows)
+        return stride(from: 0, to: averages.count - 3, by: 4).map { RGB(averages[$0], averages[$0 + 1], averages[$0 + 2]) }
+    }
+
+    /// The colour of every rectangle quarters can show: the smallest from the
+    /// picture itself, each larger the mean of its four.
+    static func quarterColours(of image: CGImage, depth: Int) -> [RGB] {
+        let n = Int(pow(2, Double(depth)))
+        let leaves = averages(of: image, columns: n, rows: n)
+        let count = QuarterSchedule.nodeCount(depth: depth)
+        var colours = [RGB](repeating: Palette.slate, count: count)
+        for node in stride(from: count - 1, through: 0, by: -1) {
+            if QuarterSchedule.level(of: node) == depth {
+                let r = QuarterSchedule.rect(of: node)
+                colours[node] = leaves[min(Int(r.y * Double(n) + 0.5), n - 1) * n + min(Int(r.x * Double(n) + 0.5), n - 1)]
+            } else {
+                let kids = QuarterSchedule.children(of: node).map { colours[$0] }
+                func mean(_ channel: KeyPath<RGB, UInt8>) -> UInt8 { UInt8(kids.map { Int($0[keyPath: channel]) }.reduce(0, +) / 4) }
+                colours[node] = RGB(mean(\.r), mean(\.g), mean(\.b))
+            }
+        }
+        return colours
     }
 
     /// The steps a tile sharpens through: its part of the picture as one
@@ -271,14 +355,35 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
     private func build(_ tree: Tree) {
         guard let plan else { return }
         tree.tiles.forEach { $0.removeFromSuperlayer() }
+        tree.tiles = []
+        tree.blocks.forEach { $0.removeFromSuperlayer() }
+        tree.blocks = []
+        tree.picture.removeFromSuperlayer()
+
+        if let quarters = plan.quarters {
+            tree.blocks = quarters.colours.map { colour in
+                let block = StillLayer()
+                block.backgroundColor = colour.cgColor
+                block.isHidden = true
+                tree.grid.addSublayer(block)
+                return block
+            }
+            tree.picture.contents = plan.image
+            tree.picture.opacity = 0
+            tree.grid.addSublayer(tree.picture)
+            return
+        }
+
         let grid = plan.schedule.grid
+        // A reveal that sharpens opens on one flat colour; one that flips,
+        // on nothing.
+        let back = plan.reveal == .sharpen ? plan.average.cgColor : CGColor(gray: 0, alpha: 1)
         tree.tiles = (0..<grid.count).map { i in
             let tile = TileLayer()
             tile.picture = plan.image
             tile.front.contents = plan.image
             tile.front.contentsRect = Self.contentsRect(column: i % grid.columns, row: i / grid.columns, of: grid)
-            // Waiting tiles show nothing: the cue opens on black.
-            tile.back.backgroundColor = CGColor(gray: 0, alpha: 1)
+            tile.back.backgroundColor = back
             tree.grid.addSublayer(tile)
             return tile
         }
@@ -294,9 +399,13 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
     private func apply(_ f: Int, animated: Bool) {
         guard let plan else { return }
         for tree in trees.values {
+            if let quarters = plan.quarters {
+                applyQuarters(quarters, plan: plan, tree: tree, f, animated: animated)
+                continue
+            }
             for (i, tile) in tree.tiles.enumerated() {
                 let start = plan.schedule.starts[i]
-                if f >= start + plan.flipFrames {
+                if plan.reveal == .show || f >= start + plan.flipFrames {
                     tile.finish()
                 } else if f >= start {
                     switch plan.reveal {
@@ -314,9 +423,40 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
                         } else {
                             tile.finish()
                         }
+                    case .show:
+                        tile.finish()
                     }
                 }
             }
+        }
+    }
+
+    /// Quarters at frame `f`: every rectangle is shown from when its parent
+    /// split until it splits itself, a pure function of the frame, so a jump
+    /// or a late surface lands on the same picture. Then the finished picture
+    /// comes up over the smallest.
+    private func applyQuarters(_ quarters: Plan.Quarters, plan: Plan, tree: Tree, _ f: Int, animated: Bool) {
+        for (node, block) in tree.blocks.enumerated() {
+            let born = quarters.schedule.birthFrame(of: node)
+            let split = quarters.schedule.splitFrame(of: node) ?? Int.max
+            block.isHidden = !(f >= born && f < split)
+        }
+        let picture = tree.picture
+        if f >= quarters.finalStart {
+            guard picture.opacity < 1 else { return }
+            picture.removeAllAnimations()
+            picture.opacity = 1
+            if animated, f < plan.settleFrame {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = 0
+                fade.toValue = 1
+                fade.duration = plan.flipDuration
+                fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                picture.add(fade, forKey: "come-up")
+            }
+        } else {
+            picture.removeAllAnimations()
+            picture.opacity = 0
         }
     }
 }

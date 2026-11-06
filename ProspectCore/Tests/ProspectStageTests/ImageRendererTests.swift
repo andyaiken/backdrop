@@ -166,6 +166,112 @@ struct ImageRendererTests {
         #expect(lit == 0, "the whole surface is black before the first tile turns")
     }
 
+    // MARK: Reveals: just show it, sharpen from one colour, flip from black
+
+    func revealCue(_ reveal: TileReveal, order: TileOrder = .diagonal, columns: Int = 4) -> Cue {
+        Cue(number: "2", content: .image(ImageContent(text: "X", src: "quadrants.png",
+                                                       overrides: ImageOverrides(gridColumns: columns, order: order, reveal: reveal))))
+    }
+
+    /// The pixel at a share of the 864 x 432 picture, centred on the 960 x 540 surface.
+    func pixelAt(_ bitmap: Bitmap, _ x: Double, _ y: Double) -> (r: Int, g: Int, b: Int) {
+        let p = bitmap.pixel(x: 48 + Int(864 * x), y: 54 + Int(432 * y))
+        return (Int(p.r), Int(p.g), Int(p.b))
+    }
+
+    @Test("Just show it: the picture is there from the start, with no hold and no reveal")
+    func justShowIt() async {
+        await prepare(revealCue(.show))
+        #expect(renderer.frame(-44), "settled before the hold even ends")
+        let b = render(live)
+        let red = pixelAt(b, 0.25, 0.25), white = pixelAt(b, 0.75, 0.75)
+        #expect(red.r > 240 && red.g < 20 && white.r > 240 && white.g > 240)
+        #expect(renderer.tree(for: live)!.tiles.allSatisfy { $0.state == .done })
+    }
+
+    @Test("Flip from black: nothing but black until the first tile turns")
+    func flipFromBlack() async {
+        await prepare(revealCue(.flip))
+        _ = renderer.frame(-10)
+        let b = render(live)
+        for (x, y) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+            let p = pixelAt(b, x, y)
+            #expect(p.r + p.g + p.b == 0, "(\(x), \(y)) is black")
+        }
+    }
+
+    @Test("Sharpen from one colour: the whole surface opens as the picture's average, then each tile sharpens out of it")
+    func sharpenFromOneColour() async throws {
+        var defaults = ShowSettings()
+        defaults.waveTicks = 3
+        await prepare(revealCue(.sharpen, order: .diagonal), defaults: defaults)
+        _ = renderer.frame(-10)
+        let opening = render(live)
+        opening.save("image-sharpen-opening")
+        // Red, green, blue and white average to a mid grey, the same everywhere.
+        let a = pixelAt(opening, 0.25, 0.25), z = pixelAt(opening, 0.75, 0.75)
+        #expect(abs(a.r - 127) < 3 && abs(a.g - 127) < 3 && abs(a.b - 127) < 3 && a == z, "\(a)")
+        let tiles = try #require(renderer.tree(for: live)?.tiles)
+        #expect(tiles.allSatisfy { $0.state == .waiting })
+        _ = renderer.frame(1_000)
+        let done = render(live)
+        let red = pixelAt(done, 0.25, 0.25)
+        #expect(red.r > 240 && red.g < 20, "and the picture at the end")
+    }
+
+    @Test("Sharpen in quarters: one block of the average, a rectangle at random splits into four, again and again, then the picture comes up")
+    func quarters() async throws {
+        var defaults = ShowSettings()
+        defaults.waveTicks = 2
+        defaults.flipMs = 440
+        defaults.clockMs = 44
+        // 4 columns is one split deep: the four quadrants.
+        await prepare(revealCue(.sharpen, order: .quarters, columns: 4), defaults: defaults)
+        let tree = try #require(renderer.tree(for: live))
+        let plan = try #require(renderer.plan?.quarters)
+        #expect(plan.schedule.depth == 1 && plan.schedule.splits == [0] && tree.blocks.count == 5)
+
+        _ = renderer.frame(-5)
+        let opening = render(live)
+        opening.save("image-quarters-1-average")
+        #expect(tree.blocks.filter { !$0.isHidden }.count == 1)
+        let a = pixelAt(opening, 0.25, 0.25)
+        #expect(abs(a.r - 127) < 3 && a == pixelAt(opening, 0.75, 0.25) && a == pixelAt(opening, 0.25, 0.75))
+
+        _ = renderer.frame(0)
+        let split = render(live)
+        split.save("image-quarters-2-split")
+        #expect(tree.blocks.filter { !$0.isHidden }.count == 4, "the one block became four, each its own colour")
+        let tl = pixelAt(split, 0.25, 0.25), tr = pixelAt(split, 0.75, 0.25), bl = pixelAt(split, 0.25, 0.75), br = pixelAt(split, 0.75, 0.75)
+        #expect(tl.r > 240 && tl.g < 20 && tr.g > 240 && tr.r < 20 && bl.b > 240 && bl.r < 20 && br.r > 240 && br.g > 240 && br.b > 240)
+
+        #expect(!renderer.frame(plan.finalStart - 1))
+        #expect(renderer.frame(plan.finalStart + 10), "settled once the picture has had its time to come up")
+        #expect(tree.picture.opacity == 1)
+        // Jumping straight to any frame gives the same picture as getting there.
+        _ = renderer.frame(-5)
+        #expect(tree.blocks.filter { !$0.isHidden }.count == 1 && tree.picture.opacity == 0, "and back, nothing accumulated")
+    }
+
+    @Test("Deeper quarters: the count of rectangles follows one, four, seven, ten")
+    func deeperQuarters() async throws {
+        var defaults = ShowSettings()
+        defaults.waveTicks = 1
+        await prepare(revealCue(.sharpen, order: .quarters, columns: 12), defaults: defaults)
+        let tree = try #require(renderer.tree(for: live))
+        let plan = try #require(renderer.plan?.quarters)
+        #expect(plan.schedule.depth == 3 && plan.schedule.splits.count == 21)
+        var counts: [Int] = []
+        for f in -1...4 {
+            _ = renderer.frame(f)
+            counts.append(tree.blocks.filter { !$0.isHidden }.count)
+        }
+        #expect(counts == [1, 4, 7, 10, 13, 16])
+        // A flip has no quarters: it takes a random order and flips tiles.
+        await prepare(revealCue(.flip, order: .quarters, columns: 12))
+        #expect(renderer.plan?.quarters == nil && renderer.tree(for: live)?.tiles.count ?? 0 > 0)
+    }
+
     @Test("Tiles turn on schedule, and the cue settles when the last flip has had time")
     func flipsOnSchedule() async throws {
         var defaults = ShowSettings()

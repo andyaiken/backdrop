@@ -142,11 +142,20 @@ enum SettingState {
     static func of(_ key: SettingKey, in s: ShowSettings) -> (enabled: Bool, annotation: String?) {
         switch key {
         case .fade: (s.transition != .snap, nil)
+        // Nothing to time or order when the picture is just shown.
+        case .grid, .flip, .order: (s.reveal != .show, imageNote(reveal: s.reveal, order: s.order, key: key))
         case .bars: (s.histogram, nil)
         case .hold: (true, SettingKey.holdLength(holdTicks: s.holdTicks, clockMs: s.clockMs))
         case .pause: (s.advance != .eachStep, SettingKey.holdLength(holdTicks: s.pauseTicks, clockMs: s.clockMs))
         default: (true, nil)
         }
+    }
+
+    /// What an image cue's order does where it isn't plain: a flip has no
+    /// quarters, so quarters flips in a random order.
+    private static func imageNote(reveal: TileReveal, order: TileOrder, key: SettingKey) -> String? {
+        guard key == .order, order == .quarters, reveal == .flip else { return nil }
+        return "random, as a flip has no quarters"
     }
 
     /// For the cue standing by, which may set its own values.
@@ -155,6 +164,13 @@ enum SettingState {
         switch key {
         case .fade:
             return (cue.transitionIn(defaults: defaults).hasLength, nil)
+        case .grid, .flip, .order, .wave:
+            // Wave is shared with decryption and anagram cues, which always use it.
+            guard cue.kind == .image else { return (true, nil) }
+            let reveal = SettingKey.reveal.effective(for: cue, defaults: defaults).value
+            let order = SettingKey.order.effective(for: cue, defaults: defaults).value
+            guard case .reveal(let r) = reveal, case .order(let o) = order else { return (true, nil) }
+            return (r != .show, imageNote(reveal: r, order: o, key: key))
         case .bars:
             return (SettingKey.histogram.effective(for: cue, defaults: defaults).value == .flag(true), nil)
         case .hold:

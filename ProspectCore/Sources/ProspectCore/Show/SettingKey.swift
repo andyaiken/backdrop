@@ -70,7 +70,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .grid: "Grid"
         case .flip: "Flip"
         case .order: "Order"
-        case .reveal: "Reveal by"
+        case .reveal: "Reveal"
         case .advance: "Advance"
         case .pause: "Pause"
         case .font: "Font"
@@ -110,10 +110,10 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .trail: "How long the red trail behind a map's dot lasts before it fades away. None leaves no trail."
         case .font: "The typeface an anagram is set in. Each letter keeps its own shape as it travels, so a printed hand suits; a joined-up script loses its joins."
         case .letters: "How each letter finds its way home: cycling through random glyphs and rolling back into place, or spinning on a dial, like a cryptex's, and settling."
-        case .grid: "How many tiles across the picture is cut into."
-        case .flip: "How long each tile takes to show its part of the picture: to turn over, or to sharpen."
-        case .order: "Whether the tiles go in a sweep from the top left, in a random order, or out along a golden spiral, square by Fibonacci square."
-        case .reveal: "How each tile shows its part of the picture: turning over, or sharpening through finer and finer blocks, 1, 2, 3, 5, 8 across and on."
+        case .grid: "How many tiles across the picture is cut into. In quarters, how fine it gets: more tiles, more times a piece splits in four."
+        case .flip: "How long each tile takes to show its part of the picture: to turn over, or to sharpen. In quarters, how long the finished picture takes to come up over the pieces."
+        case .order: "Which tile goes next: in a wave from the top left, in a random order, or out along a golden spiral, square by Fibonacci square. Quarters, for a reveal that sharpens, has no tiles: the picture is one block, and a piece picked at random splits in four, again and again."
+        case .reveal: "How the picture arrives: just there; starting as one flat average colour and sharpening, tile by tile or in quarters, through finer and finer blocks; or starting black with each tile flipping over to its part of the picture. Quarters with a flip takes a random order."
         case .layerTime: "How long a layer takes to arrive. A layer can have its own, set in the Cue tab. A layer taken off again goes in half the time."
         case .baseLevel: "How far up the whole picture sits under the layers, as a percentage. Faint lets the audience read the composition from the first second; none starts on black."
         case .context: "What happens to the layers already standing while a new one arrives: nothing, dimmed, drained of colour, or darkened round the new part. A layer can have its own, set in the Cue tab."
@@ -156,8 +156,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .grid: .slider(SettingRange.gridColumns, step: 1)
         case .flip: .slider(SettingRange.flipMs, step: 30)
         case .histogram, .sceneLine: .toggle
-        case .order: .choice(["Diagonal sweep", "Random", "Golden spiral"])
-        case .reveal: .choice(["Flipping", "Sharpening"])
+        case .order: .choice(["Wave", "Random", "Golden spiral", "Quarters"])
+        case .reveal: .choice(["Just show it", "Sharpen from one colour", "Flip from black"])
         case .advance: .choice(["By itself", "Each anagram on GO", "Each step on GO"])
         case .pause: .slider(SettingRange.pauseTicks, step: 2)
         case .letters: .choice(["Cycling", "Dials"])
@@ -214,8 +214,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
     /// For a choice, the value at each place in its menu.
     public func choice(at index: Int) -> SettingValue? {
         switch self {
-        case .order: [SettingValue.order(.diagonal), .order(.random), .order(.spiral)][safe: index]
-        case .reveal: [SettingValue.reveal(.flip), .reveal(.sharpen)][safe: index]
+        case .order: [SettingValue.order(.diagonal), .order(.random), .order(.spiral), .order(.quarters)][safe: index]
+        case .reveal: [SettingValue.reveal(.show), .reveal(.sharpen), .reveal(.flip)][safe: index]
         case .advance: [SettingValue.advance(.byItself), .advance(.eachAnagram), .advance(.eachStep)][safe: index]
         case .camera: [SettingValue.camera(.follow), .camera(.still)][safe: index]
         case .letters: [SettingValue.letters(.cycle), .letters(.dials)][safe: index]
@@ -249,10 +249,16 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.fade, .number(let n)), (.morphTime, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
         case (.grid, .number(let n)): "\(n) wide"
         case (_, .flag(let on)): on ? "on" : "off"
-        case (_, .order(.diagonal)): "diagonal sweep"
+        case (_, .order(.diagonal)): "wave"
         case (_, .order(.random)): "random"
         case (_, .order(.spiral)): "golden spiral"
-        case (_, .reveal(let reveal)): reveal == .flip ? "flipping" : "sharpening"
+        case (_, .order(.quarters)): "quarters"
+        case (_, .reveal(let reveal)):
+            switch reveal {
+            case .show: "just show it"
+            case .sharpen: "sharpen from one colour"
+            case .flip: "flip from black"
+            }
         case (_, .letters(let letters)): letters == .cycle ? "cycling" : "dials"
         case (_, .bars(let bars)): bars == .letters ? "letters" : "digraphs"
         case (_, .font(let family)): family.isEmpty ? Self.stageFont : family

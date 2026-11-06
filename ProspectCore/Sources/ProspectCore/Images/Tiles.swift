@@ -1,6 +1,6 @@
 import Foundation
 
-/// The order an image cue's tiles flip in.
+/// The order an image cue's tiles flip or sharpen in.
 public enum TileOrder: String, Codable, Sendable, CaseIterable {
     /// From the top-left corner to the bottom-right.
     case diagonal
@@ -10,6 +10,11 @@ public enum TileOrder: String, Codable, Sendable, CaseIterable {
     /// Fibonacci rectangle is, and the spiral traced from the smallest out to
     /// the largest. See `SpiralSquare`.
     case spiral
+    /// Quarters, for a reveal that sharpens: the picture starts as one block,
+    /// and a rectangle picked at random splits into four, again and again, each
+    /// part with its own average colour. A reveal that flips has no quarters,
+    /// and takes the random order.
+    case quarters
 }
 
 /// How a tile shows its part of the picture when its turn comes.
@@ -18,8 +23,10 @@ public enum TileReveal: String, Codable, Sendable, CaseIterable {
     case flip
     /// It sharpens: its part of the picture in one block, then 2 x 2, 3 x 3,
     /// 5 x 5, 8 x 8 and on through the Fibonacci numbers, until it is the
-    /// picture.
+    /// picture. The cue opens as one flat average colour.
     case sharpen
+    /// No reveal: the picture is simply there.
+    case show
 }
 
 /// The tile grid for an image: as many columns as set, and as many rows as
@@ -59,7 +66,8 @@ public struct TileSchedule: Equatable, Sendable {
         var starts = [Int](repeating: 0, count: total)
 
         switch order {
-        case .random:
+        case .random, .quarters:
+            // (Quarters has no tiles of its own, so a tile grid takes random.)
             // Shuffle the order, then pace the starts evenly. Independent
             // random starts look like rainfall, with clumps and stragglers.
             var order = Array(0..<total)
@@ -234,5 +242,84 @@ public enum TileFaces {
                 pull(rgba[i + 2], Palette.slate.b)
             )
         }
+    }
+}
+
+/// A picture that sharpens in quarters: it starts as one block of its average
+/// colour, then a rectangle picked at random splits into four, each with its
+/// own average, and another, and so on until they are small. A split leaves
+/// three rectangles more: one, then four, then seven.
+///
+/// Rectangles are numbered as in a heap: 0 is the whole picture, and the
+/// children of `i` are `4i + 1` to `4i + 4`, top left, top right, bottom
+/// left, bottom right. Computed once per cue and shared, so every surface
+/// splits the same rectangle on the same frame.
+public struct QuarterSchedule: Equatable, Sendable {
+    /// How many times a rectangle can split.
+    public let depth: Int
+    /// The rectangles in the order they split.
+    public let splits: [Int]
+    /// The frame each split happens on, in the same order.
+    public let starts: [Int]
+    public var lastStart: Int { starts.last ?? 0 }
+
+    /// How deep the splitting goes for a grid setting: about the square of
+    /// the grid's columns in the smallest pieces, so more columns, more splits.
+    public static func depth(forColumns columns: Int) -> Int {
+        max(1, Int((log2(Double(max(columns, 2)))).rounded()) - 1)
+    }
+
+    /// Every rectangle down to `depth`.
+    public static func nodeCount(depth: Int) -> Int {
+        (0...depth).reduce(0) { $0 + Int(pow(4, Double($1))) }
+    }
+
+    public static func children(of node: Int) -> [Int] {
+        (1...4).map { 4 * node + $0 }
+    }
+
+    /// How many splits deep a rectangle is: 0 for the whole picture.
+    public static func level(of node: Int) -> Int {
+        var node = node, level = 0
+        while node > 0 {
+            node = (node - 1) / 4
+            level += 1
+        }
+        return level
+    }
+
+    /// A rectangle as shares of the picture, from the top left.
+    public static func rect(of node: Int) -> (x: Double, y: Double, width: Double, height: Double) {
+        guard node > 0 else { return (0, 0, 1, 1) }
+        let parent = rect(of: (node - 1) / 4), quarter = (node - 1) % 4
+        let w = parent.width / 2, h = parent.height / 2
+        return (parent.x + Double(quarter % 2) * w, parent.y + Double(quarter / 2) * h, w, h)
+    }
+
+    /// - Parameters:
+    ///   - step: Frames between one split and the next. Below 1 counts as 1.
+    ///   - random: Picks which rectangle splits next.
+    public init(depth: Int, step: Int, random: inout some UnitRandom) {
+        self.depth = max(1, depth)
+        let step = max(1, step)
+        var open = [0], splits: [Int] = []
+        while !open.isEmpty {
+            let node = open.remove(at: random.below(open.count))
+            splits.append(node)
+            for child in Self.children(of: node) where Self.level(of: child) < self.depth { open.append(child) }
+        }
+        self.splits = splits
+        starts = splits.indices.map { $0 * step }
+    }
+
+    /// The frame a rectangle splits on, or nil if it never does.
+    public func splitFrame(of node: Int) -> Int? {
+        splits.firstIndex(of: node).map { starts[$0] }
+    }
+
+    /// The frame a rectangle first shows: when its parent split, and the start
+    /// for the whole picture.
+    public func birthFrame(of node: Int) -> Int {
+        node == 0 ? Int.min : (splitFrame(of: (node - 1) / 4) ?? 0)
     }
 }

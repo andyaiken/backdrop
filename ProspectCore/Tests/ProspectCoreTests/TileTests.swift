@@ -106,3 +106,50 @@ struct TileTests {
         #expect(start(4, 4) == start(3, 3) && start(3, 3) == start(1, 1))
     }
 }
+
+@Suite("Quarters")
+struct QuarterTests {
+    @Test("Every rectangle splits once, in an order picked at random, each only after its parent")
+    func splits() {
+        var random = SeededRandom(seed: 3)
+        let s = QuarterSchedule(depth: 3, step: 2, random: &random)
+        // 1 + 4 + 16 rectangles can split; the 64 smallest cannot.
+        #expect(s.splits.count == 21 && Set(s.splits).count == 21)
+        #expect(s.splits.first == 0 && s.starts == (0..<21).map { $0 * 2 } && s.lastStart == 40)
+        for (i, node) in s.splits.enumerated() where node > 0 {
+            #expect(s.splits.firstIndex(of: (node - 1) / 4)! < i, "a rectangle exists before it splits")
+        }
+        #expect(QuarterSchedule.nodeCount(depth: 3) == 85)
+        // Another seed, another order, the same set.
+        var other = SeededRandom(seed: 4)
+        let t = QuarterSchedule(depth: 3, step: 2, random: &other)
+        #expect(t.splits != s.splits && Set(t.splits) == Set(s.splits))
+    }
+
+    @Test("A split leaves three rectangles more: one, then four, then seven")
+    func rectangleCount() {
+        var random = SeededRandom(seed: 9)
+        let s = QuarterSchedule(depth: 3, step: 1, random: &random)
+        func showing(at f: Int) -> Int {
+            (0..<QuarterSchedule.nodeCount(depth: 3)).filter { s.birthFrame(of: $0) <= f && f < (s.splitFrame(of: $0) ?? Int.max) }.count
+        }
+        #expect((-5, showing(at: -5)) == (-5, 1), "the whole picture before anything splits")
+        #expect([0, 1, 2, 3].map(showing) == [4, 7, 10, 13])
+        #expect(showing(at: s.lastStart) == 64, "ends as the smallest rectangles")
+    }
+
+    @Test("Rectangles tile the picture exactly, quarter by quarter")
+    func geometry() {
+        let r = QuarterSchedule.rect(of: 0)
+        #expect(r.x == 0 && r.y == 0 && r.width == 1 && r.height == 1)
+        let q = QuarterSchedule.children(of: 0).map(QuarterSchedule.rect(of:))
+        #expect(q.map(\.x) == [0, 0.5, 0, 0.5] && q.map(\.y) == [0, 0, 0.5, 0.5] && q.allSatisfy { $0.width == 0.5 && $0.height == 0.5 })
+        let leaves = (0..<QuarterSchedule.nodeCount(depth: 3)).filter { QuarterSchedule.level(of: $0) == 3 }
+        #expect(leaves.count == 64 && abs(leaves.map { QuarterSchedule.rect(of: $0) }.reduce(0) { $0 + $1.width * $1.height } - 1) < 1e-9)
+    }
+
+    @Test("More columns, deeper splitting")
+    func depth() {
+        #expect([4, 12, 20, 28].map(QuarterSchedule.depth(forColumns:)) == [1, 3, 3, 4])
+    }
+}
