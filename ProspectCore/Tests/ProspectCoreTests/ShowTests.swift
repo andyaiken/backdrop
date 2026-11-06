@@ -19,6 +19,27 @@ private func sampleShow() -> Show {
     ], settings: settings)
 }
 
+@Suite("Cue kinds")
+struct CueKindTests {
+    @Test("The Add Cue menus list every kind once: the two commonest, then the rest by name")
+    func menuOrderCoversEveryKind() {
+        let listed = Cue.Kind.common + Cue.Kind.others
+        #expect(Set(listed) == Set(Cue.Kind.allCases), "every kind is offered")
+        #expect(listed.count == Cue.Kind.allCases.count, "and none of them twice")
+        #expect(Cue.Kind.common == [.image, .video], "image and video come first")
+        let byName = Cue.Kind.others.sorted { $0.heading < $1.heading }
+        #expect(Cue.Kind.others == byName, "the rest read alphabetically: \(Cue.Kind.others.map(\.heading))")
+    }
+
+    @Test("Every kind has its own icon")
+    func symbolsAreDistinct() {
+        let symbols = Cue.Kind.allCases.map(\.symbol)
+        let blank = symbols.filter(\.isEmpty)
+        #expect(blank.isEmpty, "a kind has no icon")
+        #expect(Set(symbols).count == symbols.count, "two kinds share an icon: \(symbols)")
+    }
+}
+
 @Suite("show.json")
 struct ShowCodingTests {
     @Test func roundTrips() throws {
@@ -35,7 +56,7 @@ struct ShowCodingTests {
 
     @Test func cuesAreFlatWithOnlyTheirKindsFields() throws {
         let json = try JSONSerialization.jsonObject(with: sampleShow().jsonData()) as! [String: Any]
-        #expect(json["version"] as? Int == 2, "with no groups, still readable by a version 2 Prospect")
+        #expect(json["version"] as? Int == 2, "a plain sheet is still readable by a version 2 Prospect")
         let cues = json["cues"] as! [[String: Any]]
 
         #expect(Set(cues[0].keys) == ["id", "num", "kind", "line", "text", "sub", "key", "overrides"])

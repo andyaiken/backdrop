@@ -26,7 +26,6 @@ final class MapRouteWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1240, height: 820),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 900, height: 600)
-        window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = Desk.colour
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: RouteView(model: model))

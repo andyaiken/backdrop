@@ -1,127 +1,43 @@
 import AppKit
 import ProspectCore
 import ProspectStage
+import SwiftUI
 
-// MARK: - Header
+/// What the header shows, and what its controls do. Held apart from the view
+/// so the wordmark can animate without the console rebuilding it.
+@MainActor
+final class HeaderState: ObservableObject {
+    static let name = "PROSPECT"
 
-/// GO. Brass, and the biggest thing in the window. It never takes keyboard
-/// focus, so Space can't press it as well as firing through the show keys.
-final class GoButton: NSButton {
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        isBordered = false
-        title = "GO"
-        refusesFirstResponder = true
-        focusRingType = .none
-    }
+    @Published var editing = false
+    @Published var lamp = ""
+    @Published var live = false
+    @Published var warn = false
+    @Published var projectorOpen = false
+    @Published var goEnabled = true
+    @Published var goTip = ""
+    /// The wordmark's glyphs, and how far home each one is.
+    @Published var wordmark: [(glyph: Character, progress: Double)] = HeaderState.name.map { ($0, 1) }
 
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 3, yRadius: 3)
-        if isEnabled {
-            (isHighlighted ? Desk.rgb(0xD6, 0xB0, 0x58) : Desk.brass).setFill()
-            path.fill()
-        } else {
-            Desk.line.setStroke()
-            path.stroke()
-        }
-        let text = NSAttributedString(string: "GO", attributes: [
-            .font: Desk.sans(14, .semibold),
-            .foregroundColor: isEnabled ? Desk.rgb(0x15, 0x12, 0x0B) : Desk.dim,
-            .kern: 2.2,
-        ])
-        let size = text.size()
-        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2 + 1.1, y: (bounds.height - size.height) / 2))
-    }
+    var onGo: () -> Void = {}
+    var onMode: (Bool) -> Void = { _ in }
+    var onAddCue: (Cue.Kind) -> Void = { _ in }
+    var onOpenProjector: () -> Void = {}
 }
 
-/// Show or edit: two segments in the desk's own colours, with whichever is
-/// on in brass. Clicked, never keyed: it doesn't take the keyboard, so Space
-/// can't flip it.
-final class ModeSwitch: NSControl {
-    var isEditing = false {
-        didSet { if isEditing != oldValue { needsDisplay = true } }
-    }
-
-    private static let labels = ["SHOW", "EDIT"]
-    private static let font = Desk.sans(10.5, .semibold)
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        refusesFirstResponder = true
-        focusRingType = .none
-        toolTip = "Show mode locks the cue sheet; edit mode unlocks it"
-        setAccessibilityRole(.radioGroup)
-        setAccessibilityLabel("Mode")
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var acceptsFirstResponder: Bool { false }
-    override var intrinsicContentSize: NSSize { NSSize(width: 104, height: 22) }
-    override var fittingSize: NSSize { intrinsicContentSize }
-
-    override func mouseDown(with event: NSEvent) {
-        let editing = convert(event.locationInWindow, from: nil).x >= bounds.midX
-        guard editing != isEditing else { return }
-        isEditing = editing
-        sendAction(action, to: target)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let box = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let outline = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
-        Desk.sunk.setFill()
-        outline.fill()
-        Desk.line.setStroke()
-        outline.stroke()
-
-        let half = box.width / 2
-        let selected = NSRect(x: box.minX + (isEditing ? half : 0), y: box.minY, width: half, height: box.height).insetBy(dx: 2, dy: 2)
-        Desk.brass.setFill()
-        NSBezierPath(roundedRect: selected, xRadius: 3, yRadius: 3).fill()
-
-        for (i, label) in Self.labels.enumerated() {
-            let on = (i == 1) == isEditing
-            let colour = on ? Desk.rgb(0x15, 0x12, 0x0B) : Desk.dim
-            let text = NSAttributedString(string: label, attributes: [.font: Self.font, .foregroundColor: colour, .kern: 0.8])
-            let size = text.size()
-            text.draw(at: NSPoint(x: box.minX + CGFloat(i) * half + (half - size.width) / 2 + 0.4, y: (bounds.height - size.height) / 2))
-        }
-    }
-}
-
-final class HeaderView: PanelView {
-    let wordmark = Desk.label("Prospect", font: Desk.mono(14), colour: Desk.text)
-    /// Show or edit, chosen here or from the Show menu. Never by a key: a
-    /// key that unlocked the sheet mid-performance would be a liability.
-    let mode = ModeSwitch(frame: .zero)
-    /// Edit mode only: a new cue of any kind, after the one standing by.
-    let addCue = NSPopUpButton(frame: .zero, pullsDown: true)
-    let lampDot = PanelView(radius: 3.5)
-    let lamp = Desk.label("", font: Desk.sans(12.5), colour: Desk.dim)
-    let openProjector = NSButton(title: "Open Projector", target: nil, action: nil)
-    let separator = PanelView(fill: Desk.line)
-    let go = GoButton(frame: .zero)
+/// The console's header: the wordmark, the mode switch and Add Cue at the
+/// left; the projector lamp and GO at the right.
+///
+/// Nothing here takes the keyboard. Space fires the standby cue through the
+/// show keys, and a focused GO button would fire it twice.
+@MainActor
+final class HeaderView: PanelHost<HeaderBar> {
+    let state: HeaderState
 
     init() {
-        super.init(fill: Desk.raised)
-        wordmark.attributedStringValue = Self.wordmarkText(Self.name.map { ($0, 1) })
-        wordmark.setAccessibilityLabel(Self.name)
-        openProjector.bezelStyle = .rounded
-        openProjector.refusesFirstResponder = true
-        // A pull-down's first item is its title; the kinds follow.
-        addCue.addItems(withTitles: ["Add Cue"] + Cue.Kind.allCases.map(\.heading) + ["Group"])
-        addCue.controlSize = .small
-        addCue.font = Desk.sans(11.5)
-        addCue.refusesFirstResponder = true
-        addCue.toolTip = "Adds a cue after the one standing by"
-        for view in [wordmark, mode, addCue, lampDot, lamp, openProjector, separator, go] as [NSView] { addSubview(view) }
+        let state = HeaderState()
+        self.state = state
+        super.init(rootView: HeaderBar(state: state))
     }
 
     required init?(coder: NSCoder) {
@@ -129,49 +45,17 @@ final class HeaderView: PanelView {
     }
 
     func update(mode editing: Bool, lamp text: String, live: Bool, warn: Bool, projectorOpen: Bool, goEnabled: Bool, goTip: String) {
-        mode.isEditing = editing
-        addCue.isHidden = !editing
-        lamp.stringValue = text
-        lamp.textColor = live ? Desk.live : (warn ? Desk.brass : Desk.dim)
-        lampDot.layer?.backgroundColor = (live ? Desk.live : (warn ? Desk.brass : Desk.lineBright)).cgColor
-        lampDot.layer?.shadowColor = Desk.live.cgColor
-        lampDot.layer?.shadowOpacity = live ? 0.9 : 0
-        lampDot.layer?.shadowRadius = 3.5
-        lampDot.layer?.shadowOffset = .zero
-        openProjector.isHidden = projectorOpen
-        go.isEnabled = goEnabled
-        go.toolTip = goTip
-        go.needsDisplay = true
-        needsLayout = true
-    }
-
-    override func layout() {
-        super.layout()
-        let h = bounds.height
-        func centre(_ v: NSView, x: CGFloat, width: CGFloat? = nil) {
-            let size = v.fittingSize
-            v.frame = NSRect(x: x, y: ((h - size.height) / 2).rounded(), width: width ?? size.width, height: size.height)
-        }
-        centre(wordmark, x: 16)
-        centre(mode, x: wordmark.frame.maxX + 16)
-        if !addCue.isHidden { centre(addCue, x: mode.frame.maxX + 12) }
-
-        go.frame = NSRect(x: bounds.width - 16 - 104, y: (h - 36) / 2, width: 104, height: 36)
-        separator.frame = NSRect(x: go.frame.minX - 15, y: (h - 26) / 2, width: 1, height: 26)
-        var right = separator.frame.minX - 14
-        if !openProjector.isHidden {
-            let width = openProjector.fittingSize.width
-            centre(openProjector, x: right - width)
-            right = openProjector.frame.minX - 14
-        }
-        let lampWidth = lamp.fittingSize.width
-        centre(lamp, x: right - lampWidth)
-        lampDot.frame = NSRect(x: lamp.frame.minX - 14, y: (h - 7) / 2, width: 7, height: 7)
+        state.editing = editing
+        state.lamp = text
+        state.live = live
+        state.warn = warn
+        state.projectorOpen = projectorOpen
+        state.goEnabled = goEnabled
+        state.goTip = goTip
     }
 
     // MARK: The wordmark
 
-    private static let name = "PROSPECT"
     /// Frames of ciphertext before any letter moves, and how long a frame is.
     private static let hold = 20
     private static let frameSeconds: TimeInterval = 0.05
@@ -199,7 +83,7 @@ final class HeaderView: PanelView {
         revealTimer = nil
         // The key never shows, on stage or here. Its shifts, 5, 8, 1, 13, 13,
         // 0, 2, 2, 8, are mostly Fibonacci numbers, for anyone who looks.
-        reveal = TravelPlan(text: Self.name, key: "FIBONACCI", wave: 3, random: &revealRandom)
+        reveal = TravelPlan(text: HeaderState.name, key: "FIBONACCI", wave: 3, random: &revealRandom)
         showReveal(at: frame)
     }
 
@@ -208,27 +92,12 @@ final class HeaderView: PanelView {
     private func showReveal(at frame: Int) {
         guard let plan = reveal else { return }
         revealFrame = frame
-        wordmark.attributedStringValue = Self.wordmarkText(plan.frame(max(0, frame), random: &revealRandom).map { ($0.glyph, $0.progress) })
+        state.wordmark = plan.frame(max(0, frame), random: &revealRandom).map { ($0.glyph, $0.progress) }
         if frame >= plan.duration {
             revealTimer?.invalidate()
             revealTimer = nil
             reveal = nil
         }
-    }
-
-    /// The glyphs in the wordmark's own case, each coloured by how far home
-    /// it is: from the ciphertext's slate to the desk's text colour, eased as
-    /// the stage's warming is.
-    private static func wordmarkText(_ glyphs: [(glyph: Character, progress: Double)]) -> NSAttributedString {
-        let text = NSMutableAttributedString()
-        for (glyph, letter) in zip(glyphs, name) {
-            let p = min(max(glyph.progress, 0), 1), e = p * p * (3 - 2 * p)
-            func mix(_ cold: UInt8, _ warm: Int) -> Int { Int((Double(cold) + (Double(warm) - Double(cold)) * e).rounded()) }
-            let colour = Desk.rgb(mix(Palette.slate.r, 0xCF), mix(Palette.slate.g, 0xD4), mix(Palette.slate.b, 0xDE))
-            let shown = letter.isLowercase ? String(glyph.glyph).lowercased() : String(glyph.glyph)
-            text.append(NSAttributedString(string: shown, attributes: [.font: Desk.mono(14), .foregroundColor: colour, .kern: 1.4]))
-        }
-        return text
     }
 
     #if DEBUG
@@ -237,4 +106,86 @@ final class HeaderView: PanelView {
         startReveal(at: frame)
     }
     #endif
+}
+
+struct HeaderBar: View {
+    @ObservedObject var state: HeaderState
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text(wordmark)
+                .font(.system(size: 14, design: .monospaced))
+                .accessibilityLabel(HeaderState.name)
+
+            Picker("Mode", selection: Binding(get: { state.editing }, set: { state.onMode($0) })) {
+                Text("Show").tag(false)
+                Text("Edit").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .focusable(false)
+            .help("Show mode locks the cue sheet; edit mode unlocks it")
+
+            if state.editing {
+                Menu("Add Cue") {
+                    ForEach(Cue.Kind.common, id: \.self) { kind in
+                        Button { state.onAddCue(kind) } label: { Label(kind.heading, systemImage: kind.symbol) }
+                    }
+                    Divider()
+                    ForEach(Cue.Kind.others, id: \.self) { kind in
+                        Button { state.onAddCue(kind) } label: { Label(kind.heading, systemImage: kind.symbol) }
+                    }
+                }
+                .fixedSize()
+                .focusable(false)
+                .help("Adds a cue after the one standing by")
+            }
+
+            Spacer(minLength: 16)
+
+            Circle()
+                .fill(lampColour)
+                .frame(width: 7, height: 7)
+            Text(state.lamp)
+                .font(.system(size: 12.5))
+                .foregroundStyle(state.live || state.warn ? AnyShapeStyle(lampColour) : AnyShapeStyle(.secondary))
+
+            if !state.projectorOpen {
+                Button("Open Projector") { state.onOpenProjector() }
+                    .focusable(false)
+            }
+
+            Divider().frame(height: 26)
+
+            Button("GO") { state.onGo() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!state.goEnabled)
+                .focusable(false)
+                .help(state.goTip)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var lampColour: Color {
+        state.live ? .green : (state.warn ? .orange : .secondary)
+    }
+
+    /// The glyphs in the wordmark's own case, each warming from the
+    /// ciphertext's quiet to full as it finds its way home.
+    private var wordmark: AttributedString {
+        var out = AttributedString()
+        for (glyph, letter) in zip(state.wordmark, HeaderState.name) {
+            let p = min(max(glyph.progress, 0), 1), eased = p * p * (3 - 2 * p)
+            var piece = AttributedString(letter.isLowercase ? String(glyph.glyph).lowercased() : String(glyph.glyph))
+            piece.foregroundColor = Color.primary.opacity(0.3 + 0.7 * eased)
+            piece.kern = 1.4
+            out += piece
+        }
+        return out
+    }
 }

@@ -240,8 +240,10 @@ public final class ShowController {
     }
 
     /// The title printed at the head of the cue sheet.
-    public func setTitle(_ title: String) {
-        edit("Change Show Title") { $0.title = title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// - Parameter coalescing: For a title changed as it is typed: a run of
+    ///   keystrokes becomes one undo step rather than one each.
+    public func setTitle(_ title: String, coalescing: Bool = false) {
+        edit("Change Show Title", coalescing: coalescing) { $0.title = title.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
     /// Changes one of the show's defaults. Every cue that doesn't set its own
@@ -288,8 +290,6 @@ public final class ShowController {
         guard mode == .edit else { return false }
         let before = show
         change(&show)
-        // A heading whose cue went stands above the next one.
-        show.tidyGroups(after: before)
         guard show != before else { return false }
         let time = now()
         let merged = coalescing && lastCoalescing.map { $0.name == actionName && time - $0.at < Self.coalescingWindow } == true
@@ -364,30 +364,34 @@ public final class ShowController {
         return cue.id
     }
 
-    public func updateCue(_ id: UUID, _ actionName: String, _ change: (inout Cue) -> Void) {
-        edit(actionName) { show in
+    /// - Parameter coalescing: For a value changed as it is typed: a run of
+    ///   keystrokes becomes one undo step rather than one each.
+    public func updateCue(_ id: UUID, _ actionName: String, coalescing: Bool = false, _ change: (inout Cue) -> Void) {
+        edit(actionName, coalescing: coalescing) { show in
             guard let i = show.index(of: id) else { return }
             change(&show.cues[i])
         }
     }
 
     /// Moves a cue up or down the sheet, past `offset` other cues. Its number
-    /// goes with it; a heading above it stays where it was.
+    /// goes with it.
     public func moveCue(_ id: UUID, by offset: Int) {
         edit("Move Cue") { show in
-            guard let i = show.index(of: id), let from = show.row(of: id) else { return }
+            guard let i = show.index(of: id) else { return }
             let j = max(0, min(show.cues.count - 1, i + offset))
-            guard i != j, let to = show.row(of: show.cues[j].id) else { return }
-            show.moveRows(from..<from + 1, before: j > i ? to + 1 : to)
+            guard i != j else { return }
+            show.cues.insert(show.cues.remove(at: i), at: j)
         }
     }
 
-    /// Moves a cue to stand before outline row `row`, or at the end: dropped
-    /// just under a heading, it joins that group.
-    public func moveCue(_ id: UUID, before row: Int) {
+    /// Moves a cue to stand before cue `index`, or at the end of the sheet
+    /// when `index` is the cue count.
+    public func moveCue(_ id: UUID, before index: Int) {
         edit("Move Cue") { show in
-            guard let from = show.row(of: id) else { return }
-            show.moveRows(from..<from + 1, before: row)
+            guard let from = show.index(of: id), index >= 0, index <= show.cues.count,
+                  from != index, from + 1 != index else { return }
+            let cue = show.cues.remove(at: from)
+            show.cues.insert(cue, at: index > from ? index - 1 : index)
         }
     }
 
@@ -395,64 +399,9 @@ public final class ShowController {
         edit("Delete Cue") { $0.cues.removeAll { $0.id == id } }
     }
 
-    // MARK: Groups
-
-    /// Puts a heading above the cue standing by, or at the end of the sheet,
-    /// inside every group that cue is in. It only organises the sheet.
-    @discardableResult
-    public func addGroup(named name: String = "New group") -> UUID? {
-        let id = UUID()
-        let cue = playhead.standby
-        let made = edit("Add Group") { show in
-            let level = cue.map { show.groups(around: $0).count } ?? 0
-            // Last among the headings above that cue, so it is inside them:
-            // every edit puts headings back in reading order, keeping their
-            // order where they share a cue.
-            show.groups.append(CueGroup(id: id, name: name, level: level, before: cue))
-        }
-        return made ? id : nil
-    }
-
-    public func renameGroup(_ id: UUID, to name: String) {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        edit("Rename Group") { show in
-            guard let i = show.groups.firstIndex(where: { $0.id == id }) else { return }
-            show.groups[i].name = name
-        }
-    }
-
-    /// A level in, inside the group above it, or a level out.
-    public func moveGroupLevel(_ id: UUID, by delta: Int) {
-        edit(delta > 0 ? "Move Group In" : "Move Group Out") { show in
-            guard let i = show.groups.firstIndex(where: { $0.id == id }) else { return }
-            show.groups[i].level = max(0, show.groups[i].level + delta)
-        }
-    }
-
-    /// Takes the heading away. Everything in it stays, in the group around it.
-    public func deleteGroup(_ id: UUID) {
-        edit("Delete Group") { $0.groups.removeAll { $0.id == id } }
-    }
-
-    /// Moves a group, with everything in it, to stand before outline row
-    /// `row`, or at the end.
-    public func moveGroup(_ id: UUID, before row: Int) {
-        edit("Move Group") { show in
-            guard let span = show.span(of: id) else { return }
-            show.moveRows(span, before: row)
-        }
-    }
-
     /// 1, 2, 3... Meant for once, before tech. The console warns first.
     public func renumberAll() {
         edit("Renumber All") { $0.renumberAll() }
-    }
-
-    /// A group's cues numbered from `start`, as one edit.
-    public func renumber(group id: UUID, from start: Int) {
-        guard let group = show.groups.first(where: { $0.id == id }) else { return }
-        edit("Renumber \(group.name)") { $0.renumber(group: id, from: start) }
     }
 
     public func setProjector(_ state: ProjectorState) {

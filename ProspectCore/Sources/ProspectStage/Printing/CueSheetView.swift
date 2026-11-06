@@ -118,7 +118,6 @@ public final class CueSheetView: NSView {
     }
 
     func height(of row: CueSheet.Row) -> CGFloat {
-        if row.heading { return max(32, Self.measure(heading(row), width: headingWidth(row)) + 2 * Self.padding).rounded(.up) }
         let c = columns
         let heights = [
             Self.measure(Self.number(row.number), width: c[0].width),
@@ -171,25 +170,11 @@ public final class CueSheetView: NSView {
         return out
     }
 
-    /// A row's content sits in a step for every group it is inside, and a
-    /// GO's a step more than its cue's, so each reads as part of what holds it.
+    /// A GO's content sits a step in from its cue's, so it reads as part of
+    /// the cue that waits for it.
     private func indent(_ row: CueSheet.Row) -> CGFloat {
-        CGFloat(row.depth) * Self.indentStep + (row.go == nil ? 0 : 16)
+        row.go == nil ? 0 : 16
     }
-
-    static let indentStep: CGFloat = 14
-
-    /// A group's name, across the row from the cue column, in from the left
-    /// a step for every group it is inside.
-    private func heading(_ row: CueSheet.Row) -> NSAttributedString {
-        Self.text(row.content.first ?? "", Self.headingRowFont)
-    }
-
-    private func headingWidth(_ row: CueSheet.Row) -> CGFloat {
-        paper.width - 2 * Self.margin - CGFloat(row.depth) * Self.indentStep
-    }
-
-    private static let headingRowFont = NSFont.systemFont(ofSize: 13, weight: .bold)
 
     /// The cue point, or nothing at all where none is set; or the settings,
     /// with values set for this cue in bold and starred.
@@ -258,13 +243,6 @@ public final class CueSheetView: NSView {
 
     private func draw(_ row: CueSheet.Row, top: CGFloat, height: CGFloat) {
         let c = columns, y = top + Self.padding
-        if row.heading {
-            let x = Self.margin + CGFloat(row.depth) * Self.indentStep
-            heading(row).draw(with: NSRect(x: x, y: y, width: headingWidth(row), height: height), options: .usesLineFragmentOrigin)
-            NSColor(white: 0, alpha: 0.35).setFill()
-            NSRect(x: Self.margin, y: top + height - 0.5, width: paper.width - 2 * Self.margin, height: 0.5).fill()
-            return
-        }
         // The number sits on the same baseline as the first line beside it.
         let lift = Self.numberFont.ascender - Self.bodyFont.ascender
         Self.number(row.number).draw(with: NSRect(x: c[0].x, y: y - lift, width: c[0].width, height: height),

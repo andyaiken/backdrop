@@ -1,3 +1,4 @@
+import AppKit
 import CoreText
 import ProspectCore
 import Testing
@@ -36,5 +37,13 @@ struct FontCoverageTests {
     func revealCharacters() {
         #expect(StageFont.revealCharacters.count == 46)
         #expect(StageFont.revealCharacters.last == "\u{2423}")
+    }
+
+    // A cue kind's icon is a name until AppKit resolves it; a typo draws
+    // nothing at all. Rerun after any macOS update.
+    @Test("Every cue kind's icon is a symbol this Mac has", arguments: Cue.Kind.allCases)
+    func kindSymbolsResolve(kind: Cue.Kind) {
+        #expect(NSImage(systemSymbolName: kind.symbol, accessibilityDescription: nil) != nil,
+                "no symbol named \(kind.symbol) for \(kind.heading) cues")
     }
 }

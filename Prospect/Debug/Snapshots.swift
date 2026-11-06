@@ -81,19 +81,24 @@ enum Snapshots {
         controller.setOverride(.grid, to: .number(20), for: image)
         controller.setOverride(.order, to: .order(.spiral), for: image)
         controller.setOverride(.reveal, to: .reveal(.sharpen), for: image)
-        console.showEditTab(1)
+        console.showInspectorTab(1)
         save(console, "console-cue-settings", to: directory)
-        console.showEditTab(2)
-        save(console, "console-show-defaults", to: directory)
+        // Wide enough that the inspector stands beside the preview.
+        console.window?.setFrame(NSRect(x: 0, y: 0, width: 1700, height: 980), display: false)
+        console.showInspectorTab(1)
+        save(console, "console-wide-cue-settings", to: directory)
+        console.showInspectorTab(0)
+        save(console, "console-wide-cue", to: directory)
+        console.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 860), display: false)
         // A decryption cue whose letters are on dials.
         let decryption = controller.show.cues[4].id
         controller.setOverride(.letters, to: .letters(.dials), for: decryption)
         controller.standBy(decryption)
-        console.showEditTab(1)
+        console.showInspectorTab(1)
         save(console, "console-cue-settings-decryption", to: directory)
 
         // A cue just added: every field empty, and flagged.
-        console.showEditTab(0)
+        console.showInspectorTab(0)
         controller.addCue(.title)
         save(console, "console-new-cue", to: directory)
 
@@ -108,7 +113,7 @@ enum Snapshots {
             save(console, "console-edit-anagram", to: directory)
             // Its settings, set in a hand.
             controller.setOverride(.font, to: .font("Noteworthy"), for: anagram)
-            console.showEditTab(1)
+            console.showInspectorTab(1)
             save(console, "console-cue-settings-anagram", to: directory)
 
             // In show mode, each anagram on GO: the first solved, through
@@ -122,7 +127,7 @@ enum Snapshots {
                 cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0, defaults: defaults)
                 cue.setCuePoint("LANGDON: \u{201C}The Mona Lisa\u{2026}\u{201D}", ofGoPoint: 1, defaults: defaults)
             }
-            console.showEditTab(0)
+            console.showInspectorTab(0)
             controller.standBy(anagram, step: 1)
             save(console, "console-edit-go-cue-point", to: directory)
             controller.enterShowMode()
@@ -134,29 +139,12 @@ enum Snapshots {
             for i in 1...1200 { controller.tick(at: fired + 1 + Double(i) / 60) }
             save(console, "console-show-anagram-waiting", to: directory)
 
-            // Groups: Act One holding two scenes, then Act Two. In edit mode
-            // with their controls; then in show mode, where only the group
-            // holding the standby cue is open.
-            let cues = controller.show.cues.map(\.id)
-            controller.enterEditMode()
-            controller.standBy(cues[0])
-            controller.addGroup(named: "Act One")
-            controller.addGroup(named: "Scene 1")
-            controller.standBy(cues[3])
-            if let scene = controller.addGroup(named: "Scene 2") { controller.moveGroupLevel(scene, by: -1) }
-            controller.standBy(cues[6])
-            if let act = controller.addGroup(named: "Act Two") { controller.moveGroupLevel(act, by: -2) }
-            controller.standBy(cues[1])
-            save(console, "console-edit-groups", to: directory)
-            controller.enterShowMode()
-            controller.standBy(cues[4])
-            save(console, "console-show-groups", to: directory)
         }
 
         // A morph through three drawn faces, five points matched into the
         // second, in the Cue tab and in its points window.
         controller.enterEditMode()
-        console.showEditTab(0)
+        console.showInspectorTab(0)
         if let morph = controller.addCue(.morph) {
             controller.updateCue(morph, "Change Label") { $0.text = "LEONARDO" }
             let faces = [(name: "first.png", wide: 0.30, eyes: 0.40), (name: "second.png", wide: 0.36, eyes: 0.46),
@@ -256,6 +244,19 @@ enum Snapshots {
             }
         }
 
+        // Show › Show Settings: the show's defaults and its projection area.
+        console.showShowSettings()
+        if let view = console.showSettingsView {
+            view.layoutSubtreeIfNeeded()
+            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.effectiveAppearance.performAsCurrentDrawingAppearance {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                }
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: directory).appendingPathComponent("show-settings.png"))
+            }
+        }
+
         // Prospect › Settings.
         // Its content is SwiftUI, which sizes itself as it lays out, so it
         // is laid out before it is measured.
@@ -340,7 +341,12 @@ enum Snapshots {
         console.refresh()
         view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
-        view.cacheDisplay(in: view.bounds, to: rep)
+        // Drawn as the window's own appearance, or the dynamic colours
+        // resolve against whatever was last current and the console comes
+        // out light-on-light.
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            view.cacheDisplay(in: view.bounds, to: rep)
+        }
 
         // Layer-hosting views aren't drawn by cacheDisplay, so the preview's
         // surface is rendered into its place.

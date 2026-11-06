@@ -1,28 +1,36 @@
 import AppKit
+import SwiftUI
 
-/// A warning that stays until it no longer applies: brass-edged, on the
-/// right, above the preview.
-final class WarningBox: PanelView {
-    private let bar = PanelView(fill: Desk.brass)
-    let text = Desk.label("", font: Desk.sans(12.5), colour: Desk.text, wraps: true)
+/// A warning that stays until it no longer applies, above the preview.
+@MainActor
+final class WarningBox: PanelHost<WarningBoxView> {
+    var message = "" {
+        didSet {
+            guard message != oldValue else { return }
+            rootView = WarningBoxView(message: message)
+        }
+    }
 
     init() {
-        super.init(fill: Desk.raised)
-        addSubview(bar)
-        addSubview(text)
+        super.init(rootView: WarningBoxView(message: ""), fills: false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+}
 
-    func height(width: CGFloat) -> CGFloat {
-        Desk.height(of: text, width: width - 24) + 20
-    }
+struct WarningBoxView: View {
+    let message: String
 
-    override func layout() {
-        super.layout()
-        bar.frame = NSRect(x: 0, y: 0, width: 2, height: bounds.height)
-        text.frame = NSRect(x: 12, y: 10, width: bounds.width - 24, height: bounds.height - 20)
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 12.5))
+            .foregroundStyle(.primary)
+            .labelStyle(.titleAndIcon)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

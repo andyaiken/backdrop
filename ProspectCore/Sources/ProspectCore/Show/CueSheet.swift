@@ -48,10 +48,6 @@ public struct CueSheet: Equatable, Sendable {
         /// its own under it in the DSM layout: no number, its content what
         /// the GO brings on, and its cue point left for pencil.
         public var go: Int? = nil
-        /// A group's heading: its name is the content, and nothing else is set.
-        public var heading = false
-        /// How many groups the row is inside, for its indent.
-        public var depth = 0
     }
 
     public let title: String
@@ -67,25 +63,19 @@ public struct CueSheet: Equatable, Sendable {
     public init(show: Show, title: String, layout: Layout) {
         self.title = title
         self.layout = layout
-        rows = show.outline.flatMap { entry -> [Row] in
-            guard case .cue(let cue, let depth) = entry else {
-                guard case .group(let group, let depth, _) = entry else { return [] }
-                return [Row(number: "", type: "", auto: false, content: [group.name], cuePoint: "", settings: [], heading: true, depth: depth)]
-            }
-            let i = show.index(of: cue.id) ?? 0
+        rows = show.cues.enumerated().flatMap { i, cue -> [Row] in
             let row = Row(
                 number: cue.number,
                 type: cue.kind.heading,
                 auto: i > 0 && show.cues[i - 1].continueMode.continues,
                 content: Self.content(of: cue),
                 cuePoint: layout == .dsm ? cue.line.trimmingCharacters(in: .whitespacesAndNewlines) : "",
-                settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : [],
-                depth: depth
+                settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : []
             )
             // Every GO the DSM calls gets a row, so none is missed in the book.
             guard layout == .dsm else { return [row] }
             let goes = cue.goPoints(defaults: show.settings).enumerated().map { n, point in
-                Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: point.cuePoint, settings: [], go: n + 1, depth: depth)
+                Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: point.cuePoint, settings: [], go: n + 1)
             }
             return [row] + goes
         }

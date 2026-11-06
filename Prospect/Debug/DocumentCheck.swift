@@ -97,26 +97,19 @@ enum DocumentCheck {
         }
         check(controller.show.cues.map(\.number) == ["1", "2"], "added cues are numbered 1 and 2")
 
-        // A cue dropped just under a group's heading joins that group, keeping
-        // its number and its place in the running order.
+        // A cue dragged down the sheet and back takes its number with it and
+        // leaves the running order as it found it.
         controller.standBy(imageID)
-        if let group = controller.addGroup(named: "Act One"), let row = controller.show.span(of: group)?.lowerBound {
-            controller.moveCue(titleID, before: row + 1)
-            check(controller.show.groups(around: titleID).map(\.name) == ["Act One"] && controller.show.cues.map(\.number) == ["1", "2"],
-                  "a cue dropped under a heading joins its group")
-            // Right-clicking a cue in edit mode offers to renumber its group.
-            if let console = document.console {
-                console.refresh()
-                let cueMenu = console.cueList.menuTitles(forCue: titleID), groupMenu = console.cueList.menuTitles(forGroup: group)
-                check(cueMenu == ["Renumber Cues in \u{201C}Act One\u{201D}\u{2026}", "Renumber All Cues\u{2026}"]
-                      && groupMenu.contains("Renumber Cues in \u{201C}Act One\u{201D}\u{2026}"),
-                      "a cue's right-click menu renumbers its group: \(cueMenu.joined(separator: " | "))")
-            }
-            controller.renumber(group: group, from: 100)
-            let numbers = controller.show.cues(inGroup: group).compactMap { controller.show[$0]?.number }
-            check(numbers.first == "100" && numbers.count == controller.show.cues.count, "a group renumbers from where it is told: \(numbers)")
-            controller.renumberAll()
-            controller.deleteGroup(group)
+        controller.moveCue(titleID, before: 2)
+        check(controller.show.cues.map(\.number) == ["2", "1"], "a cue dragged down the sheet takes its number with it")
+        controller.moveCue(titleID, before: 0)
+        check(controller.show.cues.map(\.number) == ["1", "2"], "and dragged back, the sheet reads as it did")
+        // Right-clicking a cue in edit mode offers to renumber the sheet.
+        if let console = document.console {
+            console.refresh()
+            let cueMenu = console.cueList.menuTitles(forCue: titleID)
+            check(cueMenu == ["Renumber All Cues\u{2026}"],
+                  "a cue's right-click menu renumbers every cue: \(cueMenu.joined(separator: " | "))")
         }
 
         // Tab runs down what the cue shows, then where it comes in the book,
@@ -131,11 +124,11 @@ enum DocumentCheck {
             let decryption = stops(for: titleID), image = stops(for: imageID)
             if let anagramID = controller.addCue(.anagram) {
                 let anagram = stops(for: anagramID)
-                check(anagram == ["anagrams", "number", "line"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
+                check(anagram == ["number", "line", "anagrams"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
                 controller.deleteCue(anagramID)
             }
-            check(decryption == ["text", "sub", "key", "number", "line"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
-            check(image == ["text", "number", "line"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
+            check(decryption == ["number", "line", "text", "sub", "key"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
+            check(image == ["number", "line", "text"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
         }
 
         document.importMedia(from: picture, into: imageID)

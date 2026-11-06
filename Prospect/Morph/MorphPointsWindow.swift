@@ -57,7 +57,6 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 860, height: 640)
-        window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = Desk.colour
         window.isReleasedWhenClosed = false
         window.contentView = root

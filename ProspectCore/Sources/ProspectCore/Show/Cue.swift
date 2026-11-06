@@ -41,6 +41,26 @@ public struct Cue: Identifiable, Equatable, Sendable {
 
         /// The name as a menu item or column heading spells it.
         public var heading: String { name.capitalized }
+
+        /// The SF Symbol that stands for this kind, in the cue list and the
+        /// Add Cue menus. A name only, so the model needs no AppKit.
+        public var symbol: String {
+            switch self {
+            // A cryptex dial coming open, which is what the letters do.
+            case .title: "lock.open.rotation"
+            case .anagram: "shuffle"
+            case .image: "photo"
+            case .morph: "rectangle.2.swap"
+            case .map: "map"
+            case .video: "film"
+            case .blank: "rectangle.slash"
+            }
+        }
+
+        /// The kinds a show uses most, which the Add Cue menus list first.
+        public static let common: [Kind] = [.image, .video]
+        /// The rest, after a separator, by the name they show.
+        public static let others: [Kind] = [.anagram, .blank, .title, .map, .morph]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,

@@ -133,28 +133,6 @@ struct CueSheetViewTests {
         }
     }
 
-    @Test("Groups print as heading rows, everything in them indented, with no page of their own")
-    func groupHeadings() throws {
-        let cues = Array(show.cues.prefix(6))
-        let grouped = Show(title: "The Da Vinci Code", cues: cues, groups: [
-            CueGroup(name: "Act One", level: 0, before: cues[0].id),
-            CueGroup(name: "Scene 1", level: 1, before: cues[0].id),
-            CueGroup(name: "Scene 2", level: 1, before: cues[2].id),
-            CueGroup(name: "Act Two", level: 0, before: cues[4].id),
-        ])
-        let view = CueSheetView(sheet: CueSheet(show: grouped, title: "The Da Vinci Code", layout: .dsm),
-                                printed: Date(timeIntervalSince1970: 1_792_051_200))
-        #expect(view.pages.count == 1, "no group starts a page")
-        let page = text(of: try pdf(.dsm, show: grouped), page: 0)
-        #expect(["Act One", "Scene 1", "Scene 2", "Act Two"].allSatisfy(page.contains))
-        let rect = view.rectForPage(1)
-        if let rep = view.bitmapImageRepForCachingDisplay(in: rect), let directory = ProcessInfo.processInfo.environment["PROSPECT_SNAPSHOTS"] {
-            view.cacheDisplay(in: rect, to: rep)
-            try? rep.representation(using: .png, properties: [:])?
-                .write(to: URL(fileURLWithPath: directory).appendingPathComponent("cue-sheet-groups.png"))
-        }
-    }
-
     @Test("The pages, for looking at")
     func snapshot() {
         for layout in CueSheet.Layout.allCases {

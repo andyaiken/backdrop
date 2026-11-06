@@ -21,7 +21,7 @@ open DerivedData/Build/Products/Debug/Prospect.app
 
 On first launch Prospect opens a new, empty show. To try it:
 
-1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu; the tabs are Cue, Cue Settings, Show and Projection Area.
+1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview has two tabs: Cue, for what every cue has, and one named for the kind of cue standing by, for what it runs with. The show's own defaults and its projection area are in Show › Show Settings, since neither is touched often.
 2. Choose Show › Enter Show Mode, then Show › Open Projector.
 3. Press Space to fire the standby cue.
 
@@ -35,7 +35,9 @@ On first launch Prospect opens a new, empty show. To try it:
 
 Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
 
-Groups organise the sheet into acts, scenes and anything else, nested as deep as needed. Add Group, in the header's Add Cue menu or the Edit menu, puts a heading above the cue standing by, and its name can be typed at once. In edit mode a heading can be renamed by double-clicking it, moved a level in or out, deleted (keeping everything in it), or dragged with everything in it; a cue dropped just under a heading joins that group. Right-clicking a cue or a heading in edit mode renumbers a group's cues from a number you choose, so Act Two can start at 100; it asks first, and warns if a new number is already used elsewhere. During a show, the standby panel names the groups the standby cue is in, in brass when GO crosses into another group. Also during a show, the groups around the live and standby cues open themselves and the rest fold away. Groups never change how the show runs: GO, standby and the arrow keys go straight through them. On the printed sheet each group is a heading, with everything in it indented beneath it.
+In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
+
+The console is in the Mac's own controls and follows its light or dark appearance and its accent colour; the stage keeps a palette of its own, because that is the projected picture rather than the interface.
 
 Nothing takes the keyboard in show mode except the Go-to field, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
 
@@ -83,11 +85,11 @@ The code is in three layers:
   - `CueSheetView`: prints the cue sheet.
 
   None of it needs a window, so its tests render offscreen.
-- **Prospect**, the app, holds only what needs AppKit. Its main files:
+- **Prospect**, the app. Its interface is SwiftUI in the Mac's own controls, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
   - [ShowDocument.swift](Prospect/Document/ShowDocument.swift) and [DocumentController.swift](Prospect/App/DocumentController.swift): the document, with one show open at a time.
-  - [ConsoleWindow.swift](Prospect/Console/ConsoleWindow.swift): the console window, built from the panels beside it in `Console/`.
+  - [ConsoleWindow.swift](Prospect/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
   - [Projector.swift](Prospect/Projector/Projector.swift): the projector window and display handling.
-  - [CueEditor.swift](Prospect/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Prospect/Console/Editing/SettingsPanels.swift): the editing panels.
+  - [CueEditor.swift](Prospect/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Prospect/Console/Editing/SettingsPanels.swift): the Inspector's two tabs, and [ShowSettingsWindow.swift](Prospect/Console/ShowSettingsWindow.swift) the show's own settings. Each is a SwiftUI form behind a small AppKit host.
   - [ProspectApp.swift](Prospect/App/ProspectApp.swift) and [MainMenu.swift](Prospect/App/MainMenu.swift): launch and the menus.
 
 Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `ProspectCore/Sources/ProspectCore/Anagrams` and `ProspectCore/Sources/ProspectStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.

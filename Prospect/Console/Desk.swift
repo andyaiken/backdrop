@@ -1,16 +1,23 @@
 import AppKit
 
-/// The desk palette, for everything around the stage.
+/// The desk palette: the Mac's own colours, named for what they are used
+/// for. They follow the system appearance and the user's accent colour, so
+/// the console looks like every other app on the machine.
+///
+/// The stage keeps a palette of its own, in `Palette`: that one is the
+/// projected picture, not the interface, and never changes with the Mac.
 enum Desk {
-    static let colour = rgb(0x14, 0x16, 0x1B)
-    static let raised = rgb(0x1B, 0x1E, 0x25)
-    static let sunk = rgb(0x0C, 0x0E, 0x12)
-    static let line = rgb(0x27, 0x2C, 0x35)
-    static let lineBright = rgb(0x3A, 0x41, 0x4E)
-    static let text = rgb(0xCF, 0xD4, 0xDE)
-    static let dim = rgb(0x76, 0x7E, 0x8D)
-    static let brass = rgb(0xC8, 0xA2, 0x4A)
-    static let live = rgb(0x6F, 0xB5, 0x8A)
+    static let colour = NSColor.windowBackgroundColor
+    /// A row that stands out: the live cue, the one standing by.
+    static let raised = NSColor.unemphasizedSelectedContentBackgroundColor
+    static let sunk = NSColor.underPageBackgroundColor
+    static let line = NSColor.separatorColor
+    static let lineBright = NSColor.tertiaryLabelColor
+    static let text = NSColor.labelColor
+    static let dim = NSColor.secondaryLabelColor
+    /// What the operator's eye goes to: standby, and anything live.
+    static let brass = NSColor.controlAccentColor
+    static let live = NSColor.systemGreen
 
     static func rgb(_ r: Int, _ g: Int, _ b: Int) -> NSColor {
         NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
@@ -42,14 +49,22 @@ enum Desk {
 }
 
 /// A plain view with a fill, and optionally a border.
+///
+/// The colours are kept, not their `CGColor`s: a `CGColor` is the colour as
+/// it stood when it was taken, so a view that cached one would keep the
+/// light appearance's colour after the Mac turned dark.
 class PanelView: NSView {
+    private let fill: NSColor?
+    private let border: NSColor?
+
     init(fill: NSColor? = nil, border: NSColor? = nil, radius: CGFloat = 0) {
+        self.fill = fill
+        self.border = border
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = fill?.cgColor
-        layer?.borderColor = border?.cgColor
         layer?.borderWidth = border == nil ? 0 : 1
         layer?.cornerRadius = radius
+        applyColours()
     }
 
     required init?(coder: NSCoder) {
@@ -57,6 +72,19 @@ class PanelView: NSView {
     }
 
     override var isFlipped: Bool { true }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyColours()
+        needsDisplay = true
+    }
+
+    private func applyColours() {
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = fill?.cgColor
+            layer?.borderColor = border?.cgColor
+        }
+    }
 }
 
 extension String {

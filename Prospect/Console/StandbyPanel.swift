@@ -1,126 +1,145 @@
 import AppKit
 import ProspectCore
 import ProspectStage
+import SwiftUI
 
 /// What GO fires next, large; what is on screen, small.
-final class StandbyPanel: PanelView {
-    private let standingBy = Desk.label("Standing by", font: Desk.sans(11.5), colour: Desk.dim)
-    /// The groups the cue standing by is in, outermost first, on the same
-    /// line: brass when GO goes into another group from the one on screen.
-    private let group = Desk.label("", font: Desk.sans(11.5), colour: Desk.dim)
-    private let number = Desk.label("\u{2014}", font: Desk.mono(30), colour: Desk.brass)
-    private let name = Desk.label("\u{2014}", font: Desk.mono(13), colour: Desk.text)
-    private let arm = Desk.label("", font: Desk.sans(11.5, .medium), colour: Desk.dim)
-    private let cuePointBox = PanelView(fill: Desk.raised)
-    private let cuePointBar = PanelView(fill: Desk.brass)
-    private let cuePoint = Desk.label("", font: Desk.sans(13), colour: Desk.text, wraps: true)
-    private let divider = PanelView(fill: Desk.line)
-    private let onScreen = Desk.label("On screen", font: Desk.sans(11.5), colour: Desk.dim)
-    private let liveNumber = Desk.label("\u{2014}", font: Desk.mono(17), colour: Desk.dim)
-    private let liveName = Desk.label("\u{2014}", font: Desk.mono(12), colour: Desk.dim)
-
+@MainActor
+final class StandbyPanel: PanelHost<StandbyPanelView> {
     init() {
-        super.init(fill: Desk.sunk)
-        name.alignment = .right
-        liveName.alignment = .right
-        cuePointBox.addSubview(cuePointBar)
-        cuePointBox.addSubview(cuePoint)
-        arm.alignment = .right
-        group.alignment = .right
-        // Too long, it loses the outer groups first: the innermost is the
-        // one that says where GO goes.
-        group.lineBreakMode = .byTruncatingHead
-        for view in [standingBy, group, number, name, arm, cuePointBox, divider, onScreen, liveNumber, liveName] as [NSView] { addSubview(view) }
+        super.init(rootView: StandbyPanelView(standby: nil, live: nil, goPoint: nil, entry: "", arm: nil), fills: false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// For a video cue standing by: whether it is armed, said plainly. While
-    /// the live cue waits partway, its GO point stands by in the cue's place.
-    func update(standby: Cue?, live: Cue?, goPoint: ShowController.StandingByGoPoint?, entry: String, arm armState: ArmState?,
-                groups: [CueGroup] = [], liveGroups: [CueGroup] = []) {
-        group.stringValue = entry.isEmpty ? groups.map(\.name).joined(separator: " \u{203A} ") : ""
-        let crosses = live != nil && groups.map(\.id) != liveGroups.map(\.id)
-        group.textColor = crosses ? Desk.brass : Desk.dim
-        group.toolTip = group.stringValue.isEmpty ? nil
-            : crosses ? "GO goes into \(group.stringValue), out of the group on screen" : "In \(group.stringValue)"
-        switch armState {
-        case .armed:
-            arm.stringValue = "Video armed"
-            arm.textColor = Desk.live
-        case .arming:
-            arm.stringValue = "Video loading \u{2014} not armed yet"
-            arm.textColor = Desk.brass
-        case .failed:
-            arm.stringValue = "No clip \u{2014} this cue goes to black"
-            arm.textColor = Desk.brass
-        case nil:
-            arm.stringValue = ""
+    /// - Parameter arm: For a video cue standing by: whether it is armed,
+    ///   said plainly. While the live cue waits partway, its GO point stands
+    ///   by in the cue's place.
+    func update(standby: Cue?, live: Cue?, goPoint: ShowController.StandingByGoPoint?, entry: String, arm: ArmState?) {
+        rootView = StandbyPanelView(standby: standby, live: live, goPoint: goPoint, entry: entry, arm: arm)
+    }
+}
+
+struct StandbyPanelView: View {
+    let standby: Cue?
+    let live: Cue?
+    let goPoint: ShowController.StandingByGoPoint?
+    /// A cue number being typed into Go to cue.
+    let entry: String
+    let arm: ArmState?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(heading)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(number)
+                    .font(.system(size: 30, design: .monospaced))
+                    .foregroundStyle(.tint)
+                Spacer(minLength: 0)
+                Text(name)
+                    .font(.system(size: 13, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.top, 2)
+
+            if let armed {
+                Text(armed.text)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(armed.colour)
+                    .padding(.top, 8)
+            }
+
+            cuePointBox.padding(.top, 10)
+
+            Divider().padding(.vertical, 12)
+
+            Text("On screen")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(live?.number ?? "\u{2014}")
+                    .font(.system(size: 17, design: .monospaced))
+                Spacer(minLength: 0)
+                Text(live.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "\u{2014}")
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.top, 2)
         }
-        if !entry.isEmpty {
-            standingBy.stringValue = "Go to \u{2014} Return stands it by, Escape clears"
-            number.stringValue = entry + "\u{2581}"
-            name.stringValue = ""
-        } else if let goPoint {
-            standingBy.stringValue = "Standing by \u{2014} \(goPoint.point.unit.rawValue) \(goPoint.number) of \(goPoint.count)"
-            number.stringValue = goPoint.cue.number
-            name.stringValue = goPoint.point.text
-        } else {
-            standingBy.stringValue = "Standing by"
-            number.stringValue = standby?.number ?? "\u{2014}"
-            name.stringValue = standby.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "end of sheet"
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The cue point, in a box with a bar down its edge: lit where one is
+    /// set, quiet where none is.
+    private var cuePointBox: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(hasCuePoint ? Color.accentColor : Color.secondary.opacity(0.4))
+                .frame(width: 2)
+            Text(cuePoint)
+                .font(.system(size: 13))
+                .italic(!hasCuePoint)
+                .foregroundStyle(hasCuePoint ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(9)
         }
-        // A GO of a cue waits for its own cue point, if it has one.
-        let line = (goPoint?.point.cuePoint ?? standby?.line ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !line.isEmpty {
-            cuePoint.stringValue = line
-        } else if let goPoint {
-            // No cue point of its own: what GO does here.
-            cuePoint.stringValue = goPoint.cue.id == live?.id
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
+    }
+
+    // MARK: What it says
+
+    private var heading: String {
+        if !entry.isEmpty { return "Go to \u{2014} Return stands it by, Escape clears" }
+        if let goPoint { return "Standing by \u{2014} \(goPoint.point.unit.rawValue) \(goPoint.number) of \(goPoint.count)" }
+        return "Standing by"
+    }
+
+    private var number: String {
+        if !entry.isEmpty { return entry + "\u{2581}" }
+        if let goPoint { return goPoint.cue.number }
+        return standby?.number ?? "\u{2014}"
+    }
+
+    private var name: String {
+        if !entry.isEmpty { return "" }
+        if let goPoint { return goPoint.point.text }
+        return standby.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "end of sheet"
+    }
+
+    /// A GO of a cue waits for its own cue point, if it has one.
+    private var line: String {
+        (goPoint?.point.cuePoint ?? standby?.line ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var hasCuePoint: Bool { !line.isEmpty }
+
+    private var cuePoint: String {
+        if hasCuePoint { return line }
+        // No cue point of its own: what GO does here.
+        if let goPoint {
+            return goPoint.cue.id == live?.id
                 ? "GO carries cue \(goPoint.cue.number) on to this step."
                 : "GO fires cue \(goPoint.cue.number) straight to this step, the steps before it already done."
-        } else {
-            cuePoint.stringValue = !line.isEmpty ? line : (standby == nil ? "Nothing to stand by for" : "No cue point set")
         }
-        cuePoint.textColor = line.isEmpty ? Desk.dim : Desk.text
-        cuePoint.font = line.isEmpty ? NSFontManager.shared.convert(Desk.sans(13), toHaveTrait: .italicFontMask) : Desk.sans(13)
-        cuePointBar.layer?.backgroundColor = (line.isEmpty ? Desk.line : Desk.brass).cgColor
-        liveNumber.stringValue = live?.number ?? "\u{2014}"
-        liveName.stringValue = live?.text ?? "\u{2014}"
-        needsLayout = true
+        return standby == nil ? "Nothing to stand by for" : "No cue point set"
     }
 
-    /// The height the panel needs at a width.
-    func height(width: CGFloat) -> CGFloat {
-        let inner = width - 32
-        return 15 + 16 + 2 + 36 + 10 + (arm.stringValue.isEmpty ? 0 : 18)
-            + (Desk.height(of: cuePoint, width: inner - 22) + 18) + 12 + 1 + 12 + 16 + 2 + 22 + 15
-    }
-
-    override func layout() {
-        super.layout()
-        let x: CGFloat = 16, inner = bounds.width - 32
-        var y: CGFloat = 15
-        // The group takes what the label leaves of the line.
-        let label = ceil(standingBy.attributedStringValue.size().width) + 12
-        standingBy.frame = NSRect(x: x, y: y, width: label, height: 16)
-        group.frame = NSRect(x: x + label, y: y, width: max(0, inner - label), height: 16); y += 18
-        number.frame = NSRect(x: x, y: y, width: inner * 0.5, height: 36)
-        name.frame = NSRect(x: x + inner * 0.35, y: y + 14, width: inner * 0.65, height: 18); y += 46
-        arm.isHidden = arm.stringValue.isEmpty
-        if !arm.isHidden {
-            arm.frame = NSRect(x: x, y: y - 6, width: inner, height: 16)
-            y += 18
+    private var armed: (text: String, colour: Color)? {
+        switch arm {
+        case .armed: ("Video armed", .green)
+        case .arming: ("Video loading \u{2014} not armed yet", .orange)
+        case .failed: ("No clip \u{2014} this cue goes to black", .orange)
+        case nil: nil
         }
-        let textHeight = Desk.height(of: cuePoint, width: inner - 22)
-        cuePointBox.frame = NSRect(x: x, y: y, width: inner, height: textHeight + 18)
-        cuePointBar.frame = NSRect(x: 0, y: 0, width: 2, height: textHeight + 18)
-        cuePoint.frame = NSRect(x: 11, y: 9, width: inner - 22, height: textHeight); y += textHeight + 18 + 12
-        divider.frame = NSRect(x: x, y: y, width: inner, height: 1); y += 13
-        onScreen.frame = NSRect(x: x, y: y, width: inner, height: 16); y += 18
-        liveNumber.frame = NSRect(x: x, y: y, width: inner * 0.4, height: 22)
-        liveName.frame = NSRect(x: x + inner * 0.3, y: y + 4, width: inner * 0.7, height: 16)
     }
 }

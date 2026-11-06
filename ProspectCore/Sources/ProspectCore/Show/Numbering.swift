@@ -1,8 +1,8 @@
 import Foundation
 
 // Cue numbers are identifiers the DSM writes in the book. Nothing here ever
-// changes a number except `renumberAll` and `renumber(group:from:)`, which
-// are meant to be used before tech.
+// changes a number except `renumberAll`, which is meant to be used before
+// tech.
 
 extension Show {
     /// The first cue with this number. Numbers compare trimmed and
@@ -54,50 +54,6 @@ extension Show {
     /// 1, 2, 3... in running order. The book will need rewriting to match.
     public mutating func renumberAll() {
         for i in cues.indices { cues[i].number = String(i + 1) }
-    }
-
-    /// The cues in a group, those in groups inside it included, in running
-    /// order.
-    public func cues(inGroup id: UUID) -> [UUID] {
-        var inside = false, depth = 0, found: [UUID] = []
-        for row in outline {
-            switch row {
-            case .group(let group, let d, _):
-                if group.id == id {
-                    inside = true
-                    depth = d
-                } else if inside, d <= depth {
-                    inside = false
-                }
-            case .cue(let cue, let d):
-                if inside, d > depth { found.append(cue.id) } else if inside { inside = false }
-            }
-        }
-        return found
-    }
-
-    /// Where renumbering a group starts unless told otherwise: the next whole
-    /// number after the highest of the cues before it, so it follows on.
-    public func renumberStart(forGroup id: UUID) -> Int {
-        guard let first = cues(inGroup: id).first, let index = index(of: first) else { return Int(highestNumber().rounded(.down)) + 1 }
-        let before = cues[..<index].compactMap { Self.leadingNumber($0.number) }.max() ?? 0
-        return Int(max(before, 0).rounded(.down)) + 1
-    }
-
-    /// The numbers renumbering a group from `start` would give that cues
-    /// outside it already have.
-    public func renumberClashes(group id: UUID, from start: Int) -> [String] {
-        let inside = cues(inGroup: id), set = Set(inside)
-        let outside = Set(cues.filter { !set.contains($0.id) }.map { Self.normalised($0.number) })
-        return (0..<inside.count).map { String(start + $0) }.filter { outside.contains($0) }
-    }
-
-    /// The cues in a group numbered `start`, `start + 1`... in running order,
-    /// groups inside it included. The book will need rewriting to match.
-    public mutating func renumber(group id: UUID, from start: Int) {
-        for (n, cueID) in cues(inGroup: id).enumerated() {
-            if let i = index(of: cueID) { cues[i].number = String(start + n) }
-        }
     }
 
     /// The shortest decimal strictly between two plain numbers, as close to

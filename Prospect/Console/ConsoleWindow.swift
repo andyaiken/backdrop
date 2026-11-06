@@ -27,14 +27,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let warning = WarningBox()
     private let previewHeading = Desk.label("What the audience sees", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
-    private let geometry = GeometryPanel()
     private(set) var editor = CueEditorPanel()
     private let cueSettings = CueSettingsPanel()
-    private let showDefaults = ShowDefaultsPanel()
+    private var showSettings: ShowSettingsWindowController?
     /// Edit mode's panels, one at a time beneath the preview.
-    private let tabs = NSSegmentedControl(labels: ["Cue", "Cue Settings", "Show", "Projection Area"],
+    /// The Inspector's tabs: everything a cue has in common, then what this
+    /// kind of cue runs with, named for the kind.
+    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
                                           trackingMode: .selectOne, target: nil, action: nil)
-    private var editPanels: [NSView] { [editor, cueSettings, showDefaults, geometry] }
+    private var inspectorPanels: [NSView] { [editor, cueSettings] }
     private let keybar = KeyBar()
 
     /// Copies a dropped or chosen file into the show for a cue.
@@ -66,7 +67,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false
         )
-        window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = Desk.colour
         window.contentMinSize = NSSize(width: 900, height: 600)
         window.contentView = root
@@ -83,8 +83,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         root.controller = controller
         root.onLayout = { [weak self] in self?.layoutContent() }
-        root.wantsLayer = true
-        root.layer?.backgroundColor = Desk.colour.cgColor
+        root.paintDesk()
         preview.controller = controller
         controller.runner.attach(preview.surface)
         previewFrame.addSubview(preview)
@@ -94,14 +93,10 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         gotoField.delegate = self
         gotoField.bezelStyle = .roundedBezel
 
-        header.go.target = self
-        header.go.action = #selector(goPressed)
-        header.openProjector.target = self
-        header.openProjector.action = #selector(openProjectorPressed)
-        header.mode.target = self
-        header.mode.action = #selector(modeChosen)
-        header.addCue.target = self
-        header.addCue.action = #selector(addCueChosen)
+        header.state.onGo = { [weak self] in self?.goPressed() }
+        header.state.onOpenProjector = { [weak self] in self?.openProjectorPressed() }
+        header.state.onMode = { [weak self] editing in self?.modeChosen(editing) }
+        header.state.onAddCue = { [weak self] kind in self?.addCueChosen(kind) }
         // An edit still open is finished first, so it lands on the cue it was
         // made for rather than the one the click stands by.
         cueList.onClick = { [weak self] id in
@@ -117,34 +112,13 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
         cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
-        cueList.onMoveGroup = { [weak controller] id, row in controller?.moveGroup(id, before: row) }
-        cueList.onGroupLevel = { [weak controller] id, delta in controller?.moveGroupLevel(id, by: delta) }
-        cueList.onDeleteGroup = { [weak controller] id in controller?.deleteGroup(id) }
-        cueList.onRenumber = { [weak self] id in
-            if let id { self?.confirmRenumber(group: id) } else { self?.confirmRenumber() }
-        }
-        // A rename hands the keyboard back to the show keys.
-        cueList.onRenameGroup = { [weak self] id, name in
-            guard let self else { return }
-            self.controller.renameGroup(id, to: name)
-            self.window?.makeFirstResponder(self.root)
-        }
+        cueList.onRenumberAll = { [weak self] in self?.confirmRenumber() }
         editor.controller = controller
         editor.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
         editor.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
         editor.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
         editor.editRoute = { [weak self] id in self?.showRoute(for: id) }
         editor.finishedEditing = { [weak self] in
-            guard let self else { return }
-            self.window?.makeFirstResponder(self.root)
-        }
-        // Slider drags are one undo step each.
-        geometry.onChange = { [weak controller] g in controller?.setGeometry(g, coalescing: true) }
-        showDefaults.onChange = { [weak controller] key, value, continuous in
-            controller?.setDefault(key, to: value, coalescing: continuous)
-        }
-        showDefaults.onTitleChange = { [weak controller] title in controller?.setTitle(title) }
-        showDefaults.finishedEditing = { [weak self] in
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
         }
@@ -156,11 +130,9 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.refusesFirstResponder = true
         tabs.target = self
         tabs.action = #selector(tabChosen)
-        geometry.guides.target = self
-        geometry.guides.action = #selector(guidesToggled)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, geometry, editor, cueSettings, showDefaults, tabs, keybar] as [NSView] {
+                     warning, previewHeading, previewFrame, editor, cueSettings, tabs, keybar] as [NSView] {
             root.addSubview(view)
         }
         refresh()
@@ -256,20 +228,31 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             goTip: goPoint.map { $0.cue.id == playhead.live ? "Carry cue \($0.cue.number) on" : "Fire cue \($0.cue.number) at GO \($0.number)" }
                 ?? next.map { "Fire cue \($0.number)" } ?? "End of the cue sheet"
         )
-        // The groups GO goes to, and those of what is on screen, to see
-        // whether GO crosses from one group into another.
-        let nextID = goPoint?.cue.id ?? next?.id
-        standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState,
-                       groups: nextID.map { show.groups(around: $0) } ?? [], liveGroups: live.map { show.groups(around: $0.id) } ?? [])
+        standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState)
         cueList.update(show: show, standby: playhead.standby, standbyStep: playhead.standbyStep, live: playhead.live,
                        taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing, goPoint: controller.standingByGoPoint)
         cueSettings.update(cue: editing, defaults: show.settings)
-        showDefaults.update(title: show.title, fallback: document?.displayName ?? "Untitled", settings: show.settings)
+        // The second tab is named for the kind of cue standing by, so what
+        // it holds is plain before it is opened.
+        let kindTab = editing.map(\.kind.heading) ?? "Settings"
+        if tabs.label(forSegment: 1) != kindTab {
+            tabs.setLabel(kindTab, forSegment: 1)
+            tabs.sizeToFit()
+            root.needsLayout = true
+        }
+
         status.stringValue = controller.message ?? ""
-        warning.text.stringValue = projector.warning ?? ""
-        geometry.update(geometry: show.settings.geometry, guidesOn: controller.showsGuides)
+        warning.message = projector.warning ?? ""
+        if let settings = showSettings?.state {
+            settings.title = show.title
+            settings.fallback = document?.displayName ?? "Untitled"
+            settings.settings = show.settings
+            settings.geometry = show.settings.geometry
+            settings.guidesOn = controller.showsGuides
+            settings.outputAspect = previewAspect
+        }
         root.needsLayout = true
     }
 
@@ -305,34 +288,59 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // Right: warnings, the preview, and in edit mode the projection area.
         let x = leftWidth + 1 + 16, width = b.width - x - 16
         var y = top + 16
-        warning.isHidden = warning.text.stringValue.isEmpty
+        warning.isHidden = warning.message.isEmpty
         if !warning.isHidden {
             let h = warning.height(width: width)
             warning.frame = NSRect(x: x, y: y, width: width, height: h)
             y += h + 14
         }
-        let headingHeight: CGFloat = 27
-        // Edit mode: one panel at a time beneath the preview, chosen by the
-        // tabs. Every panel gets the same height, so the preview doesn't jump
-        // as the tabs change.
+        let headingHeight: CGFloat = 27, gap: CGFloat = 24
         let editing = controller.mode == .edit
         tabs.isHidden = !editing
-        for (i, panel) in editPanels.enumerated() { panel.isHidden = !editing || i != tabs.selectedSegment }
+        for (i, panel) in inspectorPanels.enumerated() { panel.isHidden = !editing || i != tabs.selectedSegment }
+        let tabsSize = tabs.fittingSize
+
+        // Given the room, the editor stands beside the preview in a column of
+        // its own, full height, so neither squashes the other and a long
+        // panel scrolls rather than shrinking the picture.
+        if editing, width >= Self.sideBySideWidth {
+            let editorWidth = min(max((width * 0.42).rounded(), 420), 560)
+            let previewWidth = width - editorWidth - gap
+            let editorX = x + previewWidth + gap
+            tabs.frame = NSRect(x: editorX, y: y, width: tabsSize.width, height: tabsSize.height)
+            let panelTop = y + tabsSize.height + 10
+            let panelFrame = NSRect(x: editorX, y: panelTop, width: editorWidth, height: max(0, bottom - 16 - panelTop))
+            for panel in inspectorPanels { panel.frame = panelFrame }
+            placePreview(x: x, y: y, width: previewWidth, available: bottom - 16 - y - headingHeight,
+                         headingHeight: headingHeight)
+            return
+        }
+
+        // Narrower, the editor sits beneath the preview, every panel the same
+        // height so the preview doesn't jump as the tabs change.
         var available = bottom - 16 - y - headingHeight
         if editing {
-            let h = [geometry.preferredHeight, editor.preferredHeight, showDefaults.preferredHeight(width: width), cueSettings.preferredHeight].max() ?? 0
+            let h = [editor.preferredHeight, cueSettings.preferredHeight].max() ?? 0
             let panelFrame = NSRect(x: x, y: bottom - 16 - h, width: width, height: h)
-            for panel in editPanels { panel.frame = panelFrame }
-            let tabsSize = tabs.fittingSize
+            for panel in inspectorPanels { panel.frame = panelFrame }
             tabs.frame = NSRect(x: x, y: panelFrame.minY - 10 - tabsSize.height, width: tabsSize.width, height: tabsSize.height)
             available -= h + 16 + tabsSize.height + 10
         }
+        placePreview(x: x, y: y, width: width, available: available, headingHeight: headingHeight)
+    }
+
+    /// How wide the space right of the cue list must be before the editor
+    /// moves alongside the preview rather than under it.
+    private static let sideBySideWidth: CGFloat = 1000
+
+    /// The preview, as large as its space allows at the projector's shape,
+    /// centred in it, with its heading just above its corner.
+    private func placePreview(x: CGFloat, y: CGFloat, width: CGFloat, available: CGFloat, headingHeight: CGFloat) {
         var w = width, h = (width / previewAspect).rounded()
         if h > available {
             h = max(available, 0)
             w = (h * previewAspect).rounded()
         }
-        // Centred in the space left, its heading just above its corner.
         let left = x + ((width - w) / 2).rounded(), blockTop = y + ((available - h) / 2).rounded()
         previewHeading.frame = NSRect(x: left, y: blockTop, width: w, height: 18)
         previewFrame.frame = NSRect(x: left, y: blockTop + headingHeight, width: w, height: h)
@@ -341,27 +349,25 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     // MARK: Actions
 
-    @objc private func goPressed() {
+    private func goPressed() {
         controller.go()
         window?.makeFirstResponder(root)
     }
 
-    @objc private func openProjectorPressed() {
+    private func openProjectorPressed() {
         openProjector()
         window?.makeFirstResponder(root)
     }
 
     /// A new cue stands by, and the Cue tab opens on it to be filled in.
-    @objc private func addCueChosen() {
-        let index = header.addCue.indexOfSelectedItem - 1
-        if index == Cue.Kind.allCases.count { return addGroup() }
-        guard Cue.Kind.allCases.indices.contains(index), controller.addCue(Cue.Kind.allCases[index]) != nil else { return }
-        showEditTab(0)
+    private func addCueChosen(_ kind: Cue.Kind) {
+        guard controller.addCue(kind) != nil else { return }
+        showInspectorTab(0)
         window?.makeFirstResponder(root)
     }
 
-    @objc private func modeChosen() {
-        setMode(header.mode.isEditing)
+    private func modeChosen(_ editing: Bool) {
+        setMode(editing)
         window?.makeFirstResponder(root)
         refresh()
     }
@@ -371,22 +377,39 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.makeFirstResponder(root)
     }
 
-    /// Add Group, from the header or the Edit menu: a heading above the cue
-    /// standing by, its name ready to type.
-    func addGroup() {
-        guard let id = controller.addGroup() else { return }
+    /// The show's defaults and its projection area, in a window of their
+    /// own: neither is touched often enough to sit beside the cue editor.
+    func showShowSettings() {
+        let settings = showSettings ?? {
+            let made = ShowSettingsWindowController()
+            let controller = self.controller
+            made.state.onDefault = { [weak controller] key, value, continuous in
+                controller?.setDefault(key, to: value, coalescing: continuous)
+            }
+            made.state.onTitle = { [weak controller] title in controller?.setTitle(title, coalescing: true) }
+            made.state.onGeometry = { [weak controller] g in controller?.setGeometry(g, coalescing: true) }
+            made.state.onGuides = { [weak controller] on in controller?.showsGuides = on }
+            made.state.onFinishedEditing = { [weak self] in
+                guard let self else { return }
+                self.window?.makeFirstResponder(self.root)
+            }
+            showSettings = made
+            return made
+        }()
         refresh()
-        cueList.beginRename(id)
+        settings.showWindow(nil)
+        settings.window?.makeKeyAndOrderFront(nil)
     }
 
-    /// For the snapshot tool: shows one of edit mode's tabs.
-    func showEditTab(_ index: Int) {
+    #if DEBUG
+    /// The Show Settings window's content, for the snapshot tool.
+    var showSettingsView: NSView? { showSettings?.window?.contentView }
+    #endif
+
+    /// For the snapshot tool: shows one of the Inspector's tabs.
+    func showInspectorTab(_ index: Int) {
         tabs.selectedSegment = index
         root.needsLayout = true
-    }
-
-    @objc private func guidesToggled() {
-        controller.showsGuides = geometry.guides.state == .on
     }
 
     /// The Go-to field: Return stands the cue by, Escape gives up. Either way
@@ -418,52 +441,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         alert.beginSheetModal(for: window) { [weak self] response in
             guard response == .alertSecondButtonReturn else { return }
             MainActor.assumeIsolated { self?.controller.renumberAll() }
-        }
-    }
-
-    /// A group's cues numbered from a start the operator chooses, the next
-    /// whole number after the cues before it unless changed: so Act Two can
-    /// start at 100. It asks first, and again if any new number is already
-    /// used outside the group.
-    func confirmRenumber(group id: UUID) {
-        let show = controller.show
-        guard let window, let group = show.groups.first(where: { $0.id == id }) else { return }
-        let count = show.cues(inGroup: id).count
-        guard count > 0 else { return }
-        let alert = NSAlert()
-        alert.messageText = "Renumber the \(count) cue\(count == 1 ? "" : "s") in \u{201C}\(group.name)\u{201D}?"
-        alert.informativeText = "They are numbered in running order from the number below, one apart, groups inside it included. Cue numbers are what the DSM writes in the book, so the book will need rewriting to match."
-        let start = NSTextField(string: String(show.renumberStart(forGroup: id)))
-        start.frame = NSRect(x: 0, y: 0, width: 120, height: 24)
-        start.font = Desk.mono(13)
-        start.placeholderString = "100"
-        alert.accessoryView = start
-        alert.addButton(withTitle: "Cancel")
-        let renumber = alert.addButton(withTitle: "Renumber")
-        renumber.hasDestructiveAction = true
-        alert.window.initialFirstResponder = start
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertSecondButtonReturn else { return }
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                guard let from = Int(start.stringValue.trimmingCharacters(in: .whitespaces)), from >= 0 else {
-                    self.controller.say("\u{201C}\(start.stringValue)\u{201D} isn\u{2019}t a whole number to start from, so nothing was renumbered.")
-                    return
-                }
-                let clashes = self.controller.show.renumberClashes(group: id, from: from)
-                guard !clashes.isEmpty else { return self.controller.renumber(group: id, from: from) }
-                let again = NSAlert()
-                let listed = clashes.prefix(6).joined(separator: ", ") + (clashes.count > 6 ? " and \(clashes.count - 6) more" : "")
-                again.messageText = "Cues outside \u{201C}\(group.name)\u{201D} already use \(listed)."
-                again.informativeText = "Renumbering anyway leaves those numbers on two cues each, flagged on the sheet until one of each is changed."
-                again.addButton(withTitle: "Cancel")
-                let anyway = again.addButton(withTitle: "Renumber Anyway")
-                anyway.hasDestructiveAction = true
-                again.beginSheetModal(for: window) { [weak self] response in
-                    guard response == .alertSecondButtonReturn else { return }
-                    MainActor.assumeIsolated { self?.controller.renumber(group: id, from: from) }
-                }
-            }
         }
     }
 
@@ -511,6 +488,21 @@ final class ConsoleWindow: NSWindow {
 final class ConsoleRootView: NSView {
     weak var controller: ShowController?
     var onLayout: () -> Void = {}
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        paintDesk()
+    }
+
+    /// The desk's own background. The window has one too, but it isn't part
+    /// of this view's drawing, so a snapshot of the view alone would come
+    /// out with nothing behind it.
+    func paintDesk() {
+        wantsLayer = true
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = Desk.colour.cgColor
+        }
+    }
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
