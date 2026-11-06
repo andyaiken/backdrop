@@ -34,6 +34,18 @@ public struct ShowSettings: Equatable, Sendable {
     public var mapZoom = 3
     /// How long the trail behind a map cue's dot lasts.
     public var trailSeconds = 8
+    /// How long a layered cue's layer takes to arrive, what its base picture
+    /// sits at (percent), and what happens to the layers already standing:
+    /// the treatment, how far it goes (percent) and how long it lasts.
+    public var layerMs = 800
+    public var baseLevel = 25
+    public var layeredContext = LayerContext.desaturate
+    public var contextLevel = 60
+    public var contextTicks = 22
+    public var layeredEntrance = LayerEntrance.outline
+    /// What a layered cue's frame does, and how long a move takes.
+    public var layeredCamera = LayeredCamera.still
+    public var cameraMs = 1200
     /// How the stage changes to each cue, and how long each fade takes.
     public var transition = Transition.standard.style
     public var fadeMs = Transition.standard.fadeMs
@@ -73,6 +85,14 @@ public struct ShowSettings: Equatable, Sendable {
         MapSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, advance: o.advance ?? advance,
                     pauseTicks: o.pauseTicks ?? pauseTicks, camera: o.camera ?? mapCamera, zoom: o.zoom ?? mapZoom,
                     trailSeconds: o.trailSeconds ?? trailSeconds)
+    }
+
+    public func resolved(_ o: LayeredOverrides) -> LayeredSettings {
+        LayeredSettings(clockMs: o.clockMs ?? clockMs, holdTicks: o.holdTicks ?? holdTicks, advance: o.advance ?? advance,
+                        pauseTicks: o.pauseTicks ?? pauseTicks, layerMs: o.layerMs ?? layerMs, baseLevel: o.baseLevel ?? baseLevel,
+                        context: o.context ?? layeredContext, contextLevel: o.contextLevel ?? contextLevel,
+                        contextTicks: o.contextTicks ?? contextTicks, entrance: o.entrance ?? layeredEntrance,
+                        camera: o.camera ?? layeredCamera, zoom: o.zoom ?? mapZoom, cameraMs: o.cameraMs ?? self.cameraMs)
     }
 
     public func resolved(_ o: ImageOverrides) -> ImageSettings {
@@ -201,6 +221,9 @@ extension Cue {
         case .map(let c):
             let s = defaults.resolved(c.overrides)
             return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
+        case .layered(let c):
+            let s = defaults.resolved(c.overrides)
+            return CueTiming(clockMs: s.clockMs, holdTicks: s.holdTicks, isInstant: false)
         case .video, .blank:
             // A video plays on its own clock from GO, and a blank is instant.
             return CueTiming(clockMs: defaults.clockMs, holdTicks: 0, isInstant: true)
@@ -222,6 +245,11 @@ public enum SettingRange {
     public static let mapZoom = 1...8
     public static let trailSeconds = 0...30
     public static let fadeMs = 100...3000
+    public static let layerMs = 200...5000
+    public static let baseLevel = 0...100
+    public static let contextLevel = 0...100
+    public static let contextTicks = 0...80
+    public static let cameraMs = 300...5000
     public static let geometrySize = 20...100
     public static let geometryOffset = -40...40
 }
@@ -230,6 +258,7 @@ extension ShowSettings: Codable {
     private enum CodingKeys: String, CodingKey {
         case clockMs, waveTicks, holdTicks, histogram, sceneLine, letters, bars, gridColumns, flipMs, order
         case reveal, advance, pauseTicks, anagramFont, morphMs, mapCamera, mapZoom, trailSeconds, transition, fadeMs, textScale, geometry, projector
+        case layerMs, baseLevel, layeredContext, contextLevel, contextTicks, layeredEntrance, layeredCamera, cameraMs
     }
 
     public init(from decoder: Decoder) throws {
@@ -256,6 +285,14 @@ extension ShowSettings: Codable {
         mapCamera = try c.decodeIfPresent(MapCamera.self, forKey: .mapCamera) ?? d.mapCamera
         mapZoom = try int(.mapZoom, d.mapZoom, SettingRange.mapZoom)
         trailSeconds = try int(.trailSeconds, d.trailSeconds, SettingRange.trailSeconds)
+        layerMs = try int(.layerMs, d.layerMs, SettingRange.layerMs)
+        baseLevel = try int(.baseLevel, d.baseLevel, SettingRange.baseLevel)
+        layeredContext = try c.decodeIfPresent(LayerContext.self, forKey: .layeredContext) ?? d.layeredContext
+        contextLevel = try int(.contextLevel, d.contextLevel, SettingRange.contextLevel)
+        contextTicks = try int(.contextTicks, d.contextTicks, SettingRange.contextTicks)
+        layeredEntrance = try c.decodeIfPresent(LayerEntrance.self, forKey: .layeredEntrance) ?? d.layeredEntrance
+        layeredCamera = try c.decodeIfPresent(LayeredCamera.self, forKey: .layeredCamera) ?? d.layeredCamera
+        cameraMs = try int(.cameraMs, d.cameraMs, SettingRange.cameraMs)
         transition = try c.decodeIfPresent(TransitionStyle.self, forKey: .transition) ?? d.transition
         fadeMs = try int(.fadeMs, d.fadeMs, SettingRange.fadeMs)
         textScale = try int(.textScale, d.textScale, SettingRange.textScale)
@@ -285,6 +322,14 @@ extension ShowSettings: Codable {
         if mapCamera != d.mapCamera { try c.encode(mapCamera, forKey: .mapCamera) }
         if mapZoom != d.mapZoom { try c.encode(mapZoom, forKey: .mapZoom) }
         if trailSeconds != d.trailSeconds { try c.encode(trailSeconds, forKey: .trailSeconds) }
+        if layerMs != d.layerMs { try c.encode(layerMs, forKey: .layerMs) }
+        if baseLevel != d.baseLevel { try c.encode(baseLevel, forKey: .baseLevel) }
+        if layeredContext != d.layeredContext { try c.encode(layeredContext, forKey: .layeredContext) }
+        if contextLevel != d.contextLevel { try c.encode(contextLevel, forKey: .contextLevel) }
+        if contextTicks != d.contextTicks { try c.encode(contextTicks, forKey: .contextTicks) }
+        if layeredEntrance != d.layeredEntrance { try c.encode(layeredEntrance, forKey: .layeredEntrance) }
+        if layeredCamera != d.layeredCamera { try c.encode(layeredCamera, forKey: .layeredCamera) }
+        if cameraMs != d.cameraMs { try c.encode(cameraMs, forKey: .cameraMs) }
         try c.encode(transition, forKey: .transition)
         try c.encode(fadeMs, forKey: .fadeMs)
         try c.encode(textScale, forKey: .textScale)

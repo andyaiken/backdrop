@@ -42,7 +42,7 @@ func render(_ surface: SurfaceLayer) -> Bitmap {
         space: CGColorSpace(name: CGColorSpace.sRGB)!,
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )!
-    surface.render(in: context)
+    surface.renderStacked(surface, in: context)
     return Bitmap(context: context, width: w, height: h)
 }
 

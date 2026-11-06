@@ -64,8 +64,11 @@ enum MainMenu {
         edit.addItem(withTitle: "Add Anagram Cue", action: #selector(AppDelegate.addAnagramCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Blank Cue", action: #selector(AppDelegate.addBlankCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Decryption Cue", action: #selector(AppDelegate.addTitleCue(_:)), keyEquivalent: "")
+        edit.addItem(withTitle: "Add Layered Image Cue", action: #selector(AppDelegate.addLayeredCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Map Cue", action: #selector(AppDelegate.addMapCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Morph Cue", action: #selector(AppDelegate.addMorphCue(_:)), keyEquivalent: "")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Add Transition", action: #selector(AppDelegate.addTransition(_:)), keyEquivalent: "")
         edit.addItem(.separator())
         edit.addItem(withTitle: "Renumber All Cues\u{2026}", action: #selector(AppDelegate.renumberAllCues(_:)), keyEquivalent: "")
 

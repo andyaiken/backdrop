@@ -45,6 +45,54 @@ struct EditingTests {
         #expect(log.edits.last?.0.cues.count == 2, "the sheet before, for undo")
     }
 
+    @Test("Adding, moving, changing and removing layers are each one undo step")
+    func layerEditsAreSingleUndoSteps() throws {
+        let c = controller()
+        let id = try #require(c.addCue(.layered))
+        #expect(c.show[id]?.kind == .layered && log.edits.last?.1 == "Add Layered Image Cue")
+        func change(_ name: String, _ body: @escaping (inout LayeredContent) -> Void) {
+            c.updateCue(id, name) { cue in
+                if case .layered(var l) = cue.content { body(&l); cue.content = .layered(l) }
+            }
+        }
+        func layers() -> [String] {
+            guard case .layered(let l) = c.show[id]?.content else { return [] }
+            return l.layers.map(\.name)
+        }
+        for name in ["a", "b", "c"] { change("Add Layer") { $0.layers.append(ImageLayer(src: "\(name).png", name: name)) } }
+        #expect(layers() == ["a", "b", "c"] && log.edits.count == 4)
+        change("Move Layer") { $0.moveLayer(from: 0, to: 2) }
+        #expect(layers() == ["b", "c", "a"] && log.edits.count == 5 && log.edits.last?.1 == "Move Layer")
+        #expect(log.edits.last?.0.cues.first.map { if case .layered(let l) = $0.content { l.layers.map(\.name) } else { [] } } == ["a", "b", "c"],
+                "the sheet before, for undo")
+        change("Remove Layer") { $0.removeLayer(at: 1) }
+        #expect(layers() == ["b", "a"] && log.edits.count == 6)
+        change("Change Layer Life") { $0.layers[0].life = .untilNextGo }
+        #expect(c.show[id]?.goPoints(defaults: { var s = ShowSettings(); s.advance = .eachStep; return s }()).map(\.text) == ["b", "b goes", "a"])
+        change("Move Layer") { $0.moveLayer(from: 0, to: 0) }
+        #expect(log.edits.count == 7, "a move to the same place changes nothing, and is no edit")
+    }
+
+    @Test("Add Transition gives the standing-by cue its own, once, and one undo step")
+    func addTransition() throws {
+        #expect(controller().addTransition() == nil, "nothing stands by")
+        let c = controller([numbered("1"), numbered("2")])
+        c.standBy(c.show.cues[1].id)
+        #expect(c.addTransition() == c.show.cues[1].id)
+        #expect(c.show.cues[1].transition == TransitionOverrides(style: .crossfade) && c.show.cues[0].transition.isEmpty)
+        #expect(log.edits.last?.1 == "Add Transition" && log.edits.last?.0.cues[1].transition.isEmpty == true)
+        #expect(c.addTransition() == nil && log.edits.count == 1, "already has one")
+        var show = c.show
+        show.settings.transition = .crossfade
+        let other = controller(show.cues.map { var c = $0; c.transition = .init(); return c })
+        other.setDefault(.transition, to: .style(.crossfade))
+        other.standBy(other.show.cues[0].id)
+        other.addTransition()
+        #expect(other.show.cues[0].transition.style == .fade, "a different style from the show's, so the row says something")
+        let locked = controller([numbered("1")], mode: .show)
+        #expect(locked.addTransition() == nil)
+    }
+
     @Test("A new cue starts with every field empty")
     func newCuesStartEmpty() {
         let c = controller()

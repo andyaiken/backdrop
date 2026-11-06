@@ -5,10 +5,8 @@ import QuartzCore
 /// Image cues: a photograph arriving as a grid of tiles that flip over, or
 /// sharpen.
 ///
-/// Each tile is a 3D layer with two faces. The back shows the average colour
-/// of the picture behind it, pulled toward the cold slate, so the opening
-/// state is a colour-blocked hint of the image; the front shows its share of
-/// the picture. The clock says when each tile starts. A flip is a Core
+/// Each tile is a 3D layer with two faces. The back is black, so the cue opens
+/// on nothing; the front shows its share of the picture. The clock says when each tile starts. A flip is a Core
 /// Animation animation with its own duration; a sharpen steps through ever
 /// finer blocks of the picture on the clock's frames, over the same time.
 @MainActor
@@ -41,7 +39,6 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
     struct Plan {
         let image: CGImage
         let schedule: TileSchedule
-        let backColours: [RGB]
         let flipFrames: Int
         let flipDuration: CFTimeInterval
         let reveal: TileReveal
@@ -226,7 +223,6 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         plan = Plan(
             image: image,
             schedule: schedule,
-            backColours: Self.backColours(of: image, grid: grid),
             flipFrames: schedule.settleFrame(flipMs: settings.flipMs, clockMs: settings.clockMs) - schedule.lastStart,
             flipDuration: CFTimeInterval(settings.flipMs) / 1000,
             reveal: settings.reveal,
@@ -240,25 +236,6 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
             _ = frame(lastFrame)
         }
         onReady?()
-    }
-
-    /// One average colour per tile, pulled toward the slate: the mean of a
-    /// 16 x 16 grid of points sampled across the picture behind it. Sampled
-    /// without interpolation, because a smoothing filter would bleed each
-    /// tile's neighbours into its average.
-    static func backColours(of image: CGImage, grid: TileGrid) -> [RGB] {
-        let k = 16, w = grid.columns * k, h = grid.rows * k
-        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return Array(repeating: Palette.slate, count: grid.count)
-        }
-        ctx.interpolationQuality = .none
-        ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
-        // Bitmap memory holds the top row first, as the tiles are numbered.
-        let bytes = Array(UnsafeBufferPointer(start: ctx.data!.assumingMemoryBound(to: UInt8.self), count: w * h * 4))
-        return TileFaces.backColours(rgba: TileFaces.blockAverages(rgba: bytes, width: w, height: h,
-                                                                   columns: grid.columns, rows: grid.rows))
     }
 
     /// The steps a tile sharpens through: its part of the picture as one
@@ -300,7 +277,8 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
             tile.picture = plan.image
             tile.front.contents = plan.image
             tile.front.contentsRect = Self.contentsRect(column: i % grid.columns, row: i / grid.columns, of: grid)
-            tile.back.backgroundColor = plan.backColours[i].cgColor
+            // Waiting tiles show nothing: the cue opens on black.
+            tile.back.backgroundColor = CGColor(gray: 0, alpha: 1)
             tree.grid.addSublayer(tile)
             return tile
         }

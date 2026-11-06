@@ -22,6 +22,7 @@ final class HeaderState: ObservableObject {
     var onGo: () -> Void = {}
     var onMode: (Bool) -> Void = { _ in }
     var onAddCue: (Cue.Kind) -> Void = { _ in }
+    var onAddTransition: () -> Void = {}
     var onShowSettings: () -> Void = {}
     var onOpenProjector: () -> Void = {}
 }
@@ -139,6 +140,8 @@ struct HeaderBar: View {
                     ForEach(Cue.Kind.others, id: \.self) { kind in
                         Button { state.onAddCue(kind) } label: { Label(kind.heading, systemImage: kind.symbol) }
                     }
+                    Divider()
+                    Button { state.onAddTransition() } label: { Label("Transition", systemImage: "arrow.down.to.line") }
                 }
                 .fixedSize()
                 .focusable(false)

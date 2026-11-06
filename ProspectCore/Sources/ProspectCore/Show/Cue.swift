@@ -25,16 +25,18 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case map(MapContent)
         case video(VideoContent)
         case blank(BlankContent)
+        case layered(LayeredContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, morph, map, video, blank
+        case title, anagram, image, morph, map, video, blank, layered
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
         public var name: String {
             switch self {
             case .title: "decryption"
+            case .layered: "layered image"
             default: rawValue
             }
         }
@@ -54,13 +56,14 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .map: "map"
             case .video: "film"
             case .blank: "rectangle.slash"
+            case .layered: "square.3.layers.3d"
             }
         }
 
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .video]
         /// The rest, after a separator, by the name they show.
-        public static let others: [Kind] = [.anagram, .blank, .title, .map, .morph]
+        public static let others: [Kind] = [.anagram, .blank, .title, .layered, .map, .morph]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
@@ -82,6 +85,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .map: .map
         case .video: .video
         case .blank: .blank
+        case .layered: .layered
         }
     }
 
@@ -97,6 +101,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .map(let c): c.text
             case .video(let c): c.text
             case .blank(let c): c.text
+            case .layered(let c): c.text
             }
         }
         set {
@@ -111,6 +116,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .map(var c): c.text = newValue; content = .map(c)
             case .video(var c): c.text = newValue; content = .video(c)
             case .blank(var c): c.text = newValue; content = .blank(c)
+            case .layered(var c): c.text = newValue; content = .layered(c)
             }
         }
     }
@@ -123,7 +129,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch content {
             case .title(let c): c.sub
             case .anagram(let c): c.anagrams.first?.answer ?? ""
-            case .image, .morph, .map: ""
+            case .image, .morph, .map, .layered: ""
             case .video(let c): c.sub
             case .blank: ""
             }
@@ -135,7 +141,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 if c.anagrams.isEmpty { c.anagrams = [Anagram()] }
                 c.anagrams[0].answer = newValue
                 content = .anagram(c)
-            case .image, .morph, .map: break
+            case .image, .morph, .map, .layered: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .blank: break
             }
@@ -157,7 +163,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
 extension Cue: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, into, pairs, pictures, route, reference, colour, atEnd
-        case overrides
+        case overrides, layers
     }
 
     public init(from decoder: Decoder) throws {
@@ -225,6 +231,13 @@ extension Cue: Codable {
                 src: src,
                 atEnd: try c.decodeIfPresent(VideoEnd.self, forKey: .atEnd) ?? .hold
             ))
+        case .layered:
+            content = .layered(LayeredContent(
+                text: text,
+                base: src,
+                layers: try c.decodeIfPresent([ImageLayer].self, forKey: .layers) ?? [],
+                overrides: (try c.decodeIfPresent(LayeredOverrides.self, forKey: .overrides) ?? .init()).clamped()
+            ))
         case .blank:
             content = .blank(BlankContent(
                 text: text,
@@ -283,6 +296,10 @@ extension Cue: Codable {
             try c.encode(v.sub, forKey: .sub)
             try c.encode(v.src, forKey: .src)
             try c.encode(v.atEnd, forKey: .atEnd)
+        case .layered(let l):
+            try c.encode(l.base, forKey: .src)
+            try c.encode(l.layers, forKey: .layers)
+            if !l.overrides.isEmpty { try c.encode(l.overrides, forKey: .overrides) }
         case .blank(let b):
             try c.encode(b.colour, forKey: .colour)
         }

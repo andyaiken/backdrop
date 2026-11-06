@@ -49,7 +49,7 @@ extension Cue {
     /// A blank is instant, and a looping clip never ends.
     public var finishes: Bool {
         switch content {
-        case .title, .anagram, .image, .morph, .map: true
+        case .title, .anagram, .image, .morph, .map, .layered: true
         case .video(let v): v.atEnd != .loop
         case .blank: false
         }

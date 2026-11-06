@@ -27,6 +27,10 @@ public enum SheetIssue: Equatable, Sendable {
     case mapWithoutMap(cue: UUID)
     /// A map whose route has no stop after its start, so the dot never moves.
     case mapWithoutStops(cue: UUID)
+    /// A layered cue with no layers plays as its base picture alone.
+    case layeredWithoutLayers(cue: UUID)
+    /// A layer with no picture. `layer` counts the cue's layers from 0.
+    case layerWithoutPicture(cue: UUID, layer: Int)
 
     /// The cues the console highlights for this issue.
     public var cues: [UUID] {
@@ -34,7 +38,8 @@ public enum SheetIssue: Equatable, Sendable {
         case .duplicateNumber(_, let cues): cues
         case .missingNumber(let cue), .continuesPastEnd(let cue), .neverFinishes(let cue), .videoWithoutClip(let cue),
              .decryptionWithoutPlace(let cue), .decryptionWithoutKey(let cue), .anagramWithoutPhrase(let cue, _),
-             .anagramLettersDiffer(let cue, _, _, _), .morphWithoutPictures(let cue), .mapWithoutMap(let cue), .mapWithoutStops(let cue): [cue]
+             .anagramLettersDiffer(let cue, _, _, _), .morphWithoutPictures(let cue), .mapWithoutMap(let cue), .mapWithoutStops(let cue),
+             .layeredWithoutLayers(let cue), .layerWithoutPicture(let cue, _): [cue]
         }
     }
 }
@@ -69,6 +74,12 @@ extension Show {
             if case .map(let m) = cue.content {
                 if m.src.isEmpty { issues.append(.mapWithoutMap(cue: cue.id)) }
                 if m.stops.count < 2 { issues.append(.mapWithoutStops(cue: cue.id)) }
+            }
+            if case .layered(let l) = cue.content {
+                if l.layers.isEmpty { issues.append(.layeredWithoutLayers(cue: cue.id)) }
+                for (n, layer) in l.layers.enumerated() where layer.src.isEmpty {
+                    issues.append(.layerWithoutPicture(cue: cue.id, layer: n))
+                }
             }
             if case .anagram(let c) = cue.content {
                 if c.anagrams.isEmpty { issues.append(.anagramWithoutPhrase(cue: cue.id, anagram: 0)) }
@@ -122,6 +133,10 @@ extension Show {
             return "\(name(id)) has no map, so its dot moves over black."
         case .mapWithoutStops(let id):
             return "\(name(id)) needs a route with a stop after its start, or the dot never moves."
+        case .layeredWithoutLayers(let id):
+            return "\(name(id)) has no layers, so it plays as its base picture alone."
+        case .layerWithoutPicture(let id, let n):
+            return "Layer \(n + 1) of \(name(id)) has no picture, so its GO changes nothing."
         case .anagramWithoutPhrase(let id, let n):
             return "\(anagram(n, of: id)) needs both phrases: the one that appears and the one it rearranges into."
         case .anagramLettersDiffer(let id, let n, let extra, let missing):

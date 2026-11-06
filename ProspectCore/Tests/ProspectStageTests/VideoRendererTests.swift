@@ -124,6 +124,29 @@ struct VideoRendererTests {
         #expect(await eventually { renderer.current!.player.rate > 0 })
     }
 
+    @Test("A crossfade out of a clip takes the clip\u{2019}s own frame, on black in the picture\u{2019}s shape")
+    func snapshotForACrossfade() async throws {
+        let cue = videoCue(try await TestClips.clip("snap.mov", seconds: 1, red: 200, green: 40, blue: 40))
+        #expect(await armed(cue))
+        renderer.prepare(cue, defaults: ShowSettings())
+        _ = renderer.frame(0)
+        #expect(await eventually { renderer.current!.player.rate > 0 })
+        // A 160 x 90 clip on a 400 x 400 stage: 16:9 across the middle, black above and below.
+        let image = try #require(renderer.snapshot(size: CGSize(width: 400, height: 400)))
+        #expect(image.width == 400 && image.height == 400)
+        let ctx = CGContext(data: nil, width: 400, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: 400, height: 400))
+        let data = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        func pixel(_ x: Int, _ y: Int) -> (Int, Int, Int) { let i = (y * ctx.bytesPerRow) + x * 4; return (Int(data[i]), Int(data[i + 1]), Int(data[i + 2])) }
+        let centre = pixel(200, 200), top = pixel(200, 20)
+        #expect(centre.0 > 150 && centre.1 < 90, "the clip\u{2019}s red in the middle: \(centre)")
+        #expect(top == (0, 0, 0), "black above the picture")
+        // With nothing on stage there is nothing to hand over.
+        let empty = VideoRenderer(media: { _ in nil })
+        #expect(empty.snapshot(size: CGSize(width: 100, height: 100)) == nil)
+    }
+
     @Test("Hold: settles on reaching the end, frozen on the last frame")
     func hold() async throws {
         let cue = videoCue(try await TestClips.clip("hold.mov", seconds: 0.4))

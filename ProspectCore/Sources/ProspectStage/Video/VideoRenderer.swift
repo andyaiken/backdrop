@@ -14,7 +14,7 @@ import QuartzCore
 /// Audio is always muted. Sound is another operator on another machine, and
 /// a switch that let this play into the room would be the switch left on.
 @MainActor
-public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues {
+public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapshots {
     public let isInstant = true
     public var onProblem: ((String) -> Void)?
     public var onArmStateChange: (() -> Void)?
@@ -157,6 +157,33 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues {
         for tree in trees.values where !tree.isLive { updateReadout(tree, clip) }
         if case .failed = clip.state { return true }
         return clip.content.atEnd == .loop ? false : clip.reachedEnd
+    }
+
+    /// The frame on stage, for a crossfade out of a clip: an AVPlayerLayer
+    /// draws into no bitmap, so the clip's own current frame is read from the
+    /// file and set on black in the shape the player layer shows it.
+    public func snapshot(size: CGSize) -> CGImage? {
+        guard let clip = current, clip.state == .armed || started,
+              let asset = clip.player.currentItem?.asset ?? clip.item?.asset,
+              size.width >= 1, size.height >= 1 else { return nil }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.1, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.1, preferredTimescale: 600)
+        generator.maximumSize = size
+        var time = clip.player.currentTime()
+        if !time.isValid || time.seconds.isNaN { time = .zero }
+        guard let frame = try? generator.copyCGImage(at: time, actualTime: nil) else { return nil }
+        let w = Int(size.width.rounded()), h = Int(size.height.rounded())
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        let scale = min(Double(w) / Double(frame.width), Double(h) / Double(frame.height))
+        let fw = Double(frame.width) * scale, fh = Double(frame.height) * scale
+        ctx.draw(frame, in: CGRect(x: (Double(w) - fw) / 2, y: (Double(h) - fh) / 2, width: fw, height: fh))
+        return ctx.makeImage()
     }
 
     public func fit(_ surface: SurfaceLayer) {

@@ -38,13 +38,16 @@ final class ShowDefaultsPanel: PanelHost<ShowDefaultsView> {
     func preferredHeight(width: CGFloat) -> CGFloat { preferredHeight }
 }
 
-/// Edit mode's Cue Settings tab: what the cue standing by runs with.
+/// Edit mode's Settings and Transitions tabs: what the cue standing by runs
+/// with, and how the stage changes to it.
 @MainActor
 final class CueSettingsPanel: PanelHost<CueSettingsView> {
     var onChange: (SettingKey, SettingValue?, Bool) -> Void = { _, _, _ in }
+    private let scope: CueSettingsView.Scope
 
-    init() {
-        super.init(rootView: CueSettingsView(cue: nil, defaults: ShowSettings(), onChange: { _, _, _ in }))
+    init(scope: CueSettingsView.Scope) {
+        self.scope = scope
+        super.init(rootView: CueSettingsView(scope: scope, cue: nil, defaults: ShowSettings(), onChange: { _, _, _ in }))
     }
 
     required init?(coder: NSCoder) {
@@ -53,6 +56,7 @@ final class CueSettingsPanel: PanelHost<CueSettingsView> {
 
     func update(cue: Cue?, defaults: ShowSettings) {
         rootView = CueSettingsView(
+            scope: scope,
             cue: cue,
             defaults: defaults,
             onChange: { [weak self] key, value, continuous in self?.onChange(key, value, continuous) }

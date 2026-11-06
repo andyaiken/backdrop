@@ -55,4 +55,21 @@ struct TransitionModelTests {
         SettingKey.fade.setOverride(nil, in: &cue)
         #expect(SettingKey.fade.effective(for: cue, defaults: ShowSettings()) == (.number(500), false))
     }
+
+    @Test("A crossfade is a style like the others: chosen, stored, formatted, and with a length")
+    func crossfade() throws {
+        #expect(SettingKey.transition.format(.style(.crossfade)) == "crossfade")
+        #expect(SettingKey.transition.choice(at: 2) == .style(.crossfade))
+        #expect(SettingKey.transition.choiceIndex(of: .style(.crossfade)) == 2)
+        #expect(Transition(style: .crossfade, fadeMs: 500).hasLength && Transition(style: .fade, fadeMs: 500).hasLength)
+        #expect(!Transition(style: .snap, fadeMs: 500).hasLength)
+        var cue = Cue(content: .blank(BlankContent()))
+        cue.transition.style = .crossfade
+        let json = String(decoding: try JSONEncoder().encode(cue), as: UTF8.self)
+        #expect(json.contains("crossfade"))
+        #expect(try JSONDecoder().decode(Cue.self, from: Data(json.utf8)).transition.style == .crossfade)
+        var settings = ShowSettings()
+        settings.transition = .crossfade
+        #expect(cue.transitionIn(defaults: settings).style == .crossfade)
+    }
 }

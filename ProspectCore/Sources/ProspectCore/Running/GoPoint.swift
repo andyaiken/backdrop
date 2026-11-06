@@ -4,7 +4,7 @@ import Foundation
 /// working can, or a morph cue before each stage. GO carries the cue on rather than firing the next one.
 public struct GoPoint: Equatable, Sendable {
     public enum Unit: String, Sendable {
-        case anagram, step, stage, stop
+        case anagram, step, stage, stop, layer
     }
 
     /// What it is the GO for: an anagram's turn, a step of one, or a morph's
@@ -32,6 +32,7 @@ extension Cue {
         case .anagram(let c): c.goPoints(defaults.resolved(c.overrides).advance)
         case .morph(let c): c.goPoints(eachStageOnGO: defaults.resolved(c.overrides).eachStageOnGO)
         case .map(let c): c.goPoints(eachStopOnGO: defaults.resolved(c.overrides).eachStopOnGO)
+        case .layered(let c): c.goPoints(eachStepOnGO: defaults.resolved(c.overrides).eachStepOnGO)
         default: []
         }
     }
@@ -68,6 +69,10 @@ extension Cue {
             stop.cuePoint = line
             c.route[stops[point]].stop = stop
             content = .map(c)
+        case .layered(var c):
+            guard defaults.resolved(c.overrides).eachStepOnGO else { return }
+            c.setCuePoint(line, ofStep: point)
+            content = .layered(c)
         default:
             return
         }
@@ -79,6 +84,7 @@ extension Cue {
         case .anagram(let c): c.anagrams.contains { !$0.cuePoints.isEmpty }
         case .morph(let c): c.pictures.contains { !$0.cuePoint.isEmpty }
         case .map(let c): c.route.contains { !($0.stop?.cuePoint.isEmpty ?? true) }
+        case .layered(let c): c.hasGoCuePoints
         default: false
         }
     }

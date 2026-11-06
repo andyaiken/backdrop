@@ -24,6 +24,9 @@ final class SurfaceView: NSView {
         // Layer-hosting: the view's layer is the surface itself.
         layer = surface
         wantsLayer = true
+        // Layered image cues desaturate and blend with Core Image filters,
+        // which a layer-hosting view only draws when it is told to.
+        layerUsesCoreImageFilters = true
     }
 
     required init?(coder: NSCoder) {

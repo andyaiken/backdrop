@@ -122,3 +122,38 @@ struct NumberingFixture: Decodable {
     }
     let lookup: Lookup
 }
+
+struct LayeredStepsFixture: Decodable {
+    struct Case: Decodable, Sendable, CustomTestStringConvertible {
+        struct Layer: Decodable, Sendable {
+            let name: String
+            let withPrevious: Bool
+            let life: String
+            let cuePoint, exitCuePoint: String
+        }
+        struct Step: Decodable, Sendable {
+            let arriving, leaving: [Int]
+            let name, sheetName, cuePoint: String
+        }
+        let name: String
+        let layers: [Layer]
+        let steps: [Step]
+        /// The layers standing before any step, then after each.
+        let standing: [[Int]]
+        var testDescription: String { name }
+    }
+    let cases: [Case]
+}
+
+struct LayeredSheetFixture: Decodable {
+    struct Setting: Decodable { let name, value: String; let overridden: Bool }
+    struct Row: Decodable {
+        let number, type: String
+        let content: [String]
+        let cuePoint: String
+        let go: Int
+        let settings: [Setting]
+    }
+    let dsm: [Row]
+    let `operator`: [Row]
+}

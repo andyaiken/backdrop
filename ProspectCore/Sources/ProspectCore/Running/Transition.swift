@@ -4,14 +4,15 @@ public enum TransitionStyle: String, Codable, CaseIterable, Sendable {
     case snap
     /// The old picture fades out to black, then the new one fades in.
     case fade
-    // A crossfade, the old and new pictures overlapping, would be a third
-    // style; see Transitions in the spec.
+    /// The old picture dissolves into the new one, which is already running
+    /// underneath. The only style that depends on the outgoing cue.
+    case crossfade
 }
 
 /// The transition into a cue, once its overrides are applied.
 public struct Transition: Equatable, Sendable {
     public var style: TransitionStyle
-    /// The length of each fade: out, then in. Unused by a snap.
+    /// The length of each fade: out, then in; or of a whole crossfade. Unused by a snap.
     public var fadeMs: Int
 
     public init(style: TransitionStyle, fadeMs: Int) {
@@ -23,6 +24,9 @@ public struct Transition: Equatable, Sendable {
     public static let standard = Transition(style: .fade, fadeMs: 500)
 
     public var fadeSeconds: Double { Double(fadeMs) / 1000 }
+
+    /// Whether the style has a length to set.
+    public var hasLength: Bool { style != .snap }
 }
 
 /// A cue's own values for its transition in. Nil takes the show's default.

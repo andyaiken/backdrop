@@ -55,7 +55,7 @@ public final class ShowController {
         warnings: [String] = [],
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
-            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(),
+            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(),
             .video: VideoRenderer(), .blank: BlankRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
@@ -354,6 +354,7 @@ public final class ShowController {
         case .image: cue = Cue(content: .image(ImageContent()))
         case .morph: cue = Cue(content: .morph(MorphContent()))
         case .map: cue = Cue(content: .map(MapContent()))
+        case .layered: cue = Cue(content: .layered(LayeredContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
         case .blank: cue = Cue(content: .blank(BlankContent(text: "")))
         }
@@ -362,6 +363,20 @@ public final class ShowController {
         playhead.standBy(cue.id)
         changed()
         return cue.id
+    }
+
+    /// Gives the cue standing by a transition of its own, a crossfade as the
+    /// one that differs most from the show's default, unless it has one
+    /// already. Deleting the row clears it. Nil when there is nothing to
+    /// change.
+    @discardableResult
+    public func addTransition() -> UUID? {
+        guard let id = playhead.standby, let cue = show[id], cue.transition.isEmpty else { return nil }
+        let style: TransitionStyle = show.settings.transition == .crossfade ? .fade : .crossfade
+        guard edit("Add Transition", { show in
+            if let i = show.index(of: id) { show.cues[i].transition = TransitionOverrides(style: style) }
+        }) else { return nil }
+        return id
     }
 
     /// - Parameter coalescing: For a value changed as it is typed: a run of

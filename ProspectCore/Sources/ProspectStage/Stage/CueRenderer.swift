@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import ProspectCore
 
@@ -98,4 +99,14 @@ public enum ArmState: Equatable, Sendable {
 public protocol ArmsCues: AnyObject {
     func armState(for cue: UUID) -> ArmState?
     var onArmStateChange: (() -> Void)? { get set }
+}
+
+/// A renderer that can hand over its current picture itself, because its
+/// layers cannot be drawn into a bitmap: a Metal layer renders nothing there.
+/// A crossfade asks for this before it falls back to drawing the layers.
+@MainActor
+public protocol Snapshots: CueRenderer {
+    /// The cue as it stands, drawn at `size` in pixels, or nil if it has
+    /// nothing of its own to show.
+    func snapshot(size: CGSize) -> CGImage?
 }

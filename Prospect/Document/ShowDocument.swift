@@ -111,6 +111,7 @@ final class ShowDocument: NSDocument {
                 .image: ImageRenderer(media: media),
                 .morph: MorphRenderer(media: media),
                 .map: MapRenderer(media: media),
+                .layered: LayeredRenderer(media: media),
                 .video: VideoRenderer(media: media),
                 .blank: BlankRenderer(),
             ]
@@ -234,18 +235,57 @@ final class ShowDocument: NSDocument {
                     cue.content = .morph(c)
                 case .map(var c): c.src = path; cue.content = .map(c)
                 case .video(var c): c.src = path; cue.content = .video(c)
+                case .layered(var c):
+                    // The base with no slot, as when dropped on its well; a
+                    // layer in a layer's place, or added at the end.
+                    if case .picture(let i) = slot, c.layers.indices.contains(i) {
+                        c.layers[i].src = path
+                    } else if slot == .add {
+                        c.layers.append(ImageLayer(src: path))
+                    } else {
+                        c.base = path
+                    }
+                    cue.content = .layered(c)
                 default: break
                 }
             }
+            checkLayerSize(of: url, in: cue, slot: slot)
         } catch {
             controller.say("\(url.lastPathComponent) couldn\u{2019}t be copied into the show.")
         }
     }
 
+    /// A layer is a full-frame picture at the base's pixel size, with
+    /// transparency; nothing else in the app enforces it, so say plainly when a
+    /// layer just added, or a base just chosen, differs from the other.
+    private func checkLayerSize(of url: URL, in cue: Cue, slot: MediaSlot?) {
+        guard case .layered(let c) = cue.content, let size = Self.pixelSize(of: url) else { return }
+        let isBase: Bool
+        if case .picture = slot { isBase = false } else { isBase = slot != .add }
+        if isBase {
+            // A new base against the layers already there.
+            let odd = c.layers.filter { layer in
+                mediaURL(layer.src).flatMap(Self.pixelSize(of:)).map { $0 != size } ?? false
+            }
+            if !odd.isEmpty {
+                controller?.say("The base is \(Int(size.width)) \u{00D7} \(Int(size.height)), but \(odd.count) layer\(odd.count == 1 ? " is" : "s are") a different size. Every layer must be the base\u{2019}s size, or the parts won\u{2019}t line up.")
+            }
+        } else if !c.base.isEmpty, let base = mediaURL(c.base).flatMap(Self.pixelSize(of:)), base != size {
+            controller?.say("\(url.lastPathComponent) is \(Int(size.width)) \u{00D7} \(Int(size.height)), but the base is \(Int(base.width)) \u{00D7} \(Int(base.height)). Every layer must be the base\u{2019}s size, or the parts won\u{2019}t line up.")
+        }
+    }
+
+    static func pixelSize(of url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = properties[kCGImagePropertyPixelWidth] as? Int, let h = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return CGSize(width: w, height: h)
+    }
+
     static func accepts(_ url: URL, for kind: Cue.Kind) -> Bool {
         guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
         switch kind {
-        case .image, .morph, .map: return type.conforms(to: .image)
+        case .image, .morph, .map, .layered: return type.conforms(to: .image)
         case .video: return type.conforms(to: .movie)
         default: return false
         }
@@ -257,13 +297,16 @@ final class ShowDocument: NSDocument {
         panel.allowedContentTypes = cue.kind == .video ? [.movie] : [.image]
         panel.message = switch (cue.kind, slot) {
         case (.video, _): "Choose a clip for cue \(cue.number)."
+        case (.layered, .picture(let i)): "Choose a picture to take the place of layer \(i + 1) in cue \(cue.number)."
+        case (.layered, .add): "Choose layers to add to cue \(cue.number), each the same size as the base, with transparency. Several at once are added in order of their names."
+        case (.layered, _): "Choose the base picture for cue \(cue.number): the whole painting."
         case (.morph, .picture(let i)): "Choose a picture to take the place of picture \(i + 1) in cue \(cue.number)."
         case (.morph, _): "Choose pictures to add to cue \(cue.number). Several at once are added in order of their names."
         case (.map, _): "Choose a map for cue \(cue.number): a street map, light or dark, as large as you have."
         default: "Choose a picture for cue \(cue.number)."
         }
         // Adding to a morph may take several at once.
-        panel.allowsMultipleSelection = cue.kind == .morph && slot == .add
+        panel.allowsMultipleSelection = (cue.kind == .morph || cue.kind == .layered) && slot == .add
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK else { return }
             let urls = panel.urls.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }

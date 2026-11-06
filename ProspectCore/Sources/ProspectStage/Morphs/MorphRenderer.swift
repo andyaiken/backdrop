@@ -21,7 +21,7 @@ import QuartzCore
 /// image cue fits its grid: a morph from a picture an image cue has just
 /// shown starts exactly where that picture is.
 @MainActor
-public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO {
+public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO, Snapshots {
     public let isInstant = false
     public var onProblem: ((String) -> Void)?
 
@@ -292,7 +292,9 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsFor
         tree.metal.isHidden = false
     }
 
-    /// The current moment, drawn offscreen at a size, for tests.
+    public func snapshot(size: CGSize) -> CGImage? { image(size: size) }
+
+    /// The current moment, drawn offscreen at a size.
     func image(size: CGSize) -> CGImage? {
         guard let gpu, let (mesh, first, second) = current else { return nil }
         return gpu.image(width: Int(size.width), height: Int(size.height)) { target in

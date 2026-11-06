@@ -1,0 +1,601 @@
+{
+  "cases" : [
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "table",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "Jesus",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "hands",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "a plain cue",
+      "standing" : [
+        [
+
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "table",
+          "sheetName" : "table"
+        },
+        {
+          "arriving" : [
+            1
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "Jesus",
+          "sheetName" : "Jesus"
+        },
+        {
+          "arriving" : [
+            2
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "hands",
+          "sheetName" : "hands"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "table",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "hands",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "line",
+          "withPrevious" : true
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "M",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "withPrevious puts two layers on one step",
+      "standing" : [
+        [
+
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "table",
+          "sheetName" : "table"
+        },
+        {
+          "arriving" : [
+            1,
+            2
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "hands + line",
+          "sheetName" : "hands + line"
+        },
+        {
+          "arriving" : [
+            3
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "M",
+          "sheetName" : "M"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "table",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "a cup",
+          "exitCuePoint" : "",
+          "life" : "untilNextLayer",
+          "name" : "chalice",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "no, a robe",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "robe",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "hands",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "until the next layer leaves as the next arrives",
+      "standing" : [
+        [
+
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          2,
+          3
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "table",
+          "sheetName" : "table"
+        },
+        {
+          "arriving" : [
+            1
+          ],
+          "cuePoint" : "a cup",
+          "leaving" : [
+
+          ],
+          "name" : "chalice",
+          "sheetName" : "chalice"
+        },
+        {
+          "arriving" : [
+            2
+          ],
+          "cuePoint" : "no, a robe",
+          "leaving" : [
+            1
+          ],
+          "name" : "robe (chalice goes)",
+          "sheetName" : "robe (✕ chalice)"
+        },
+        {
+          "arriving" : [
+            3
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "hands",
+          "sheetName" : "hands"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "table",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "a cup",
+          "exitCuePoint" : "there is no cup",
+          "life" : "untilNextGo",
+          "name" : "chalice",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "robe",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "until the next GO has a step of its own",
+      "standing" : [
+        [
+
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          2
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "table",
+          "sheetName" : "table"
+        },
+        {
+          "arriving" : [
+            1
+          ],
+          "cuePoint" : "a cup",
+          "leaving" : [
+
+          ],
+          "name" : "chalice",
+          "sheetName" : "chalice"
+        },
+        {
+          "arriving" : [
+
+          ],
+          "cuePoint" : "there is no cup",
+          "leaving" : [
+            1
+          ],
+          "name" : "chalice goes",
+          "sheetName" : "✕ chalice"
+        },
+        {
+          "arriving" : [
+            2
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "robe",
+          "sheetName" : "robe"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "table",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "no cup",
+          "life" : "untilNextLayer",
+          "name" : "chalice",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "until the next layer on the last layer gets a final step",
+      "standing" : [
+        [
+
+        ],
+        [
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "table",
+          "sheetName" : "table"
+        },
+        {
+          "arriving" : [
+            1
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "chalice",
+          "sheetName" : "chalice"
+        },
+        {
+          "arriving" : [
+
+          ],
+          "cuePoint" : "no cup",
+          "leaving" : [
+            1
+          ],
+          "name" : "chalice goes",
+          "sheetName" : "✕ chalice"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "a",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "b",
+          "withPrevious" : true
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "untilNextGo",
+          "name" : "x",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "y",
+          "withPrevious" : true
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "stays",
+          "name" : "z",
+          "withPrevious" : false
+        }
+      ],
+      "name" : "a false step between withPrevious groups",
+      "standing" : [
+        [
+
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          0,
+          1,
+          3
+        ],
+        [
+          0,
+          1,
+          3,
+          4
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0,
+            1
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "a + b",
+          "sheetName" : "a + b"
+        },
+        {
+          "arriving" : [
+            2,
+            3
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "x + y",
+          "sheetName" : "x + y"
+        },
+        {
+          "arriving" : [
+
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+            2
+          ],
+          "name" : "x goes",
+          "sheetName" : "✕ x"
+        },
+        {
+          "arriving" : [
+            4
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "z",
+          "sheetName" : "z"
+        }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "",
+          "life" : "untilNextLayer",
+          "name" : "a",
+          "withPrevious" : false
+        },
+        {
+          "cuePoint" : "",
+          "exitCuePoint" : "gone",
+          "life" : "untilNextLayer",
+          "name" : "b",
+          "withPrevious" : true
+        }
+      ],
+      "name" : "two last layers leave together",
+      "standing" : [
+        [
+
+        ],
+        [
+          0,
+          1
+        ],
+        [
+
+        ]
+      ],
+      "steps" : [
+        {
+          "arriving" : [
+            0,
+            1
+          ],
+          "cuePoint" : "",
+          "leaving" : [
+
+          ],
+          "name" : "a + b",
+          "sheetName" : "a + b"
+        },
+        {
+          "arriving" : [
+
+          ],
+          "cuePoint" : "gone",
+          "leaving" : [
+            0,
+            1
+          ],
+          "name" : "a + b goes",
+          "sheetName" : "✕ a + b"
+        }
+      ]
+    }
+  ]
+}

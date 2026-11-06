@@ -96,6 +96,9 @@ public struct CueSheet: Equatable, Sendable {
                 return n > 0 && stop.arrival == .jump ? "\u{21AF} " + name : name
             }
             lines = [c.text, stops.joined(separator: " \u{2192} ")]
+        case .layered(let c):
+            // The steps in order, a withdrawal marked.
+            lines = [c.text, c.steps.map(\.sheetName).joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
         case .blank(let c): lines = [c.text, c.colour.hex.uppercased()]
         }
@@ -134,7 +137,7 @@ public struct CueSheet: Equatable, Sendable {
         }
 
         // Every cue's transition in, with its fade time only where it fades.
-        let fades = cue.transitionIn(defaults: defaults).style == .fade
+        let fades = cue.transitionIn(defaults: defaults).hasLength
         let transition = timing(fades ? SettingKey.transitions : [.transition])
 
         // When the show moves on from here by itself.
@@ -170,6 +173,23 @@ public struct CueSheet: Equatable, Sendable {
                 Setting(name: "Map", value: file(c.src, "none"), overridden: false),
                 Setting(name: "Route", value: route, overridden: false),
             ]
+        case .layered(let c):
+            // A line per layer, as a morph lists a line per picture.
+            let layers = c.layers.enumerated().map { i, layer in
+                var parts = [file(layer.src, "none")]
+                if let level = layer.level { parts.append("\(level)%") }
+                if layer.blend != .normal { parts.append(layer.blend.rawValue) }
+                if layer.withPrevious { parts.append("with the one before") }
+                switch layer.life {
+                case .stays: break
+                case .untilNextLayer: parts.append("goes as the next arrives")
+                case .untilNextGo: parts.append("goes on its own GO")
+                }
+                if let fade = layer.fadeMs { parts.append(SettingKey.layerTime.format(.number(fade))) }
+                return Setting(name: "Layer \(i + 1)", value: ([layer.displayName] + parts).joined(separator: " \u{00B7} "),
+                               overridden: layer.fadeMs != nil || layer.level != nil)
+            }
+            return timing(SettingKey.layered) + [Setting(name: "Base", value: file(c.base, "black"), overridden: false)] + layers
         case .video(let c):
             let end = switch c.atEnd {
             case .hold: "hold the last frame"

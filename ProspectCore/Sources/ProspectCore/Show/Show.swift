@@ -9,9 +9,9 @@ public struct Show: Equatable, Sendable {
     /// reader would take for an empty cue; 3 put group headings in the
     /// running list, a feature since removed; 4 lists a morph cue's
     /// pictures, for a morph of more than two; 5 has map cues; 6 gives the
-    /// GOs a cue waits for cue points of their own. Older files read as they
+    /// GOs a cue waits for cue points of their own; 7 has layered image cues. Older files read as they
     /// are.
-    public static let formatVersion = 6
+    public static let formatVersion = 7
 
     /// For the window and the printed cue sheet header.
     public var title: String
@@ -29,6 +29,7 @@ public struct Show: Equatable, Sendable {
     /// a show with no morph of more than two pictures stays readable by a
     /// version 2 Prospect.
     public var version: Int {
+        if cues.contains(where: { $0.kind == .layered }) { return 7 }
         if cues.contains(where: \.hasGoCuePoints) { return 6 }
         if cues.contains(where: { $0.kind == .map }) { return 5 }
         let staged = cues.contains { if case .morph(let m) = $0.content { !m.isPlain } else { false } }

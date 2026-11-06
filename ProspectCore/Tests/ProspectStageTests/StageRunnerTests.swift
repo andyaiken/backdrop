@@ -100,8 +100,8 @@ struct StageRunnerTests {
     func detach() {
         runner.load(titleCue("THE LOUVRE"), defaults: ShowSettings(), presentation: .run, at: 0)
         runner.detach(live)
-        // Only the surface's own layers remain: its curtain and its guides.
-        #expect(live.inset.sublayers?.count == 2)
+        // Only the surface's own layers remain: its curtain, its crossfade layer and its guides.
+        #expect(live.inset.sublayers?.count == 3)
         #expect(live.inset.sublayers?.contains { $0 is GuidesLayer } == true)
         #expect(tree(renderer, on: live) == nil)
     }

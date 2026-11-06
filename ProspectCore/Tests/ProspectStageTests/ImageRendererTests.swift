@@ -154,13 +154,16 @@ struct ImageRendererTests {
         }
     }
 
-    @Test("Each tile's back is the average colour behind it, pulled toward the slate")
-    func backsAreAverages() async throws {
+    @Test("Tiles waiting to turn show black, nothing of the picture, so the cue opens on black")
+    func backsAreBlack() async throws {
         await prepare(imageCue("quadrants.png"))
-        let backs = try #require(renderer.plan?.backColours)
-        let red = TileFaces.backColours(rgba: [255, 0, 0, 255])[0], white = TileFaces.backColours(rgba: [255, 255, 255, 255])[0]
-        #expect(backs[0] == red && backs[7] == white)
-        #expect(renderer.tree(for: live)?.tiles[0].back.backgroundColor == red.cgColor)
+        let tiles = try #require(renderer.tree(for: live)?.tiles)
+        #expect(tiles.allSatisfy { $0.back.backgroundColor == CGColor(gray: 0, alpha: 1) && !$0.back.isHidden })
+        _ = renderer.frame(-1)
+        let opening = render(live)
+        var lit = 0
+        for y in stride(from: 0, to: opening.height, by: 6) { for x in stride(from: 0, to: opening.width, by: 6) where !opening.isBlack(x: x, y: y) { lit += 1 } }
+        #expect(lit == 0, "the whole surface is black before the first tile turns")
     }
 
     @Test("Tiles turn on schedule, and the cue settles when the last flip has had time")

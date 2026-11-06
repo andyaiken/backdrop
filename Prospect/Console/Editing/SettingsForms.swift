@@ -141,7 +141,7 @@ enum SettingState {
     /// For a show default.
     static func of(_ key: SettingKey, in s: ShowSettings) -> (enabled: Bool, annotation: String?) {
         switch key {
-        case .fade: (s.transition == .fade, nil)
+        case .fade: (s.transition != .snap, nil)
         case .bars: (s.histogram, nil)
         case .hold: (true, SettingKey.holdLength(holdTicks: s.holdTicks, clockMs: s.clockMs))
         case .pause: (s.advance != .eachStep, SettingKey.holdLength(holdTicks: s.pauseTicks, clockMs: s.clockMs))
@@ -154,7 +154,7 @@ enum SettingState {
         let timing = cue.timing(defaults: defaults)
         switch key {
         case .fade:
-            return (cue.transitionIn(defaults: defaults).style == .fade, nil)
+            return (cue.transitionIn(defaults: defaults).hasLength, nil)
         case .bars:
             return (SettingKey.histogram.effective(for: cue, defaults: defaults).value == .flag(true), nil)
         case .hold:
@@ -191,7 +191,12 @@ struct SettingGroup: Identifiable {
     /// The same groups, keeping only what this kind of cue can set.
     static func applying(to kind: Cue.Kind) -> [SettingGroup] {
         all.compactMap { group in
-            let keys = group.keys.filter { $0.applies(to: kind) }
+            var keys = group.keys.filter { $0.applies(to: kind) }
+            // Zoom is the map's key, shared: a layered cue's sits with its own.
+            if kind == .layered {
+                if group.id == "Map cues" { keys = [] }
+                if group.id == "Layered image cues" { keys.insert(.zoom, at: keys.firstIndex(of: .push).map { $0 + 1 } ?? keys.endIndex) }
+            }
             return keys.isEmpty ? nil : SettingGroup(id: group.id, keys: keys)
         }
     }
@@ -248,6 +253,10 @@ struct ShowDefaultsView: View {
 /// Edit mode's Cue Settings tab: what the cue standing by runs with, the
 /// values it sets itself marked, and a Reset for each of those.
 struct CueSettingsView: View {
+    /// The Settings tab, or the Transitions tab beside it.
+    enum Scope { case settings, transitions }
+
+    let scope: Scope
     let cue: Cue?
     let defaults: ShowSettings
     let onChange: (SettingKey, SettingValue?, Bool) -> Void
@@ -255,11 +264,8 @@ struct CueSettingsView: View {
     var body: some View {
         Form {
             if let cue {
-                Section {
-                    Text(heading).font(.headline)
-                }
-                ForEach(SettingGroup.applying(to: cue.kind)) { group in
-                    Section(group.id) {
+                ForEach(SettingGroup.applying(to: cue.kind).filter { (scope == .transitions) == ($0.id == "Transitions") }) { group in
+                    Section(scope == .transitions ? "Transition in" : group.id) {
                         ForEach(group.keys, id: \.self) { key in
                             let (value, overridden) = key.effective(for: cue, defaults: defaults)
                             let state = SettingState.of(key, in: cue, defaults: defaults)
@@ -270,7 +276,7 @@ struct CueSettingsView: View {
                         }
                     }
                 }
-                Section { Text(note(for: cue)) }
+                Section { Text(scope == .transitions ? Self.transitionNote : note(for: cue)) }
             } else {
                 Section {
                     Text("Nothing is standing by. Click a cue in the list to see the settings it runs with.")
@@ -280,18 +286,17 @@ struct CueSettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var heading: String {
-        guard let cue else { return "Cue settings" }
-        return "Cue \(cue.number.isEmpty ? "(no number)" : cue.number) settings \u{2014} \(cue.kind.name)"
-    }
+    private static let transitionNote = "How the stage changes to this cue, when it fires. A crossfade dissolves from the cue before; "
+        + "a fade goes through black; a snap cuts. A value in the accent colour is set for this cue; the rest come from the Show tab. "
+        + "A cue with its own transition shows a row above it in the cue list."
 
     private func note(for cue: Cue) -> String {
         switch cue.kind {
         case .video:
-            "A video plays on its own clock from GO, so it has only its transition in to set. Its end behaviour is in the Cue tab."
+            "A video plays on its own clock from GO, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its end behaviour is in the Cue tab."
         case .blank:
-            "A blank is instant, so it has only its transition in to set. Its colour is in the Cue tab."
-        case .title, .anagram, .image, .morph, .map:
+            "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the Transitions tab. Its colour is in the Cue tab."
+        case .title, .anagram, .image, .morph, .map, .layered:
             SettingKey.timingExplanation
                 + " Values in the accent colour are set for this cue; the rest come from the Show tab. Reset puts a value back on the default."
         }

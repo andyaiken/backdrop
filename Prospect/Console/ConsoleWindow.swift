@@ -28,14 +28,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let previewHeading = Desk.label("What the audience sees", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
     private(set) var editor = CueEditorPanel()
-    private let cueSettings = CueSettingsPanel()
+    private let cueSettings = CueSettingsPanel(scope: .settings)
+    private let cueTransitions = CueSettingsPanel(scope: .transitions)
     private var showSettings: ShowSettingsWindowController?
     /// Edit mode's panels, one at a time beneath the preview.
     /// The Inspector's tabs: everything a cue has in common, then what this
     /// kind of cue runs with, named for the kind.
-    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
+    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings", "Transitions"],
                                           trackingMode: .selectOne, target: nil, action: nil)
-    private var inspectorPanels: [NSView] { [editor, cueSettings] }
+    private var inspectorPanels: [NSView] { [editor, cueSettings, cueTransitions] }
     /// What the Inspector says with no cue standing by. It takes the tabs'
     /// place rather than sitting under them: with nothing to inspect, tabs
     /// onto empty forms are only noise.
@@ -106,6 +107,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.state.onOpenProjector = { [weak self] in self?.openProjectorPressed() }
         header.state.onMode = { [weak self] editing in self?.modeChosen(editing) }
         header.state.onAddCue = { [weak self] kind in self?.addCueChosen(kind) }
+        header.state.onAddTransition = { [weak self] in self?.addTransition() }
         header.state.onShowSettings = { [weak self] in self?.showShowSettings() }
         // An edit still open is finished first, so it lands on the cue it was
         // made for rather than the one the click stands by.
@@ -121,6 +123,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
+        cueList.onClearTransition = { [weak controller] id in
+            controller?.edit("Clear Transition") { show in
+                if let i = show.cues.firstIndex(where: { $0.id == id }) { show.cues[i].transition = TransitionOverrides() }
+            }
+        }
         cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
         cueList.onRenumberAll = { [weak self] in self?.confirmRenumber() }
         editor.controller = controller
@@ -132,9 +139,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
         }
-        cueSettings.onChange = { [weak controller] key, value, continuous in
-            guard let controller, let id = controller.standingByCue?.id else { return }
-            controller.setOverride(key, to: value, for: id, coalescing: continuous)
+        for panel in [cueSettings, cueTransitions] {
+            panel.onChange = { [weak controller] key, value, continuous in
+                guard let controller, let id = controller.standingByCue?.id else { return }
+                controller.setOverride(key, to: value, for: id, coalescing: continuous)
+            }
         }
         tabs.selectedSegment = 0
         tabs.refusesFirstResponder = true
@@ -142,7 +151,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.action = #selector(tabChosen)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, editor, cueSettings, tabs, inspectorEmpty,
+                     warning, previewHeading, previewFrame, editor, cueSettings, cueTransitions, tabs, inspectorEmpty,
                      keybar] as [NSView] {
             root.addSubview(view)
         }
@@ -245,6 +254,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing, goPoint: controller.standingByGoPoint)
         cueSettings.update(cue: editing, defaults: show.settings)
+        cueTransitions.update(cue: editing, defaults: show.settings)
         // The second tab is named for the kind of cue standing by, so what
         // it holds is plain before it is opened.
         let kindTab = editing.map(\.kind.heading) ?? "Settings"
@@ -336,7 +346,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // height so the preview doesn't jump as the tabs change.
         var available = bottom - 16 - y - headingHeight
         if inspecting {
-            let h = [editor.preferredHeight, cueSettings.preferredHeight].max() ?? 0
+            let h = [editor.preferredHeight, cueSettings.preferredHeight, cueTransitions.preferredHeight].max() ?? 0
             let panelFrame = NSRect(x: x, y: bottom - 16 - h, width: width, height: h)
             for panel in inspectorPanels { panel.frame = panelFrame }
             tabs.frame = NSRect(x: x, y: panelFrame.minY - 10 - tabsSize.height, width: tabsSize.width, height: tabsSize.height)
@@ -395,6 +405,14 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private func addCueChosen(_ kind: Cue.Kind) {
         guard controller.addCue(kind) != nil else { return }
         showInspectorTab(0)
+        window?.makeFirstResponder(root)
+    }
+
+    /// Gives the cue standing by a transition of its own, which shows as a row
+    /// above it, and opens the Transitions tab to adjust it.
+    func addTransition() {
+        guard controller.addTransition() != nil else { return }
+        showInspectorTab(2)
         window?.makeFirstResponder(root)
     }
 

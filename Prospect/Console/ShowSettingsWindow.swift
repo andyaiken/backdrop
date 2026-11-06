@@ -33,6 +33,22 @@ final class ShowSettingsState: ObservableObject {
 ///
 /// A settings window on the Mac puts its tabs in the toolbar, so this is an
 /// `NSTabViewController` in that style with a SwiftUI form in each tab.
+/// A toolbar-style tab controller that keeps the window called Show Settings:
+/// left alone, it retitles the window as each tab is chosen, to nothing.
+final class SettingsTabViewController: NSTabViewController {
+    static let windowTitle = "Show Settings"
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        view.window?.title = Self.windowTitle
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.title = Self.windowTitle
+    }
+}
+
 @MainActor
 final class ShowSettingsWindowController: NSWindowController {
     let state: ShowSettingsState
@@ -41,14 +57,15 @@ final class ShowSettingsWindowController: NSWindowController {
         let state = ShowSettingsState()
         self.state = state
 
-        let tabs = NSTabViewController()
+        let tabs = SettingsTabViewController()
+        tabs.title = SettingsTabViewController.windowTitle
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(Self.tab(ShowDefaultsTab(state: state), "Show", "slider.horizontal.3", height: 560))
         tabs.addTabViewItem(Self.tab(ProjectionAreaTab(state: state), "Projection Area", "square.dashed", height: 430))
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]
-        window.title = "Show Settings"
+        window.title = SettingsTabViewController.windowTitle
         window.isRestorable = false
         super.init(window: window)
         window.center()
@@ -58,10 +75,17 @@ final class ShowSettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Always its own name, whatever document it is opened from.
+    override func windowTitle(forDocumentDisplayName displayName: String) -> String {
+        SettingsTabViewController.windowTitle
+    }
+
     /// One tab: its form, the name and icon the toolbar shows, and the size
     /// the window takes while it is the one on show.
     private static func tab(_ content: some View, _ label: String, _ symbol: String, height: CGFloat) -> NSTabViewItem {
         let hosting = NSHostingController(rootView: content)
+        // The tab controller takes the window's title from the tab on show.
+        hosting.title = SettingsTabViewController.windowTitle
         hosting.preferredContentSize = NSSize(width: Self.width, height: height)
         let item = NSTabViewItem(viewController: hosting)
         item.label = label
@@ -84,6 +108,9 @@ private struct ShowDefaultsTab: View {
             onChange: state.onDefault,
             onFinishedEditing: state.onFinishedEditing
         )
+        // A hosting controller's title follows SwiftUI's, which is empty,
+        // and the tab controller hands that to the window.
+        .navigationTitle(SettingsTabViewController.windowTitle)
     }
 }
 
@@ -98,5 +125,6 @@ private struct ProjectionAreaTab: View {
             onChange: state.onGeometry,
             onGuides: state.onGuides
         )
+        .navigationTitle(SettingsTabViewController.windowTitle)
     }
 }

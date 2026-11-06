@@ -29,7 +29,7 @@ public final class StageRunner {
     /// A change of cue under way: the curtain coming down over the old cue,
     /// or going up on the new one.
     private struct Change {
-        enum Phase { case out, into }
+        enum Phase { case out, into, dissolve }
         var phase: Phase
         /// When this phase began, and where the curtain was then.
         var start: Double
@@ -45,6 +45,12 @@ public final class StageRunner {
     /// The curtain on every surface: 0 is the picture, 1 is black.
     private var curtain = 0.0 {
         didSet { for s in surfaces { s.curtain = curtain } }
+    }
+
+    /// How much of the cue that was on stage still shows over the new one, on
+    /// every surface: 1 is all of it, 0 is none.
+    private var dissolve = 0.0 {
+        didSet { for s in surfaces { s.dissolve = dissolve } }
     }
 
     /// Whether a change of cue is still fading.
@@ -116,7 +122,9 @@ public final class StageRunner {
         switch transition.style {
         case .snap:
             load(cue, defaults: defaults, presentation: .run, at: time, startingAt: step)
-        case .fade:
+        case .crossfade where self.cue != nil:
+            dissolveInto(cue, defaults: defaults, at: time, seconds: transition.fadeSeconds, step: step)
+        case .fade, .crossfade:
             if self.cue == nil {
                 // Nothing to fade out, so straight up from black.
                 curtain = 1
@@ -128,8 +136,27 @@ public final class StageRunner {
                                 next: (cue, defaults, step))
             }
         }
-        // A crossfade would be a third style: a second deck of renderers would
-        // take the new cue while this one fades, and the two would swap.
+    }
+
+    /// A crossfade: the stage as it stands is photographed, the new cue goes
+    /// up and runs underneath at once, and the photograph fades away over it.
+    /// The old cue is frozen for the length of the dissolve, which nobody
+    /// sees, because a cue has settled before the next one fires.
+    private func dissolveInto(_ cue: Cue, defaults: ShowSettings, at time: Double, seconds: Double, step: Int?) {
+        let old = self.cue.flatMap { renderers[$0.kind] as? Snapshots }
+        // Taken before anything is wiped, and with any fade or crossfade
+        // already under way in it, so a quick second GO dissolves from what
+        // the audience was looking at.
+        let images = surfaces.map { s -> CGImage? in
+            let scale = max(s.contentsScale, 1)
+            let size = CGSize(width: s.inset.bounds.width * scale, height: s.inset.bounds.height * scale)
+            return s.snapshot(replacing: change == nil ? old?.snapshot(size: size) : nil)
+        }
+        put(cue, defaults: defaults, presentation: .run, at: time, step: step)
+        curtain = 0
+        for (s, image) in zip(surfaces, images) { s.startDissolve(from: image) }
+        dissolve = 1
+        change = Change(phase: .dissolve, start: time, from: 1, seconds: seconds)
     }
 
     /// Puts a cue on stage at once, with no transition. `.run` starts it from
@@ -139,6 +166,7 @@ public final class StageRunner {
                      startingAt step: Int? = nil) {
         change = nil
         curtain = 0
+        dissolve = 0
         put(cue, defaults: defaults, presentation: presentation, at: time, step: step)
     }
 
@@ -148,6 +176,7 @@ public final class StageRunner {
     }
 
     private func put(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double, step: Int?) {
+        dissolve = 0
         // Every renderer is wiped on every surface, not just the incoming one.
         for (kind, renderer) in renderers {
             for surface in surfaces {
@@ -237,6 +266,7 @@ public final class StageRunner {
     public func unload() {
         change = nil
         curtain = 0
+        dissolve = 0
         for renderer in renderers.values {
             for surface in surfaces {
                 renderer.clear(surface)
@@ -277,6 +307,11 @@ public final class StageRunner {
             let length = change.seconds * change.from
             let done = length > 0 ? min(1, max(0, (time - change.start) / length)) : 1
             curtain = change.from * (1 - Self.ease(done))
+            if done >= 1 { self.change = nil }
+        case .dissolve:
+            let length = change.seconds * change.from
+            let done = length > 0 ? min(1, max(0, (time - change.start) / length)) : 1
+            dissolve = change.from * (1 - Self.ease(done))
             if done >= 1 { self.change = nil }
         }
     }

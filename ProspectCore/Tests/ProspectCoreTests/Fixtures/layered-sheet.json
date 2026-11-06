@@ -1,0 +1,208 @@
+{
+  "dsm" : [
+    {
+      "content" : [
+        "Last Supper",
+        "the table → the hands → the chalice → ✕ the chalice → John → the M (✕ John)"
+      ],
+      "cuePoint" : "Sophie looks up",
+      "go" : 0,
+      "number" : "9",
+      "settings" : [
+
+      ],
+      "type" : "Layered Image"
+    },
+    {
+      "content" : [
+        "the table"
+      ],
+      "cuePoint" : "Look at the table",
+      "go" : 1,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 1"
+    },
+    {
+      "content" : [
+        "the hands"
+      ],
+      "cuePoint" : "His hands",
+      "go" : 2,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 2"
+    },
+    {
+      "content" : [
+        "the chalice"
+      ],
+      "cuePoint" : "A chalice",
+      "go" : 3,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 3"
+    },
+    {
+      "content" : [
+        "the chalice goes"
+      ],
+      "cuePoint" : "No chalice",
+      "go" : 4,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 4"
+    },
+    {
+      "content" : [
+        "John"
+      ],
+      "cuePoint" : "",
+      "go" : 5,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 5"
+    },
+    {
+      "content" : [
+        "the M (John goes)"
+      ],
+      "cuePoint" : "",
+      "go" : 6,
+      "number" : "",
+      "settings" : [
+
+      ],
+      "type" : "GO 6"
+    }
+  ],
+  "operator" : [
+    {
+      "content" : [
+        "Last Supper",
+        "the table → the hands → the chalice → ✕ the chalice → John → the M (✕ John)"
+      ],
+      "cuePoint" : "",
+      "go" : 0,
+      "number" : "9",
+      "settings" : [
+        {
+          "name" : "Clock",
+          "overridden" : false,
+          "value" : "44 ms"
+        },
+        {
+          "name" : "Hold",
+          "overridden" : false,
+          "value" : "44 · 1.9 s"
+        },
+        {
+          "name" : "Advance",
+          "overridden" : false,
+          "value" : "each step on GO"
+        },
+        {
+          "name" : "Pause",
+          "overridden" : false,
+          "value" : "44 · 1.9 s"
+        },
+        {
+          "name" : "Layer",
+          "overridden" : false,
+          "value" : "0.8 s"
+        },
+        {
+          "name" : "Base picture",
+          "overridden" : true,
+          "value" : "30%"
+        },
+        {
+          "name" : "Others while it arrives",
+          "overridden" : false,
+          "value" : "desaturate"
+        },
+        {
+          "name" : "Strength",
+          "overridden" : false,
+          "value" : "60%"
+        },
+        {
+          "name" : "Lasts",
+          "overridden" : false,
+          "value" : "22"
+        },
+        {
+          "name" : "Arriving layer",
+          "overridden" : false,
+          "value" : "outline"
+        },
+        {
+          "name" : "Frame",
+          "overridden" : false,
+          "value" : "holds still"
+        },
+        {
+          "name" : "Zoom",
+          "overridden" : false,
+          "value" : "3×"
+        },
+        {
+          "name" : "Frame move",
+          "overridden" : false,
+          "value" : "1.2 s"
+        },
+        {
+          "name" : "Base",
+          "overridden" : false,
+          "value" : "base.png"
+        },
+        {
+          "name" : "Layer 1",
+          "overridden" : false,
+          "value" : "the table · table.png"
+        },
+        {
+          "name" : "Layer 2",
+          "overridden" : true,
+          "value" : "the hands · hands.png · 60% · screen"
+        },
+        {
+          "name" : "Layer 3",
+          "overridden" : false,
+          "value" : "the chalice · chalice.png · goes on its own GO"
+        },
+        {
+          "name" : "Layer 4",
+          "overridden" : false,
+          "value" : "John · john.png · goes as the next arrives"
+        },
+        {
+          "name" : "Layer 5",
+          "overridden" : true,
+          "value" : "the M · m.png · 1.5 s"
+        },
+        {
+          "name" : "Transition",
+          "overridden" : false,
+          "value" : "fade through black"
+        },
+        {
+          "name" : "Fade",
+          "overridden" : false,
+          "value" : "0.5 s"
+        }
+      ],
+      "type" : "Layered Image"
+    }
+  ]
+}

@@ -15,7 +15,7 @@ enum CueField: String, Hashable, CaseIterable {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
         case .video: fields += [.text, .sub]
-        case .image, .morph, .map, .blank: fields += [.text]
+        case .image, .morph, .map, .blank, .layered: fields += [.text]
         }
         return fields
     }
@@ -74,21 +74,6 @@ struct CommittingField: View {
     }
 }
 
-/// The picture, clip or map a cue plays, as a well a file can be dropped on.
-struct MediaWellView: NSViewRepresentable {
-    let path: String
-    let kind: Cue.Kind
-    let empty: String
-    let onDrop: (URL) -> Void
-
-    func makeNSView(context: Context) -> MediaWell { MediaWell() }
-
-    func updateNSView(_ well: MediaWell, context: Context) {
-        well.onDrop = onDrop
-        well.show(path: path, kind: kind, empty: empty)
-    }
-}
-
 /// Edit mode's Cue tab: the cue standing by, and everything about it that
 /// isn't a setting. Every change goes through the show controller as one
 /// undoable edit.
@@ -100,6 +85,7 @@ struct CueEditorView: View {
     /// The show's defaults, for setting a GO's cue point.
     let defaults: ShowSettings
     let morphPictures: MorphPicturesState
+    let layeredStrip: LayeredStripState
     let edit: (String, @escaping (inout Cue) -> Void) -> Void
     /// A change made as it is typed: coalesced, so a run of keystrokes is one
     /// undo step rather than one each.
@@ -121,9 +107,6 @@ struct CueEditorView: View {
     var body: some View {
         Form {
             if let cue {
-                Section {
-                    Text(heading(cue)).font(.headline)
-                }
                 Section {
                     LabeledContent("Number") {
                         CommittingField(field: .number, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.number,
@@ -148,11 +131,6 @@ struct CueEditorView: View {
     }
 
     // MARK: The cue itself
-
-    private func heading(_ cue: Cue) -> String {
-        "Cue \(cue.number.isEmpty ? "(no number)" : cue.number) \u{2014} \(cue.kind.name)"
-            + (goPoint.map { " \u{00B7} GO \($0.number) of \($0.count): \($0.point.text)" } ?? "")
-    }
 
     private var cuePointPrompt: String {
         goPoint.map { "The line or action GO \($0.number) waits for" } ?? "The line or action to wait for"
@@ -302,6 +280,17 @@ struct CueEditorView: View {
                     .focusable(false)
                     .fixedSize()
                 }
+            }
+        case .layered(let c):
+            Section {
+                textRow("Label", cue, name: "Change Label")
+                mediaRow("Base", path: c.base, kind: .image, empty: "No base \u{2014} black", cue: cue)
+            }
+            Section("Layers") {
+                LayeredStripView(state: layeredStrip)
+                Text("\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s"), \(c.steps.count) step\(c.steps.count == 1 ? "" : "s"). Every layer is a full-frame picture at the base\u{2019}s size, with transparency.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         case .blank(let c):
             Section {

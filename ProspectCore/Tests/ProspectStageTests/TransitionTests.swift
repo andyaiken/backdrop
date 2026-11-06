@@ -72,6 +72,63 @@ struct TransitionTests {
         #expect(runner.cue == b && live.curtain == 1)
     }
 
+    let cross = Transition(style: .crossfade, fadeMs: 500)
+
+    @Test("A crossfade puts the new cue up at once, with the old one fading out over it")
+    func crossfade() {
+        let a = titleCue("A"), b = titleCue("B")
+        runner.load(a, defaults: ShowSettings(), presentation: .settled, at: 0)
+        runner.change(to: b, defaults: ShowSettings(), transition: cross, at: 10)
+        #expect(runner.cue == b && runner.startedAt == 10, "no waiting for the curtain")
+        #expect(live.curtain == 0 && preview.curtain == 0, "the stage never goes dark")
+        #expect(live.dissolve == 1 && preview.dissolve == 1 && runner.isChanging)
+        _ = runner.tick(at: 10.25)
+        #expect(close(live.dissolve, 0.5) && close(preview.dissolve, 0.5) && live.curtain == 0)
+        _ = runner.tick(at: 10.5)
+        #expect(live.dissolve == 0 && !runner.isChanging)
+    }
+
+    @Test("The old picture is what the audience saw, not black")
+    func crossfadeHoldsTheOldPicture() {
+        let blank = BlankRenderer()
+        let runner = StageRunner(renderers: [.title: renderer, .blank: blank])
+        let s = surface()
+        runner.attach(s)
+        runner.load(titleCue("THE LOUVRE"), defaults: ShowSettings(), presentation: .settled, at: 0)
+        func lit(_ b: Bitmap) -> Int {
+            var n = 0
+            for y in stride(from: 0, to: b.height, by: 4) { for x in stride(from: 0, to: b.width, by: 4) where !b.isBlack(x: x, y: y) { n += 1 } }
+            return n
+        }
+        let before = lit(render(s))
+        #expect(before > 0, "the title is on the surface")
+        var black = Cue(content: .blank(BlankContent()))
+        black.number = "2"
+        runner.change(to: black, defaults: ShowSettings(), transition: cross, at: 10)
+        #expect(lit(render(s)) >= before * 9 / 10, "the old title still shows, over the blank cue now running")
+        _ = runner.tick(at: 10.5)
+        #expect(lit(render(s)) == 0, "and gone once the dissolve ends")
+    }
+
+    @Test("The first cue has nothing to dissolve from, so it comes up out of black")
+    func crossfadeFirstCue() {
+        runner.change(to: titleCue("A"), defaults: ShowSettings(), transition: cross, at: 10)
+        #expect(live.curtain == 1 && live.dissolve == 0)
+    }
+
+    @Test("A snap, a fade or a load cuts a crossfade short")
+    func crossfadeCutShort() {
+        let a = titleCue("A"), b = titleCue("B"), c = titleCue("C")
+        runner.load(a, defaults: ShowSettings(), presentation: .settled, at: 0)
+        runner.change(to: b, defaults: ShowSettings(), transition: cross, at: 10)
+        runner.change(to: c, defaults: ShowSettings(), transition: snap, at: 10.1)
+        #expect(runner.cue == c && live.dissolve == 0 && !runner.isChanging)
+        runner.change(to: b, defaults: ShowSettings(), transition: cross, at: 11)
+        runner.change(to: a, defaults: ShowSettings(), transition: fade, at: 11.1)
+        _ = runner.tick(at: 11.7)
+        #expect(runner.cue == a && live.dissolve == 0, "gone with the cue it was fading out of")
+    }
+
     @Test("A snap is at once, and cuts short any fade")
     func snapCutsAFadeShort() {
         let a = titleCue("A"), b = titleCue("B"), c = titleCue("C")

@@ -4,11 +4,9 @@ import ProspectCore
 /// One row: number, a glyph for the kind, the name, and beneath it the
 /// subtitle and the cue point. The live cue sits on a raised background; the
 /// standby cue has a brass number and a brass bar. A transition in that isn't
-/// the show's default is noted in brass along the top, between this cue and
-/// the one before.
+/// the show's default gets a row of its own above the cue, `TransitionRowView`.
 final class CueRowView: NSView {
     let cue: Cue
-    let transitionNote: String?
     var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true } } }
     var isLive = false { didSet { if isLive != oldValue { needsDisplay = true } } }
     var hasIssue = false
@@ -35,9 +33,8 @@ final class CueRowView: NSView {
     /// The grip was pressed: the list takes the drag from here.
     var onGrip: (CueRowView, NSEvent) -> Void = { _, _ in }
 
-    init(cue: Cue, transitionNote: String? = nil) {
+    init(cue: Cue) {
         self.cue = cue
-        self.transitionNote = transitionNote
         super.init(frame: .zero)
         let continues = cue.continueMode.continues ? "Continues " + cue.continueMode.summary : nil
         toolTip = [cue.line.isEmpty ? nil : cue.line, continues].compactMap { $0 }.joined(separator: "\n").nilIfEmpty
@@ -84,6 +81,8 @@ final class CueRowView: NSView {
                 : c.stops.count < 2 ? "no stops" : "\(c.stops.count - 1) stop\(c.stops.count == 2 ? "" : "s")"
         case .video(let c): [c.sub, c.atEnd == .hold ? "" : c.atEnd.rawValue].filter { !$0.isEmpty }.joined(separator: "   ")
         case .blank(let c): c.colour.hex
+        case .layered(let c):
+            c.layers.isEmpty ? "no layers" : "\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s")"
         }
     }
 
@@ -91,15 +90,18 @@ final class CueRowView: NSView {
     static func transitionNote(for cue: Cue, defaults: ShowSettings) -> String? {
         guard !cue.transition.isEmpty else { return nil }
         let transition = cue.transitionIn(defaults: defaults)
-        return transition.style == .snap ? "snap" : "fade " + SettingKey.fade.format(.number(transition.fadeMs))
+        let length = SettingKey.fade.format(.number(transition.fadeMs))
+        switch transition.style {
+        case .snap: return "snap"
+        case .fade: return "fade " + length
+        case .crossfade: return "crossfade " + length
+        }
     }
 
-    private static let noteHeight: CGFloat = 14
-
-    /// The middle of the cue's own lines, below any transition note. The
-    /// number and kind on the left, and every mark and control on the right,
-    /// centre on it, so they line up however many lines the row has.
-    private var middleY: CGFloat { ((transitionNote == nil ? 0 : Self.noteHeight) + bounds.height) / 2 }
+    /// The middle of the cue's own lines. The number and kind on the left,
+    /// and every mark and control on the right, centre on it, so they line up
+    /// however many lines the row has.
+    private var middleY: CGFloat { bounds.height / 2 }
     /// The whole height of the row's right edge, so it's easy to take hold of.
     var gripRect: NSRect { NSRect(x: bounds.width - 26, y: 0, width: 26, height: bounds.height) }
     var deleteRect: NSRect { NSRect(x: bounds.width - 48, y: middleY - 11, width: 22, height: 22) }
@@ -123,7 +125,7 @@ final class CueRowView: NSView {
     }
 
     var preferredHeight: CGFloat {
-        16 + 18 + (subtitle.isEmpty ? 0 : 17) + (cue.line.isEmpty ? 0 : 17) + (transitionNote == nil ? 0 : Self.noteHeight)
+        16 + 18 + (subtitle.isEmpty ? 0 : 17) + (cue.line.isEmpty ? 0 : 17)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -156,10 +158,6 @@ final class CueRowView: NSView {
         }
 
         var y: CGFloat = 8
-        if let transitionNote {
-            draw("\u{2193} " + transitionNote, Desk.sans(10.5), Desk.brass, x: 78, y: 3, width: bounds.width - 88)
-            y += Self.noteHeight
-        }
         // Text boxes are 18 high, with the glyphs sitting a point low in them.
         let leftY = middleY - 9 - 1
         draw(cue.number, Desk.mono(12), isStandby ? Desk.brass : Desk.dim, x: 8, y: leftY, width: 40, align: .right)
@@ -238,6 +236,55 @@ final class CueRowView: NSView {
     }
 }
 
+/// A cue's own transition in, where it differs from the show's, as a row above
+/// the cue it belongs to: "\u{2193} crossfade 0.5 s". It is derived from the
+/// cue, never stored, so it has no number and standing by never lands on it.
+/// A click selects its cue; the right-click menu clears the override, which
+/// is also what removes the row. Console only: the printed sheet has its own
+/// settings lines and never shows this.
+final class TransitionRowView: NSView {
+    let cue: UUID
+    let note: String
+    var onClick: (UUID) -> Void = { _ in }
+    var onClear: (UUID) -> Void = { _ in }
+
+    static let height: CGFloat = 18
+
+    init(cue: UUID, note: String) {
+        self.cue = cue
+        self.note = note
+        super.init(frame: .zero)
+        toolTip = "This cue\u{2019}s own transition in. Right-click to clear it and use the show\u{2019}s."
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSAttributedString(string: "\u{2193} " + note, attributes: [.font: Desk.sans(10.5), .foregroundColor: Desk.brass])
+            .draw(in: NSRect(x: 78, y: 2, width: max(0, bounds.width - 88), height: 14))
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick(cue)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        let item = NSMenuItem(title: "Clear Transition", action: #selector(clearPicked(_:)), keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func clearPicked(_ item: NSMenuItem) {
+        onClear(cue)
+    }
+}
+
 /// The cue sheet as it reads: every cue in running order, and under the live
 /// or standby cue the GOs it waits for. In edit mode a cue is dragged by its
 /// grip to anywhere in the sheet.
@@ -248,6 +295,8 @@ final class CueListView: NSScrollView {
     private var steps: [UUID: [SubCueRowView]] = [:]
     private var shown: [Cue] = []
     private var shownNotes: [String?] = []
+    /// The transition rows on screen, by the cue they sit above.
+    private var transitionRows: [UUID: TransitionRowView] = [:]
     /// The cue rows on screen, in sheet order.
     private var visible: [CueRowView] = []
 
@@ -256,6 +305,8 @@ final class CueListView: NSScrollView {
     var onStepClick: (UUID, Int) -> Void = { _, _ in }
     var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
+    /// A transition row's menu: remove the cue's own transition.
+    var onClearTransition: (UUID) -> Void = { _ in }
     /// A cue dragged to stand before the cue at this index, or at the end.
     var onMoveCue: (UUID, Int) -> Void = { _, _ in }
     /// Renumber every cue: the console asks first.
@@ -285,9 +336,18 @@ final class CueListView: NSScrollView {
         let notes = cues.map { CueRowView.transitionNote(for: $0, defaults: defaults) }
         if cues != shown || notes != shownNotes {
             cueRows.values.forEach { $0.removeFromSuperview() }
+            transitionRows.values.forEach { $0.removeFromSuperview() }
             cueRows = [:]
+            transitionRows = [:]
             for (cue, note) in zip(cues, notes) {
-                let row = CueRowView(cue: cue, transitionNote: note)
+                if let note {
+                    let transition = TransitionRowView(cue: cue.id, note: note)
+                    transition.onClick = { [weak self] in self?.onClick($0) }
+                    transition.onClear = { [weak self] in self?.onClearTransition($0) }
+                    document.addSubview(transition, positioned: .below, relativeTo: insertion)
+                    transitionRows[cue.id] = transition
+                }
+                let row = CueRowView(cue: cue)
                 row.onClick = { [weak self] in self?.onClick($0) }
                 row.onDrop = { [weak self] url, id in self?.onDrop(url, id) }
                 row.onDelete = { [weak self] in self?.onDelete($0) }
@@ -403,7 +463,8 @@ final class CueListView: NSScrollView {
 
     private func showInsertion(at slot: Int) {
         let bottom = document.subviews.filter { !$0.isHidden && $0 !== insertion }.map(\.frame.maxY).max() ?? 0
-        let y = slot < visible.count ? visible[slot].frame.minY - 2.5 : bottom + 0.5
+        // Above the cue's transition row, which travels with it.
+        let y = slot < visible.count ? (transitionRows[visible[slot].cue.id] ?? visible[slot]).frame.minY - 2.5 : bottom + 0.5
         insertion.frame = NSRect(x: 6, y: y, width: document.bounds.width - 12, height: 2)
         insertion.isHidden = false
     }
@@ -414,9 +475,15 @@ final class CueListView: NSScrollView {
         var y: CGFloat = 0
         visible = []
         cueRows.values.forEach { $0.isHidden = true }
+        transitionRows.values.forEach { $0.isHidden = true }
         steps.values.joined().forEach { $0.isHidden = true }
         for cue in shown {
             guard let row = cueRows[cue.id] else { continue }
+            if let transition = transitionRows[cue.id] {
+                transition.isHidden = false
+                transition.frame = NSRect(x: 0, y: y, width: width, height: TransitionRowView.height)
+                y += TransitionRowView.height
+            }
             row.isHidden = false
             row.frame = NSRect(x: 0, y: y, width: width, height: row.preferredHeight)
             y += row.preferredHeight + 3
