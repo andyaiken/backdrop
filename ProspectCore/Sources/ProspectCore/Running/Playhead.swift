@@ -117,6 +117,19 @@ public struct Playhead: Equatable, Sendable {
         return Fire(cue: live, presentation: .run, automatic: false)
     }
 
+    /// Edit mode: runs the cue standing by on the stage, from the start, and
+    /// leaves it standing by, so the cue being edited stays selected.
+    public mutating func runStandby(in show: Show) -> Fire? {
+        entry = ""
+        // With nothing standing by, as after the last cue has gone, the live
+        // cue is the one selected.
+        guard let id = standby ?? live, show.index(of: id) != nil else { return nil }
+        let saved = (standby ?? id, standby == nil ? nil : standbyStep)
+        let fired = fire(id, in: show, presentation: .run, automatic: false, step: nil)
+        (standby, standbyStep) = saved
+        return fired
+    }
+
     /// After a crash: put `id` up in its finished state and stand by the next.
     public mutating func resume(at id: UUID, in show: Show) -> Fire? {
         guard show.index(of: id) != nil else { return nil }

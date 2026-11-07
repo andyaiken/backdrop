@@ -69,7 +69,7 @@ struct CommittingField: View {
                 .frame(minHeight: 72)
                 .scrollContentBackground(.hidden)
                 .padding(4)
-                .background(.background, in: RoundedRectangle(cornerRadius: 5))
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
         } else {
             TextField("", text: $draft, prompt: Text(prompt))
@@ -480,6 +480,10 @@ struct AnagramsEditor: View {
         TextEditor(text: $draft)
             .font(.system(size: 12.5, design: .monospaced))
             .frame(minHeight: 96)
+            .scrollContentBackground(.hidden)
+            .padding(4)
+            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
             .focused(focus, equals: .anagrams)
             .onKeyPress(keys: [.tab]) { press in
                 moveFocus(from: .anagrams, by: press.modifiers.contains(.shift) ? -1 : 1, in: order, to: focus)

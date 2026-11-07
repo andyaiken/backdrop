@@ -140,7 +140,7 @@ struct MapTests {
 
     @Test("A map has Clock, Hold, Advance, Pause, View, Zoom and Trail, and Advance offers Each stop on GO")
     func settingKeys() {
-        #expect(SettingKey.allCases.filter { $0.applies(to: .map) } == [.clock, .hold, .advance, .pause, .camera, .zoom, .trail, .transition, .fade])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .map) } == [.clock, .hold, .advance, .pause, .camera, .zoom, .trail, .transition, .fade, .wipeFrom])
         #expect(SettingKey.camera.choices().map(\.label) == ["Follows the dot", "Holds still"])
         #expect(SettingKey.camera.format(.camera(.still)) == "holds still")
         #expect(SettingKey.advance.choices(for: .map).map(\.label) == ["By itself", "Each stop on GO"])

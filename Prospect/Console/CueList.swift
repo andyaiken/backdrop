@@ -112,6 +112,7 @@ final class CueRowView: NSView {
         case .snap: "snap"
         case .fade: "fade " + length
         case .crossfade: "crossfade " + length
+        case .wipe: "wipe from " + SettingKey.wipeFrom.format(.edge(transition.wipeFrom)) + " " + length
         }
     }
 

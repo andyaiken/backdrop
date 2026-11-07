@@ -43,9 +43,44 @@ public final class SurfaceLayer: StillLayer {
     /// there now: 1 is all of it, 0 is none. A crossfade fades it out.
     public var dissolve = 0.0 {
         didSet {
-            dissolveLayer.opacity = Float(dissolve)
-            if dissolve <= 0 { dissolveLayer.contents = nil }
+            if dissolve <= 0 {
+                dissolveLayer.contents = nil
+                wipeEdge = nil
+            }
+            // A wipe keeps the old picture at full strength and takes it
+            // away from one side or corner instead.
+            dissolveLayer.opacity = wipeEdge == nil ? Float(dissolve) : (dissolve > 0 ? 1 : 0)
+            updateWipeMask()
         }
+    }
+
+    /// Where the wipe in progress started from, if the old picture is being
+    /// wiped away rather than faded.
+    private var wipeEdge: WipeEdge?
+    private let wipeMask = CAShapeLayer()
+
+    /// Leaves only the part of the old picture the wipe has yet to reach.
+    private func updateWipeMask() {
+        guard let edge = wipeEdge else {
+            dissolveLayer.mask = nil
+            return
+        }
+        let size = inset.bounds.size
+        let polygon = edge.remaining(after: 1 - dissolve)
+        let path = CGMutablePath()
+        // The layer's y runs up the stage; the polygon's runs down it.
+        let points = polygon.map { CGPoint(x: $0.x * size.width, y: (1 - $0.y) * size.height) }
+        if let first = points.first {
+            path.move(to: first)
+            for p in points.dropFirst() { path.addLine(to: p) }
+            path.closeSubpath()
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        wipeMask.frame = CGRect(origin: .zero, size: size)
+        wipeMask.path = path
+        dissolveLayer.mask = wipeMask
+        CATransaction.commit()
     }
 
     private let dissolveLayer = StillLayer()
@@ -87,8 +122,11 @@ public final class SurfaceLayer: StillLayer {
     }
 
     /// Puts a picture under the curtain at full strength, to fade out.
-    public func startDissolve(from image: CGImage?) {
+    /// With `wipingFrom`, the picture is wiped off the stage from that side
+    /// or corner instead.
+    public func startDissolve(from image: CGImage?, wipingFrom edge: WipeEdge? = nil) {
         dissolveLayer.contents = image
+        wipeEdge = image == nil ? nil : edge
         dissolve = image == nil ? 0 : 1
     }
 
@@ -132,6 +170,7 @@ public final class SurfaceLayer: StillLayer {
         inset.frame = geometry.insetRect(in: bounds.size).flipped(within: bounds.height)
         curtainLayer.frame = inset.bounds
         dissolveLayer.frame = inset.bounds
+        if wipeEdge != nil { updateWipeMask() }
         guides.frame = inset.bounds
         guides.layoutLines()
     }

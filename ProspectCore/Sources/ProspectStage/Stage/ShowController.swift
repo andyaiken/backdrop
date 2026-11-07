@@ -189,12 +189,34 @@ public final class ShowController {
         }
     }
 
+    /// R. In show mode, the live cue runs again; in edit mode, the selected one.
     public func rerun() {
+        if mode == .edit {
+            runSelected()
+            return
+        }
         guard let fire = playhead.rerun(in: show) else {
             say("Nothing is on stage yet.")
             return
         }
         perform(fire)
+    }
+
+    /// Edit mode: runs the selected cue on the stage again, from the start.
+    public func runSelected() {
+        guard mode == .edit else { return }
+        guard let fire = playhead.runStandby(in: show) else {
+            say("No cue is selected.")
+            return
+        }
+        perform(fire)
+        // And in the console's own preview, from black, so the operator sees
+        // the cue arrive as the projector does.
+        if let cue = show[fire.cue], nextRunner.kinds.contains(cue.kind) {
+            nextRunner.unload()
+            nextRunner.change(to: cue, show: show.settings, transition: cue.transition, at: now())
+            needsTicks(true)
+        }
     }
 
     public func toggleBlackout() {
@@ -454,8 +476,9 @@ public final class ShowController {
             continueAt = nil
             if let fire = playhead.continueAfter(timed.cue, in: show) { perform(fire) }
         }
+        _ = nextRunner.tick(at: time)
         // A timed continue keeps the clock going after the cue has settled.
-        needsTicks(runner.needsTicks || continueAt != nil)
+        needsTicks(runner.needsTicks || nextRunner.needsTicks || continueAt != nil)
     }
 
     private func perform(_ fire: Playhead.Fire) {

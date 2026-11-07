@@ -124,7 +124,9 @@ public final class StageRunner {
             load(cue, show: show, presentation: .run, at: time, startingAt: step)
         case .crossfade where self.cue != nil:
             dissolveInto(cue, show: show, at: time, seconds: transition.fadeSeconds, step: step)
-        case .fade, .crossfade:
+        case .wipe where self.cue != nil:
+            dissolveInto(cue, show: show, at: time, seconds: transition.fadeSeconds, step: step, wipeFrom: transition.wipeFrom)
+        case .fade, .crossfade, .wipe:
             if self.cue == nil {
                 // Nothing to fade out, so straight up from black.
                 curtain = 1
@@ -142,7 +144,10 @@ public final class StageRunner {
     /// up and runs underneath at once, and the photograph fades away over it.
     /// The old cue is frozen for the length of the dissolve, which nobody
     /// sees, because a cue has settled before the next one fires.
-    private func dissolveInto(_ cue: Cue, show: ShowSettings, at time: Double, seconds: Double, step: Int?) {
+    /// A wipe is the same, with the photograph wiped off from the far side
+    /// instead of faded: `wipeFrom` is where the new cue starts to show.
+    private func dissolveInto(_ cue: Cue, show: ShowSettings, at time: Double, seconds: Double, step: Int?,
+                              wipeFrom: WipeEdge? = nil) {
         let old = self.cue.flatMap { renderers[$0.kind] as? Snapshots }
         // Taken before anything is wiped, and with any fade or crossfade
         // already under way in it, so a quick second GO dissolves from what
@@ -154,7 +159,7 @@ public final class StageRunner {
         }
         put(cue, show: show, presentation: .run, at: time, step: step)
         curtain = 0
-        for (s, image) in zip(surfaces, images) { s.startDissolve(from: image) }
+        for (s, image) in zip(surfaces, images) { s.startDissolve(from: image, wipingFrom: wipeFrom) }
         dissolve = 1
         change = Change(phase: .dissolve, start: time, from: 1, seconds: seconds)
     }

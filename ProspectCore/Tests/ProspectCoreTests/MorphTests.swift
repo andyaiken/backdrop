@@ -94,7 +94,7 @@ struct MorphTests {
 
     @Test("A morph has a clock, a hold, Advance, Pause and its own time, but no wave")
     func settings() {
-        #expect(SettingKey.allCases.filter { $0.applies(to: .morph) } == [.clock, .hold, .advance, .pause, .morphTime, .transition, .fade])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .morph) } == [.clock, .hold, .advance, .pause, .morphTime, .transition, .fade, .wipeFrom])
         var cue = Cue(content: .morph(MorphContent()))
         SettingKey.morphTime.set(.number(4250), in: &cue)
         #expect(SettingKey.morphTime.value(in: cue) == .number(4300), "snapped to a tenth of a second")

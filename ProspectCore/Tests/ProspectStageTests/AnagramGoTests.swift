@@ -145,8 +145,21 @@ struct AnagramGoTests {
         runUntilIdle(c)
         c.updateCue(c.show.cues[0].id, "Change Number") { $0.number = "1.1" }
         #expect(c.standingByGoPoint == nil && anagrams.moveShown(0) == 1)
+        // In show mode R runs the live cue again; in edit mode it runs the selected one.
+        c.enterShowMode()
         c.rerun()
         #expect(c.standingByGoPoint?.number == 1)
+    }
+
+    @Test("In edit mode R runs the one selected cue, which stays selected")
+    func editRerunSingle() {
+        let c = controller([stepped("1")])
+        c.enterEditMode()
+        c.rerun()
+        #expect(c.playhead.live == c.show.cues[0].id)
+        #expect(c.playhead.standby == c.show.cues[0].id)
+        #expect(c.runner.cue?.id == c.show.cues[0].id)
+        #expect(anagrams.moveShown(0) != nil || c.runner.needsTicks)
     }
 }
 

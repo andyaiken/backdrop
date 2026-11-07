@@ -136,7 +136,7 @@ struct AnagramTests {
 
     @Test("An anagram sets its own timing, and runs on its own clock")
     func settings() {
-        #expect(SettingKey.allCases.filter { $0.applies(to: .anagram) } == [.clock, .wave, .hold, .advance, .pause, .font, .transition, .fade])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .anagram) } == [.clock, .wave, .hold, .advance, .pause, .font, .transition, .fade, .wipeFrom])
         var cue = Cue(content: .anagram(AnagramContent(text: "A", answer: "A")))
         SettingKey.hold.set(.number(10), in: &cue)
         #expect(cue.timing == CueTiming(clockMs: 44, holdTicks: 10, isInstant: false))

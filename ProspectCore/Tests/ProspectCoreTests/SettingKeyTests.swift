@@ -53,10 +53,10 @@ struct SettingKeyTests {
 
     @Test("Which settings apply to which cues")
     func applicability() {
-        #expect(SettingKey.allCases.filter { $0.applies(to: .title) } == [.clock, .wave, .hold, .histogram, .sceneLine, .letters, .bars, .transition, .fade])
-        #expect(SettingKey.allCases.filter { $0.applies(to: .image) } == [.clock, .wave, .hold, .grid, .flip, .order, .reveal, .transition, .fade])
-        #expect(SettingKey.allCases.filter { $0.applies(to: .video) } == [.transition, .fade], "every cue has a transition in")
-        #expect(SettingKey.allCases.filter { $0.applies(to: .blank) } == [.transition, .fade])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .title) } == [.clock, .wave, .hold, .histogram, .sceneLine, .letters, .bars, .transition, .fade, .wipeFrom])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .image) } == [.clock, .wave, .hold, .grid, .flip, .order, .reveal, .transition, .fade, .wipeFrom])
+        #expect(SettingKey.allCases.filter { $0.applies(to: .video) } == [.transition, .fade, .wipeFrom], "every cue has a transition in")
+        #expect(SettingKey.allCases.filter { $0.applies(to: .blank) } == [.transition, .fade, .wipeFrom])
         #expect(SettingKey.groups.flatMap(\.keys) == SettingKey.allCases.filter { $0 != .textScale }, "the cue panels show every cue setting once")
     }
 

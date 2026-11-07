@@ -15,6 +15,7 @@ public enum SettingValue: Equatable, Sendable {
     case context(LayerContext)
     case entrance(LayerEntrance)
     case push(LayeredCamera)
+    case edge(WipeEdge)
 }
 
 /// Every setting a cue holds. One definition serves the cue editor's panels
@@ -23,7 +24,7 @@ public enum SettingValue: Equatable, Sendable {
 public enum SettingKey: String, CaseIterable, Sendable {
     case clock, wave, hold, advance, pause, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, font, morphTime, camera, zoom, trail
     case layerTime, baseLevel, context, strength, length, entrance, push, move
-    case transition, fade
+    case transition, fade, wipeFrom
 
     /// What a title cue has.
     public static let title: [SettingKey] = [.clock, .wave, .hold, .histogram, .sceneLine, .letters, .bars]
@@ -41,7 +42,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
     /// What an image cue has.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
     /// The transition into a cue, which every cue has.
-    public static let transitions: [SettingKey] = [.transition, .fade]
+    public static let transitions: [SettingKey] = [.transition, .fade, .wipeFrom]
     /// The cue panels, in their groups.
     public static let groups: [(name: String, keys: [SettingKey])] = [
         // Advance and Pause belong to every cue that runs in steps, anagrams
@@ -87,6 +88,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .move: "Frame move"
         case .transition: "Transition"
         case .fade: "Fade"
+        case .wipeFrom: "Wipe from"
         }
     }
 
@@ -121,8 +123,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .entrance: "What the arriving layer does: simply fades up, has its edge drawn as a brass line, settles in slightly magnified, or blooms past its level and back."
         case .push: "What the frame does as layers arrive: holds still on the whole picture, pulls back out and in on each new part, or travels straight from one part to the next. Every move happens on a GO."
         case .move: "How long a move of the frame takes."
-        case .transition: "How the stage changes to this cue: a fade through black, a crossfade from the cue before, or a snap."
-        case .fade: "How long each half of a fade takes: out, then in. A crossfade takes this long in all."
+        case .transition: "How the stage changes to this cue: a fade through black, a crossfade from the cue before, a wipe across it from one side or corner, or a snap."
+        case .fade: "How long each half of a fade takes: out, then in. A crossfade or a wipe takes this long in all."
+        case .wipeFrom: "The side or corner of the stage a wipe starts from. The new cue is uncovered from there, and the old picture wiped off ahead of it."
         }
     }
 
@@ -174,7 +177,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .entrance: .choice(["Fade", "Outline", "Settle", "Bloom"])
         case .push: .choice(["Holds still", "Pulls back between parts", "Travels part to part"])
         case .move: .slider(SettingRange.cameraMs, step: 100)
-        case .transition: .choice(["Fade through black", "Snap", "Crossfade"])
+        case .transition: .choice(["Fade through black", "Snap", "Crossfade", "Wipe"])
+        case .wipeFrom: .choice(["Left", "Right", "Top", "Bottom", "Top left", "Top right", "Bottom left", "Bottom right"])
         case .fade: .slider(SettingRange.fadeMs, step: 100)
         }
     }
@@ -222,7 +226,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .context: [SettingValue.context(.none), .context(.dim), .context(.desaturate), .context(.spotlight)][safe: index]
         case .entrance: [SettingValue.entrance(.fade), .entrance(.outline), .entrance(.settle), .entrance(.bloom)][safe: index]
         case .push: [SettingValue.push(.still), .push(.push), .push(.travel)][safe: index]
-        case .transition: [SettingValue.style(.fade), .style(.snap), .style(.crossfade)][safe: index]
+        case .transition: [SettingValue.style(.fade), .style(.snap), .style(.crossfade), .style(.wipe)][safe: index]
+        case .wipeFrom: [SettingValue.edge(.left), .edge(.right), .edge(.top), .edge(.bottom),
+                         .edge(.topLeft), .edge(.topRight), .edge(.bottomLeft), .edge(.bottomRight)][safe: index]
         default: nil
         }
     }
@@ -266,6 +272,18 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .fade: "fade through black"
             case .snap: "snap"
             case .crossfade: "crossfade"
+            case .wipe: "wipe"
+            }
+        case (_, .edge(let edge)):
+            switch edge {
+            case .left: "left"
+            case .right: "right"
+            case .top: "top"
+            case .bottom: "bottom"
+            case .topLeft: "top left"
+            case .topRight: "top right"
+            case .bottomLeft: "bottom left"
+            case .bottomRight: "bottom right"
             }
         case (_, .advance(.byItself)): "by itself"
         case (_, .advance(.eachAnagram)): "each anagram on GO"
@@ -317,6 +335,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         switch self {
         case .transition: return .style(cue.transition.style)
         case .fade: return .number(cue.transition.fadeMs)
+        case .wipeFrom: return .edge(cue.transition.wipeFrom)
         default: break
         }
         switch cue.content {
@@ -411,6 +430,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
             return
         case (.fade, .number(let n)):
             cue.transition.fadeMs = n
+            return
+        case (.wipeFrom, .edge(let edge)):
+            cue.transition.wipeFrom = edge
             return
         default: break
         }

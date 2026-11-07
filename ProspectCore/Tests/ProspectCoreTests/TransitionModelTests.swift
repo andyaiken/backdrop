@@ -63,3 +63,44 @@ struct TransitionModelTests {
         #expect(try JSONDecoder().decode(Cue.self, from: Data(json.utf8)).transition.style == .crossfade)
     }
 }
+
+@Suite("Wipes")
+struct WipeTests {
+    @Test("A wipe remembers where it starts from, and older files start from the left")
+    func coding() throws {
+        var cue = Cue(content: .blank(BlankContent()))
+        cue.transition = Transition(style: .wipe, fadeMs: 800, wipeFrom: .bottomRight)
+        let back = try JSONDecoder().decode(Cue.self, from: try JSONEncoder().encode(cue))
+        #expect(back.transition.style == .wipe && back.transition.wipeFrom == .bottomRight)
+        let old = try JSONDecoder().decode(Cue.self, from: Data(#"{ "kind": "blank", "num": "1" }"#.utf8))
+        #expect(old.transition.wipeFrom == .left)
+    }
+
+    @Test("What a wipe has yet to reach shrinks away from its side or corner")
+    func remaining() {
+        func area(_ p: [CGPoint]) -> Double {
+            var a = 0.0
+            for i in p.indices { let q = p[(i + 1) % p.count]; a += p[i].x * q.y - q.x * p[i].y }
+            return abs(a) / 2
+        }
+        for edge in WipeEdge.allCases {
+            #expect(abs(area(edge.remaining(after: 0)) - 1) < 1e-9)
+            #expect(edge.remaining(after: 1).isEmpty)
+            #expect(area(edge.remaining(after: 0.75)) < area(edge.remaining(after: 0.25)))
+        }
+        // From the left, the right half is left at the halfway mark.
+        #expect(abs(area(WipeEdge.left.remaining(after: 0.5)) - 0.5) < 1e-9)
+        #expect(WipeEdge.left.remaining(after: 0.5).allSatisfy { $0.x >= 0.5 - 1e-9 })
+        // From the top left, the bottom right corner is the last to go.
+        #expect(WipeEdge.topLeft.remaining(after: 0.9).contains { abs($0.x - 1) < 0.3 && abs($0.y - 1) < 0.3 })
+    }
+
+    @Test("The edge reads and sets like the other settings")
+    func settingKey() {
+        var cue = Cue(content: .blank(BlankContent()))
+        SettingKey.wipeFrom.set(.edge(.topRight), in: &cue)
+        #expect(cue.transition.wipeFrom == .topRight)
+        #expect(SettingKey.wipeFrom.format(.edge(.topRight)) == "top right")
+        #expect(SettingKey.wipeFrom.choices().count == 8)
+    }
+}

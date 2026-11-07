@@ -132,7 +132,7 @@ final class ShowDocument: NSDocument {
         let projector = ProjectorManager(controller: controller)
         projector.console = console.window
         self.projector = projector
-        let clock = ClockSource(projector: projector.view, preview: console.preview)
+        let clock = ClockSource(projector: projector.view, preview: console.nextPreview)
         self.clock = clock
 
         controller.changed = { [weak console] in console?.setNeedsRefresh() }

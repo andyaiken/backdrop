@@ -131,7 +131,9 @@ public struct CueSheet: Equatable, Sendable {
 
         // Every cue's transition in, with its fade time only where it fades.
         let fades = cue.transition.hasLength
-        let transition = timing(fades ? SettingKey.transitions : [.transition])
+        let transition = timing(
+            cue.transition.style == .wipe ? SettingKey.transitions
+                : fades ? [.transition, .fade] : [.transition])
 
         // When the show moves on from here by itself.
         let continues = cue.continueMode.continues

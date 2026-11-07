@@ -31,7 +31,14 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
     /// The Inspector's outline, around its tabs and forms, so it reads as a
     /// place even with nothing in it. It has no fill: the desk shows through.
-    private let inspectorFrame = PanelView(border: Desk.line, radius: 8)
+    private let inspectorFrame = PanelView(fill: Desk.line)
+    /// Edit mode: runs the selected cue on the stage again.
+    private let runAgainButton: NSButton = {
+        let b = NSButton(title: "Run again", target: nil, action: nil)
+        b.bezelStyle = .rounded
+        b.controlSize = .large
+        return b
+    }()
     private let nextHeading = Desk.label("Up next", font: Desk.sans(12.5), colour: Desk.dim)
     private let nextFrame = PanelView(fill: .black, border: Desk.line, radius: 2)
     private(set) var editor = CueEditorPanel(scope: .common)
@@ -141,6 +148,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         controller.nextRunner.attach(nextPreview.surface)
         nextFrame.addSubview(nextPreview)
 
+        runAgainButton.target = self
+        runAgainButton.action = #selector(runAgainPressed)
         gotoField.font = Desk.mono(12.5)
         gotoField.placeholderString = "e.g. P12"
         gotoField.delegate = self
@@ -241,7 +250,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.action = #selector(tabChosen)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, nextHeading, nextFrame, inspectorFrame, editor, kindEditor, cueTransitions, showSettingsPanel, tabs, inspectorEmpty,
+                     warning, previewHeading, previewFrame, nextHeading, nextFrame, runAgainButton, inspectorFrame, editor, kindEditor, cueTransitions, showSettingsPanel, tabs, inspectorEmpty,
                      keybar, cueListEmpty, listDivider, inspectorDivider] as [NSView] {
             root.addSubview(view)
         }
@@ -324,10 +333,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let next = playhead.standby.flatMap { show[$0] }
         controller.updateNextPreview()
         previewHeading.stringValue = live.map { "On screen: cue \($0.number)" } ?? "On screen"
-        nextHeading.stringValue = next.map { cue in
-            let prompt = cue.line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "Up next: cue \(cue.number)" + (prompt.isEmpty ? "" : " \u{2014} \(prompt)")
-        } ?? "Up next"
+        if controller.mode == .edit {
+            nextHeading.stringValue = next.map { "Cue \($0.number)" } ?? "No cue selected"
+        } else {
+            nextHeading.stringValue = next.map { cue in
+                let prompt = cue.line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return "Up next: cue \(cue.number)" + (prompt.isEmpty ? "" : " \u{2014} \(prompt)")
+            } ?? "Up next"
+        }
+        runAgainButton.isEnabled = next != nil || live != nil
         // A step of a cue may stand by rather than the cue itself: GO carries
         // the live cue on or back to it, or fires another cue straight at it.
         let goPoint = controller.standingByGoPoint
@@ -416,13 +430,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         // Right: warnings, the previews, and in edit mode the Inspector.
         let x = leftWidth + 1 + 16, width = b.width - x - 16
-        var y = top + 16
-        warning.isHidden = warning.message.isEmpty
-        if !warning.isHidden {
-            let h = warning.height(width: width)
-            warning.frame = NSRect(x: x, y: y, width: width, height: h)
-            y += h + 14
-        }
+        let regionTop = top + 16
         let headingHeight: CGFloat = 27, gap = Self.columnGap
         let editing = controller.mode == .edit
         // In edit mode with nothing standing by there is no cue to inspect,
@@ -447,11 +455,15 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             .clamped(to: 0...max(0, width - gap - Self.previewMinWidth))
         let previewWidth = width - editorWidth - gap
         let editorX = x + previewWidth + gap
-        let region = NSRect(x: editorX, y: y, width: editorWidth, height: max(0, bottom - 16 - y))
-        inspectorFrame.frame = region
-        inspectorDivider.frame = NSRect(x: editorX - gap / 2 - 4, y: y, width: 9, height: region.height)
+        let region = NSRect(x: editorX, y: regionTop, width: editorWidth, height: max(0, bottom - 16 - regionTop))
+        // A single line separates the Inspector from the previews, as the
+        // cue list is separated; the Inspector's contents sit beside it.
+        let lineX = editorX - gap / 2
+        inspectorFrame.frame = NSRect(x: lineX, y: top - 1, width: 1, height: bottom - top + 1)
+        let column = NSRect(x: lineX + 1, y: top, width: max(0, b.width - lineX - 1), height: max(0, bottom - top))
+        inspectorDivider.frame = NSRect(x: editorX - gap / 2 - 4, y: regionTop, width: 9, height: region.height)
         if editing {
-            let inner = region.insetBy(dx: Self.inspectorPadding, dy: Self.inspectorPadding)
+            let inner = column.insetBy(dx: Self.inspectorPadding, dy: Self.inspectorPadding)
             centre(inspectorEmpty, in: inner)
             tabs.frame = NSRect(x: inner.minX, y: inner.minY, width: tabsSize.width, height: tabsSize.height)
             let panelTop = inner.minY + tabsSize.height + 10
@@ -463,6 +475,14 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             // The panel pads itself.
             standby.frame = NSRect(x: region.minX, y: region.minY, width: region.width,
                                    height: min(standby.height(width: region.width), region.height))
+        }
+        // The warning belongs to the previews' column; the Inspector runs full height beside it.
+        var y = regionTop
+        warning.isHidden = warning.message.isEmpty
+        if !warning.isHidden {
+            let h = warning.height(width: previewWidth)
+            warning.frame = NSRect(x: x, y: y, width: previewWidth, height: h)
+            y += h + 14
         }
         placePreview(x: x, y: y, width: previewWidth, available: bottom - 16 - y - headingHeight,
                      headingHeight: headingHeight)
@@ -480,14 +500,39 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     /// Space between the Inspector panel's edge and what it holds.
-    private static let inspectorPadding: CGFloat = 12
+    private static let inspectorPadding: CGFloat = 16
 
     /// The preview, as large as its space allows at the projector's shape,
     /// centred in it, with its heading just above its corner.
     private func placePreview(x: CGFloat, y: CGFloat, width: CGFloat, available: CGFloat, headingHeight: CGFloat) {
+        let gap: CGFloat = 14
+        if controller.mode == .edit {
+            // The selected cue alone, as large as the space allows, with a
+            // button under it to run it again.
+            previewHeading.isHidden = true
+            previewFrame.isHidden = true
+            runAgainButton.isHidden = false
+            let buttonHeight: CGFloat = 32
+            let room = max(0, available - headingHeight - gap - buttonHeight)
+            let w = min(width, (room * previewAspect).rounded(.down))
+            let h = (w / previewAspect).rounded()
+            let total = headingHeight + h + gap + buttonHeight
+            let top = y + max(0, ((available + headingHeight - total) / 2).rounded())
+            let left = x + ((width - w) / 2).rounded()
+            nextHeading.frame = NSRect(x: left, y: top, width: w, height: 18)
+            nextFrame.frame = NSRect(x: left, y: top + headingHeight, width: w, height: h)
+            nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
+            let size = runAgainButton.fittingSize
+            runAgainButton.frame = NSRect(x: x + ((width - size.width) / 2).rounded(), y: nextFrame.frame.maxY + gap,
+                                          width: size.width, height: buttonHeight)
+            return
+        }
+        previewHeading.isHidden = false
+        previewFrame.isHidden = false
+        runAgainButton.isHidden = true
         // The live preview, and under it the up-next preview, smaller, both
         // centred across the space and together centred down it.
-        let ratio: CGFloat = 0.6, gap: CGFloat = 14
+        let ratio: CGFloat = 0.6
         let room = max(0, available - headingHeight - gap)
         let w = min(width, (room * previewAspect / (1 + ratio)).rounded(.down))
         let h = (w / previewAspect).rounded()
@@ -502,6 +547,10 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         nextHeading.frame = NSRect(x: nextLeft, y: nextTop, width: nw, height: 18)
         nextFrame.frame = NSRect(x: nextLeft, y: nextTop + headingHeight, width: nw, height: nh)
         nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
+    }
+
+    @objc private func runAgainPressed() {
+        controller.rerun()
     }
 
     // MARK: Actions

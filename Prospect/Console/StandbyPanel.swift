@@ -3,7 +3,7 @@ import ProspectCore
 import ProspectStage
 import SwiftUI
 
-/// What GO fires next, large; what is on screen, small.
+/// What is on screen, then what GO fires next.
 @MainActor
 final class StandbyPanel: PanelHost<StandbyPanelView> {
     init() {
@@ -32,6 +32,27 @@ struct StandbyPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text("On screen")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(live?.number ?? "\u{2014}")
+                    .font(.system(size: 17, design: .monospaced))
+                Spacer(minLength: 0)
+                if case .blank(let blank)? = live?.content {
+                    BlankSwatch(colour: blank.colour)
+                } else {
+                    Text(live.map { $0.text.isEmpty ? "\u{2014}" : $0.text.replacingOccurrences(of: "\n", with: " \u{23CE} ") } ?? "\u{2014}")
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .foregroundStyle(.secondary)
+            .padding(.top, 2)
+
+            Divider().padding(.vertical, 12)
+
             Text(heading)
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
@@ -60,27 +81,6 @@ struct StandbyPanelView: View {
             }
 
             cuePointBox.padding(.top, 10)
-
-            Divider().padding(.vertical, 12)
-
-            Text("On screen")
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Text(live?.number ?? "\u{2014}")
-                    .font(.system(size: 17, design: .monospaced))
-                Spacer(minLength: 0)
-                if case .blank(let blank)? = live?.content {
-                    BlankSwatch(colour: blank.colour)
-                } else {
-                    Text(live.map { $0.text.isEmpty ? "\u{2014}" : $0.text.replacingOccurrences(of: "\n", with: " \u{23CE} ") } ?? "\u{2014}")
-                        .font(.system(size: 12, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
-            .foregroundStyle(.secondary)
-            .padding(.top, 2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -156,6 +156,8 @@ enum SettingState {
         switch key {
         case .fade:
             return (cue.transition.hasLength, nil)
+        case .wipeFrom:
+            return (cue.transition.style == .wipe, nil)
         case .grid, .flip, .order, .wave:
             // Wave is shared with decryption and anagram cues, which always use it.
             guard case .image(let c) = cue.content else { return (true, nil) }
@@ -233,6 +235,7 @@ struct ShowSettingsView: View {
                 FieldRow(label: "Title") {
                     TextField("Title", text: Binding(get: { title }, set: { onTitle($0) }),
                               prompt: Text("\(fallback) (the file\u{2019}s name)"))
+                        .textFieldStyle(.roundedBorder)
                         // Return and Escape both hand the keyboard back to the
                         // show keys. The title is already saved as it is typed.
                         .onSubmit(onFinishedEditing)
