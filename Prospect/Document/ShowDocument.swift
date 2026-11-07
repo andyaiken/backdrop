@@ -112,6 +112,7 @@ final class ShowDocument: NSDocument {
                 .morph: MorphRenderer(media: media),
                 .map: MapRenderer(media: media),
                 .layered: LayeredRenderer(media: media),
+                .keypad: KeypadRenderer(),
                 .video: VideoRenderer(media: media),
                 .text: TextRenderer(),
                 .blank: BlankRenderer(),
@@ -139,6 +140,7 @@ final class ShowDocument: NSDocument {
         controller.needsTicks = { [weak clock] on in clock?.ticking = on }
         projector.onChange = { [weak clock, weak projector] in clock?.projectorVisible = projector?.isVisible ?? false }
         console.openProjector = { [weak projector] in projector?.open() }
+        console.closeProjector = { [weak projector] in projector?.close() }
         console.setMode = { [weak self] editing in
             if editing { self?.enterEditMode() } else { self?.enterShowMode() }
         }
@@ -179,13 +181,43 @@ final class ShowDocument: NSDocument {
     // MARK: Modes
 
     /// Pending edits are saved before the show locks, because nothing is
-    /// written in show mode.
+    /// written in show mode. Media no cue uses any longer goes at the same
+    /// time: this is the one moment undo no longer needs it.
     func enterShowMode() {
         guard let controller, controller.mode == .edit else { return }
-        if hasUnautosavedChanges {
-            autosave(withImplicitCancellability: false) { _ in }
+        guard hasUnautosavedChanges else {
+            pruneUnusedMedia(then: { controller.enterShowMode() })
+            return
         }
-        controller.enterShowMode()
+        autosave(withImplicitCancellability: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pruneUnusedMedia(then: { controller.enterShowMode() })
+            }
+        }
+    }
+
+    /// Removes media no cue refers to and saves, then calls `done`. Undo is
+    /// dropped when anything goes, because an undo could bring back a cue
+    /// whose picture is no longer in the package. Earlier versions keep the
+    /// files, in File › Revert To. Imports not yet saved are never touched.
+    private func pruneUnusedMedia(then done: @escaping () -> Void) {
+        guard let controller, pendingMedia.isEmpty,
+              let package = try? ShowPackage.updated(self.package, with: controller.show) else { return done() }
+        self.package = package
+        let unused = ShowPackage.unusedMedia(in: package, show: controller.show)
+        guard !unused.isEmpty else { return done() }
+        ShowPackage.removeMedia(unused, from: package)
+        undoManager?.removeAllActions()
+        updateChangeCount(.changeDone)
+        autosave(withImplicitCancellability: false) { [weak controller] error in
+            MainActor.assumeIsolated {
+                done()
+                if error == nil {
+                    controller?.say("Show mode. Removed \(unused.count) unused file\(unused.count == 1 ? "" : "s") from the show.")
+                }
+            }
+        }
     }
 
     func enterEditMode() {

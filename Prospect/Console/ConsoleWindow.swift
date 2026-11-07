@@ -111,6 +111,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// Open Projector, from the header button.
     var openProjector: () -> Void = {}
+    /// Close Projector, from the header button.
+    var closeProjector: () -> Void = {}
     /// The header's Show / Edit switch: true for edit mode. The document
     /// does the switching, as it does for the Show menu.
     var setMode: (_ editing: Bool) -> Void = { _ in }
@@ -159,6 +161,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         header.state.onGo = { [weak self] in self?.goPressed() }
         header.state.onOpenProjector = { [weak self] in self?.openProjectorPressed() }
+        header.state.onCloseProjector = { [weak self] in self?.closeProjectorPressed() }
         header.state.onMode = { [weak self] editing in self?.modeChosen(editing) }
         header.state.onAddCue = { [weak self] kind in self?.addCueChosen(kind) }
         header.state.onShowSettings = { [weak self] on in
@@ -577,6 +580,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private func openProjectorPressed() {
         openProjector()
+        window?.makeFirstResponder(root)
+    }
+
+    private func closeProjectorPressed() {
+        closeProjector()
         window?.makeFirstResponder(root)
     }
 

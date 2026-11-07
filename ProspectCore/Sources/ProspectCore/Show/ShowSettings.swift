@@ -52,6 +52,7 @@ public enum SettingRange {
     public static let contextLevel = 0...100
     public static let contextTicks = 0...80
     public static let cameraMs = 300...5000
+    public static let keypadBoxes = 1...12
     public static let geometrySize = 20...100
     public static let geometryOffset = -40...40
 }
@@ -89,6 +90,7 @@ extension Cue {
         case .morph(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
         case .map(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
         case .layered(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
+        case .keypad(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
         // A video plays on its own clock from GO, and a blank or a text is instant.
         case .video, .blank, .text: CueTiming(clockMs: CueTiming.standardClockMs, holdTicks: 0, isInstant: true)
         }

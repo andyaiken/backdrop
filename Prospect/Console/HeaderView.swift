@@ -22,6 +22,7 @@ final class HeaderState: ObservableObject {
     var onAddCue: (Cue.Kind) -> Void = { _ in }
     var onShowSettings: (Bool) -> Void = { _ in }
     var onOpenProjector: () -> Void = {}
+    var onCloseProjector: () -> Void = {}
 }
 
 /// The console's header: the mode switch, then the cue sheet's
@@ -98,7 +99,10 @@ struct HeaderBar: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(state.live || state.warn ? AnyShapeStyle(lampColour) : AnyShapeStyle(.secondary))
 
-            if !state.projectorOpen {
+            if state.projectorOpen {
+                Button("Close Projector") { state.onCloseProjector() }
+                    .focusable(false)
+            } else {
                 Button("Open Projector") { state.onOpenProjector() }
                     .focusable(false)
             }

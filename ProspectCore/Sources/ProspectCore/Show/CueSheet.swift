@@ -93,6 +93,7 @@ public struct CueSheet: Equatable, Sendable {
             // The steps in order, a withdrawal marked.
             lines = [c.text, c.steps.map(\.sheetName).joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
+        case .keypad(let c): lines = [c.text] + c.script.split(whereSeparator: \.isNewline).map(String.init)
         case .blank(let c): lines = [c.colour.hex.uppercased()]
         }
         return lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -183,6 +184,11 @@ public struct CueSheet: Equatable, Sendable {
                 return Setting(name: "Layer \(i + 1)", value: ([layer.displayName] + parts).joined(separator: " \u{00B7} "))
             }
             return timing(SettingKey.layered) + [Setting(name: "Base", value: file(c.base, "black"))] + layers
+        case .keypad(let c):
+            return timing(SettingKey.keypad) + [
+                Setting(name: "Boxes", value: "\(c.boxCount)"),
+                Setting(name: "Keys", value: c.script.isEmpty ? "none" : c.script.split(whereSeparator: \.isNewline).joined(separator: " / ")),
+            ]
         case .video(let c):
             let end = switch c.atEnd {
             case .hold: "hold the last frame"

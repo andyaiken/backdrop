@@ -39,6 +39,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
     public static let layered: [SettingKey] = [
         .clock, .hold, .advance, .pause, .layerTime, .baseLevel, .context, .strength, .length, .entrance, .push, .zoom, .move,
     ]
+    /// What a keypad cue has: the pause is the time between key presses.
+    public static let keypad: [SettingKey] = [.clock, .hold, .pause]
     /// What an image cue has.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
     /// The transition into a cue, which every cue has.
@@ -104,7 +106,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .sceneLine: "The smaller line of text beneath the main one."
         case .bars: "What the histogram counts: single letters, or the commonest pairs of letters, which tell more on a long text."
         case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. A morph cue of several pictures, a map cue's dot, or a layered image cue's layers move on by themselves, or wait for GO before each stage, stop or step on either GO choice. GO carries the cue on rather than firing the next one."
-        case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves; a morph on each picture before it becomes the next; a map's dot at each stop; and a layered image cue between steps when it moves on by itself."
+        case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves; a morph on each picture before it becomes the next; a map's dot at each stop; and a layered image cue between steps when it moves on by itself; and a keypad between key presses."
         case .morphTime: "How long each picture takes to become the next, after the hold. A stage can have its own, set in the Cue tab."
         case .camera: "Whether a map follows its dot, the dot fixed at the middle and the map sliding under it, or holds still, framed round the whole route, with the dot moving across it."
         case .zoom: "Following the dot, how many stage widths across a map is drawn; holding still, the closest the frame comes. The map's picture should be about this many times the stage's width in pixels, or it softens. For a layered image cue, the closest its frame comes to a part; the layers should be about this many times the stage's width in pixels, and the cue holds that much more in memory."
@@ -324,6 +326,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .map: Self.map.contains(self)
         case .image: Self.image.contains(self)
         case .layered: Self.layered.contains(self)
+        case .keypad: Self.keypad.contains(self)
         case .video, .blank, .text: false
         }
     }
@@ -412,6 +415,14 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .push: return .push(o.camera)
             case .zoom: return .number(o.zoom)
             case .move: return .number(o.cameraMs)
+            default: return nil
+            }
+        case .keypad(let c):
+            let o = c.settings
+            switch self {
+            case .clock: return .number(o.clockMs)
+            case .hold: return .number(o.holdTicks)
+            case .pause: return .number(o.pauseTicks)
             default: return nil
             }
         case .video, .blank, .text:
@@ -512,6 +523,14 @@ public enum SettingKey: String, CaseIterable, Sendable {
             default: return
             }
             cue.content = .layered(c)
+        case .keypad(var c):
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.pause, .number(let n)): c.settings.pauseTicks = n
+            default: return
+            }
+            cue.content = .keypad(c)
         case .video, .blank, .text:
             return
         }

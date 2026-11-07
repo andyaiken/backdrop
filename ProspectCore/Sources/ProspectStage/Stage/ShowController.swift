@@ -59,7 +59,7 @@ public final class ShowController {
         warnings: [String] = [],
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
-            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(),
+            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(),
             .text: TextRenderer(), .video: VideoRenderer(), .blank: BlankRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
@@ -72,7 +72,7 @@ public final class ShowController {
         // No video: a second copy would play it twice, so it shows black.
         nextRunner = StageRunner(renderers: [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
-            .map: MapRenderer(), .layered: LayeredRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
         ])
         self.now = now
         message = Self.openingMessage(show, warnings: warnings)
@@ -398,6 +398,7 @@ public final class ShowController {
         case .morph: cue = Cue(content: .morph(MorphContent()))
         case .map: cue = Cue(content: .map(MapContent()))
         case .layered: cue = Cue(content: .layered(LayeredContent()))
+        case .keypad: cue = Cue(content: .keypad(KeypadContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
         case .blank: cue = Cue(content: .blank(BlankContent()))
         }

@@ -33,6 +33,7 @@ extension Cue {
         case .morph(let c): c.goPoints(eachStageOnGO: c.settings.eachStageOnGO)
         case .map(let c): c.goPoints(eachStopOnGO: c.settings.eachStopOnGO)
         case .layered(let c): c.goPoints(eachStepOnGO: c.settings.eachStepOnGO)
+        case .keypad(let c): c.goPoints()
         default: []
         }
     }

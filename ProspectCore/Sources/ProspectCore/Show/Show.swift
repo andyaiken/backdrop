@@ -29,6 +29,7 @@ public struct Show: Equatable, Sendable {
     /// a show with no morph of more than two pictures stays readable by a
     /// version 2 Prospect.
     public var version: Int {
+        if cues.contains(where: { $0.kind == .keypad }) { return 8 }
         if cues.contains(where: { $0.kind == .layered }) { return 7 }
         if cues.contains(where: \.hasGoCuePoints) { return 6 }
         if cues.contains(where: { $0.kind == .map }) { return 5 }

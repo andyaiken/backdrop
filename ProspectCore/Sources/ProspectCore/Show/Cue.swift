@@ -27,10 +27,11 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case video(VideoContent)
         case blank(BlankContent)
         case layered(LayeredContent)
+        case keypad(KeypadContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, text, morph, map, video, blank, layered
+        case title, anagram, image, text, morph, map, video, blank, layered, keypad
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -59,6 +60,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .video: "film"
             case .blank: "rectangle.slash"
             case .layered: "square.3.layers.3d"
+            case .keypad: "circle.grid.3x3"
             }
         }
 
@@ -74,13 +76,14 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .video: "Plays a video file."
             case .blank: "Clears the screen to a solid colour."
             case .layered: "Stacks several images into one composed picture."
+            case .keypad: "Keys numbers into boxes on a numpad, a stage on each GO, then flashes green or red."
             }
         }
 
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .text, .video]
         /// The rest, after a separator, by the name they show.
-        public static let others: [Kind] = [.anagram, .blank, .title, .layered, .map, .morph]
+        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .map, .morph]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
@@ -104,6 +107,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .video: .video
         case .blank: .blank
         case .layered: .layered
+        case .keypad: .keypad
         }
     }
 
@@ -121,6 +125,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .video(let c): c.text
             case .blank: ""
             case .layered(let c): c.text
+            case .keypad(let c): c.text
             }
         }
         set {
@@ -137,6 +142,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .video(var c): c.text = newValue; content = .video(c)
             case .blank: break
             case .layered(var c): c.text = newValue; content = .layered(c)
+            case .keypad(var c): c.text = newValue; content = .keypad(c)
             }
         }
     }
@@ -149,7 +155,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch content {
             case .title(let c): c.sub
             case .anagram(let c): c.anagrams.first?.answer ?? ""
-            case .image, .text, .morph, .map, .layered: ""
+            case .image, .text, .morph, .map, .layered, .keypad: ""
             case .video(let c): c.sub
             case .blank: ""
             }
@@ -161,7 +167,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 if c.anagrams.isEmpty { c.anagrams = [Anagram()] }
                 c.anagrams[0].answer = newValue
                 content = .anagram(c)
-            case .image, .text, .morph, .map, .layered: break
+            case .image, .text, .morph, .map, .layered, .keypad: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .blank: break
             }
@@ -182,7 +188,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
 // and answer, in place of the cue's own text and answer.
 extension Cue: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, into, pairs, pictures, route, reference, colour, atEnd, font, align, valign, background
+        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, script, src, into, pairs, pictures, route, reference, colour, atEnd, font, align, valign, background
         case settings, layers
     }
 
@@ -267,6 +273,12 @@ extension Cue: Codable {
                 layers: try c.decodeIfPresent([ImageLayer].self, forKey: .layers) ?? [],
                 settings: try c.value(.settings, LayeredSettings())
             ))
+        case .keypad:
+            content = .keypad(KeypadContent(
+                text: text,
+                script: try c.decodeIfPresent(String.self, forKey: .script) ?? "",
+                settings: try c.value(.settings, KeypadSettings())
+            ))
         case .blank:
             content = .blank(BlankContent(
                 colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? .black
@@ -334,6 +346,9 @@ extension Cue: Codable {
             try c.encode(l.base, forKey: .src)
             try c.encode(l.layers, forKey: .layers)
             try c.encode(l.settings, forKey: .settings)
+        case .keypad(let k):
+            try c.encode(k.script, forKey: .script)
+            try c.encode(k.settings, forKey: .settings)
         case .blank(let b):
             try c.encode(b.colour, forKey: .colour)
         }

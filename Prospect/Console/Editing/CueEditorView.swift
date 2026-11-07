@@ -6,7 +6,7 @@ import SwiftUI
 /// A field of the cue editor. The order they stand in is stated once here:
 /// Tab walks it, and the document check reads it.
 enum CueField: String, Hashable, CaseIterable {
-    case number, line, seconds, text, sub, key, anagrams
+    case number, line, seconds, text, sub, key, anagrams, script
 
     /// Which of the Inspector's tabs a form is: the fields every cue has, or
     /// the ones this kind of cue adds to them.
@@ -24,6 +24,7 @@ enum CueField: String, Hashable, CaseIterable {
         case .anagram: fields += [.anagrams]
         case .video: fields += [.text, .sub]
         case .image, .text, .morph, .map, .layered: fields += [.text]
+        case .keypad: fields += [.text, .script]
         case .blank: break
         }
         return fields
@@ -388,6 +389,19 @@ struct CueEditorView: View {
             Section("Layers") {
                 LayeredStripView(state: layeredStrip)
                 Text("\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s"), \(c.steps.count) step\(c.steps.count == 1 ? "" : "s"). Every layer is a full-frame picture at the base\u{2019}s size, with transparency.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .keypad(let c):
+            Section {
+                textRow("Label", cue, name: "Change Label")
+                FieldRow(label: "Keys") {
+                    CommittingField(field: .script, focus: $focus, order: fieldOrder, prompt: "a stage per line, e.g. 1332, <<<<, 1123, GOOD", mono: true, multiline: true, value: c.script,
+                                    commit: { v in edit("Change Keys") { cue in
+                                        if case .keypad(var k) = cue.content { k.script = v; cue.content = .keypad(k) }
+                                    } }, onFinished: onFinished)
+                }
+                Text("Typed a stage at a time, a GO for each after the first: digits, * and # press that key, \u{003C} deletes, and each new line starts the next stage. A stage with GOOD or BAD presses OK after its keys, then flashes the boxes green or red. The boxes are as many as the script ever holds at once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

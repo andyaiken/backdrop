@@ -339,7 +339,7 @@ struct CueSettingsSections: View {
             "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its colour is above."
         case .text:
             "A text cue is instant, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its words, font, colour and alignment are above."
-        case .title, .anagram, .image, .morph, .map, .layered:
+        case .title, .anagram, .image, .morph, .map, .layered, .keypad:
             nil
         }
     }
