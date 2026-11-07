@@ -32,8 +32,8 @@ private func layer(_ file: String, withPrevious: Bool = false, life: LayerLife =
     ImageLayer(src: file, name: (file as NSString).deletingPathExtension, withPrevious: withPrevious, life: life)
 }
 
-private func cue(_ layers: [ImageLayer], base: String = "base.png", overrides: LayeredOverrides = .init()) -> Cue {
-    Cue(number: "4", content: .layered(LayeredContent(text: "Last Supper", base: base, layers: layers, overrides: overrides)))
+private func cue(_ layers: [ImageLayer], base: String = "base.png", settings: LayeredSettings = .init()) -> Cue {
+    Cue(number: "4", content: .layered(LayeredContent(text: "Last Supper", base: base, layers: layers, settings: settings)))
 }
 
 @Suite("Layered renderer")
@@ -41,20 +41,26 @@ private func cue(_ layers: [ImageLayer], base: String = "base.png", overrides: L
 struct LayeredRendererTests {
     let renderer = LayeredRenderer(media: { media.appendingPathComponent($0) })
     let live = surface(width: 960, height: 540)
-    var onGo: ShowSettings = { var s = ShowSettings(); s.advance = .eachStep; s.layerMs = 400; return s }()
+    var onGo = LayeredSettings(advance: .eachStep, layerMs: 400)
 
     init() {
         renderer.mount(on: live)
         renderer.setVisible(true, on: live)
     }
 
-    func prepare(_ cue: Cue, defaults: ShowSettings) async {
+    /// Prepares the cue with these settings in place of its own.
+    func prepare(_ cue: Cue, settings: LayeredSettings) async {
+        var cue = cue
+        if case .layered(var content) = cue.content {
+            content.settings = settings
+            cue.content = .layered(content)
+        }
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             renderer.onReady = { [renderer] in
                 renderer.onReady = nil
                 done.resume()
             }
-            renderer.prepare(cue, defaults: defaults)
+            renderer.prepare(cue, show: ShowSettings())
         }
     }
 
@@ -71,7 +77,7 @@ struct LayeredRendererTests {
 
     @Test("It opens on the base alone, at the cue's base level, waiting for the first GO")
     func opening() async {
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: onGo)
         #expect(!renderer.frame(-3))
         #expect(close(tree.base.opacity, 0.25) && opacities == [0, 0])
         #expect(renderer.isWaiting(at: 0), "step one waits for GO")
@@ -84,7 +90,7 @@ struct LayeredRendererTests {
     func goBringsLayerOn() async {
         var red = layer("red.png")
         red.level = 60
-        await prepare(cue([red, layer("green.png")]), defaults: onGo)
+        await prepare(cue([red, layer("green.png")]), settings: onGo)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10)
         _ = renderer.frame(10)
@@ -100,7 +106,7 @@ struct LayeredRendererTests {
 
     @Test("A false step takes the layer off again, quicker than it came")
     func falseStep() async {
-        await prepare(cue([layer("red.png"), layer("green.png", life: .untilNextGo), layer("blue.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png", life: .untilNextGo), layer("blue.png")]), settings: onGo)
         _ = renderer.frame(0)
         for (n, f) in [10, 30, 50, 70].enumerated() {
             renderer.carryOn(at: f)
@@ -119,7 +125,7 @@ struct LayeredRendererTests {
 
     @Test("A jump lands on the picture before that step with nothing animating, then the step runs")
     func jump() async {
-        await prepare(cue([layer("red.png"), layer("green.png"), layer("blue.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png"), layer("blue.png")]), settings: onGo)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10)
         _ = renderer.frame(10)
@@ -136,7 +142,7 @@ struct LayeredRendererTests {
 
     @Test("A cue put up finished shows the whole picture, settled")
     func settled() async {
-        await prepare(cue([layer("red.png"), layer("green.png", life: .untilNextGo)]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png", life: .untilNextGo)]), settings: onGo)
         renderer.carryOnToEnd()
         #expect(renderer.frame(1_000_000))
         #expect(close(opacities[0], 1) && opacities[1] == 0 && tree.layers[0].animation(forKey: "opacity") == nil)
@@ -149,7 +155,7 @@ struct LayeredRendererTests {
     @Test("A cue put up finished before its pictures load still settles when they arrive")
     func settledBeforeLoading() async {
         let c = cue([layer("red.png")])
-        renderer.prepare(c, defaults: onGo)
+        renderer.prepare(c, show: ShowSettings())
         renderer.carryOnToEnd()
         _ = renderer.frame(1_000_000)
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
@@ -160,11 +166,11 @@ struct LayeredRendererTests {
 
     @Test("Moving on by itself, every step runs a pause after the one before")
     func byItself() async {
-        var defaults = ShowSettings()
+        var defaults = LayeredSettings()
         defaults.layerMs = 440
         defaults.pauseTicks = 10
         defaults.holdTicks = 0
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: defaults)
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
         #expect(!renderer.isWaiting(at: 0))
         _ = renderer.frame(0)
         #expect(close(opacities[0], 1) && opacities[1] == 0)
@@ -180,10 +186,10 @@ struct LayeredRendererTests {
     func missing() async {
         var problems: [String] = []
         renderer.onProblem = { problems.append($0) }
-        let c = cue([layer("red.png"), layer("gone.png"), layer("blue.png")])
-        await prepare(c, defaults: onGo)
+        let c = cue([layer("red.png"), layer("gone.png"), layer("blue.png")], settings: onGo)
+        await prepare(c, settings: onGo)
         #expect(problems.count == 1 && problems[0].contains("gone.png"))
-        #expect(c.goPoints(defaults: onGo).count == 3)
+        #expect(c.goPoints().count == 3)
         _ = renderer.frame(0)
         for f in [10, 30, 50] { renderer.carryOn(at: f); _ = renderer.frame(f) }
         #expect(close(opacities[0], 1) && close(opacities[2], 1) && tree.layers[1].isHidden)
@@ -194,14 +200,14 @@ struct LayeredRendererTests {
     func shapeMismatch() async {
         var problems: [String] = []
         renderer.onProblem = { problems.append($0) }
-        await prepare(cue([layer("red.png"), layer("square.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("square.png")]), settings: onGo)
         #expect(problems.count == 1 && problems[0].contains("layer 2") && problems[0].contains("square.png".replacingOccurrences(of: ".png", with: "")))
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         renderer.carryOn(at: 30); _ = renderer.frame(30)
         #expect(close(opacities[1], 1), "it still arrives")
         problems = []
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: onGo)
         #expect(problems.isEmpty, "the right shape says nothing")
     }
 
@@ -209,7 +215,9 @@ struct LayeredRendererTests {
     func properties() async {
         var green = layer("green.png")
         green.blend = .screen
-        await prepare(cue([layer("red.png"), green], overrides: LayeredOverrides(baseLevel: 0)), defaults: onGo)
+        var dark = onGo
+        dark.baseLevel = 0
+        await prepare(cue([layer("red.png"), green]), settings: dark)
         _ = renderer.frame(-1)
         #expect(tree.base.opacity == 0)
         #expect(tree.layers[0].compositingFilter == nil && tree.layers[1].compositingFilter as? String == "screenBlendMode")
@@ -217,7 +225,7 @@ struct LayeredRendererTests {
 
     @Test("A cue with no base is black under its layers")
     func noBase() async {
-        await prepare(cue([layer("red.png")], base: ""), defaults: onGo)
+        await prepare(cue([layer("red.png")], base: ""), settings: onGo)
         _ = renderer.frame(-1)
         #expect(tree.base.contents == nil)
         #expect(tree.picture.frame.width > 0, "the layer sets the shape")
@@ -227,9 +235,9 @@ struct LayeredRendererTests {
     func contexts() async {
         for context in [LayerContext.dim, .desaturate] {
             var defaults = onGo
-            defaults.layeredContext = context
+            defaults.context = context
             defaults.contextTicks = 10
-            await prepare(cue([layer("red.png"), layer("green.png")]), defaults: defaults)
+            await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
             _ = renderer.frame(0)
             renderer.carryOn(at: 10)
             _ = renderer.frame(10)
@@ -240,8 +248,8 @@ struct LayeredRendererTests {
             #expect(tree.layers[1].animation(forKey: "context") == nil, "and the arriving layer is not")
         }
         var spot = onGo
-        spot.layeredContext = .spotlight
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: spot)
+        spot.context = .spotlight
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: spot)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         renderer.carryOn(at: 30); _ = renderer.frame(30)
@@ -252,8 +260,8 @@ struct LayeredRendererTests {
     @Test("An outline entrance draws the part's alpha edge as a brass line")
     func outline() async {
         var defaults = onGo
-        defaults.layeredEntrance = .outline
-        await prepare(cue([layer("red.png")]), defaults: defaults)
+        defaults.entrance = .outline
+        await prepare(cue([layer("red.png")]), settings: defaults)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         #expect(tree.edges[0].contents != nil && tree.edges[0].animation(forKey: "outline") != nil)
@@ -262,15 +270,15 @@ struct LayeredRendererTests {
     @Test("Settle scales about the part's own centre, and bloom overshoots its level")
     func entrances() async {
         var defaults = onGo
-        defaults.layeredEntrance = .settle
-        await prepare(cue([layer("red.png")]), defaults: defaults)
+        defaults.entrance = .settle
+        await prepare(cue([layer("red.png")]), settings: defaults)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         #expect(tree.layers[0].animation(forKey: "settle") != nil)
         #expect(abs(tree.layers[0].anchorPoint.x - 0.25) < 0.02 && abs(tree.layers[0].anchorPoint.y - 0.75) < 0.02, "about the top left part")
         var bloom = onGo
-        bloom.layeredEntrance = .bloom
-        await prepare(cue([layer("red.png")]), defaults: bloom)
+        bloom.entrance = .bloom
+        await prepare(cue([layer("red.png")]), settings: bloom)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         let k = tree.layers[0].animation(forKey: "opacity") as? CAKeyframeAnimation
@@ -280,10 +288,10 @@ struct LayeredRendererTests {
     @Test("A pushing camera frames each part, pulling back through the whole picture, and settles on it")
     func camera() async {
         var defaults = onGo
-        defaults.layeredCamera = .push
-        defaults.mapZoom = 4
+        defaults.camera = .push
+        defaults.zoom = 4
         defaults.cameraMs = 880
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: defaults)
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
         _ = renderer.frame(0)
         #expect(CATransform3DIsIdentity(tree.zoomer.transform), "the whole picture to begin with")
         renderer.carryOn(at: 10); _ = renderer.frame(10)
@@ -304,13 +312,13 @@ struct LayeredRendererTests {
 
     @Test("A still camera never moves, and a travelling one goes straight")
     func stillAndTravel() async {
-        await prepare(cue([layer("red.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png")]), settings: onGo)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         #expect(CATransform3DIsIdentity(tree.zoomer.transform) && tree.zoomer.animation(forKey: "camera") == nil)
         var defaults = onGo
-        defaults.layeredCamera = .travel
-        await prepare(cue([layer("red.png")]), defaults: defaults)
+        defaults.camera = .travel
+        await prepare(cue([layer("red.png")]), settings: defaults)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         #expect((tree.zoomer.animation(forKey: "camera") as? CAKeyframeAnimation)?.values?.count == 2)
@@ -318,12 +326,12 @@ struct LayeredRendererTests {
 
     @Test("Pictures decode at the cue's own push depth and no deeper")
     func pushDepth() async {
-        await prepare(cue([layer("red.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png")]), settings: onGo)
         let flat = renderer.maxPixels
         var defaults = onGo
-        defaults.layeredCamera = .push
-        defaults.mapZoom = 2
-        await prepare(cue([layer("red.png")]), defaults: defaults)
+        defaults.camera = .push
+        defaults.zoom = 2
+        await prepare(cue([layer("red.png")]), settings: defaults)
         #expect(renderer.maxPixels > flat && renderer.maxPixels <= 8192)
     }
 
@@ -339,7 +347,7 @@ struct LayeredRendererTests {
     @Test("Snapshots: the opening state, a mid-cue state, the settled picture, a jump to a late step, and a false step gone")
     func snapshots() async {
         let layers = [layer("red.png"), layer("green.png", life: .untilNextGo), layer("red.png")]
-        await prepare(cue(layers), defaults: onGo)
+        await prepare(cue(layers), settings: onGo)
         let topLeft = (0.25, 0.25), bottomRight = (0.75, 0.75)
         _ = renderer.frame(0)
         let opening = render(live)
@@ -381,9 +389,9 @@ struct LayeredRendererTests {
     @Test("Snapshot: pushed in on a part, the part fills the picture")
     func pushedIn() async {
         var defaults = onGo
-        defaults.layeredCamera = .push
-        defaults.mapZoom = 4
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: defaults)
+        defaults.camera = .push
+        defaults.zoom = 4
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         let pushed = render(live)
@@ -402,7 +410,7 @@ struct LayeredRendererTests {
 
     @Test("A late-mounted surface shows the current picture straight away")
     func lateSurface() async {
-        await prepare(cue([layer("red.png"), layer("green.png")]), defaults: onGo)
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: onGo)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
         let second = surface(width: 480, height: 270, role: .preview)
@@ -467,15 +475,11 @@ struct LayerImageTests {
 
 @Suite("Layered cue plan")
 struct LayeredCuePlanTests {
-    func plan(_ layers: [ImageLayer], on: Bool, _ tweak: (inout ShowSettings) -> Void = { _ in }) -> LayeredCuePlan {
-        var s = ShowSettings()
-        s.advance = on ? .eachStep : .byItself
-        s.clockMs = 50
-        s.layerMs = 500
-        s.pauseTicks = 4
+    func plan(_ layers: [ImageLayer], on: Bool, _ tweak: (inout LayeredSettings) -> Void = { _ in }) -> LayeredCuePlan {
+        var s = LayeredSettings(clockMs: 50, advance: on ? .eachStep : .byItself, pauseTicks: 4, layerMs: 500)
         tweak(&s)
-        let content = LayeredContent(layers: layers)
-        return LayeredCuePlan(content, settings: s.resolved(content.overrides))
+        let content = LayeredContent(layers: layers, settings: s)
+        return LayeredCuePlan(content, settings: s)
     }
 
     @Test("With each step on GO, the base is part 0 and every step a part of its own")

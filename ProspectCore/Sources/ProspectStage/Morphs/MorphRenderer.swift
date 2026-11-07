@@ -137,10 +137,10 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsFor
         shown = MorphCuePlan.Shown(stage: nil, progress: 0)
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .morph(let content) = cue.content else { return }
         reset()
-        let settings = defaults.resolved(content.overrides)
+        let settings = content.settings
         let cuePlan = MorphCuePlan(content, settings: settings)
         // With no pictures at all, the label on black, standing.
         let paths = content.pictures.isEmpty ? [""] : content.pictures.map(\.src)
@@ -214,7 +214,7 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsFor
         plan != nil && pictures[shown.from] != nil && pictures[shown.to] != nil
     }
 
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
+    public func preload(_ cue: Cue, show: ShowSettings) {
         guard case .morph(let content) = cue.content else { return }
         for (i, picture) in content.pictures.prefix(3).enumerated() {
             loader.load(source(picture.src, label: content.text, number: cue.number, which: Self.ordinal(i)).source, maxPixels: maxPixels) { _ in }

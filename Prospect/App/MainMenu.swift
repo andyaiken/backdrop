@@ -59,6 +59,7 @@ enum MainMenu {
         edit.addItem(.separator())
         // The same order as the header's Add Cue menu.
         edit.addItem(withTitle: "Add Image Cue", action: #selector(AppDelegate.addImageCue(_:)), keyEquivalent: "")
+        edit.addItem(withTitle: "Add Text Cue", action: #selector(AppDelegate.addTextCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Video Cue", action: #selector(AppDelegate.addVideoCue(_:)), keyEquivalent: "")
         edit.addItem(.separator())
         edit.addItem(withTitle: "Add Anagram Cue", action: #selector(AppDelegate.addAnagramCue(_:)), keyEquivalent: "")
@@ -67,8 +68,6 @@ enum MainMenu {
         edit.addItem(withTitle: "Add Layered Image Cue", action: #selector(AppDelegate.addLayeredCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Map Cue", action: #selector(AppDelegate.addMapCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Morph Cue", action: #selector(AppDelegate.addMorphCue(_:)), keyEquivalent: "")
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Add Transition", action: #selector(AppDelegate.addTransition(_:)), keyEquivalent: "")
         edit.addItem(.separator())
         edit.addItem(withTitle: "Renumber All Cues\u{2026}", action: #selector(AppDelegate.renumberAllCues(_:)), keyEquivalent: "")
 

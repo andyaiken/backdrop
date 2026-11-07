@@ -159,7 +159,7 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
         for tree in trees.values { show(nil, on: tree) }
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show _: ShowSettings) {
         guard case .video(let content) = cue.content else { return }
         let clip = arm(cue, content)
         clip.lastUsed = Date()
@@ -284,7 +284,7 @@ public final class VideoRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsh
 
     /// Arming: the cue that may fire next is loaded, prerolled and waiting
     /// at its first frame before GO.
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
+    public func preload(_ cue: Cue, show: ShowSettings) {
         guard case .video(let content) = cue.content else { return }
         arm(cue, content).lastUsed = Date()
     }

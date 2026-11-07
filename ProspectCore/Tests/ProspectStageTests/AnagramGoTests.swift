@@ -17,11 +17,14 @@ struct AnagramGoTests {
     let stage = surface()
 
     func controller(_ cues: [Cue]) -> ShowController {
-        var settings = ShowSettings()
-        settings.holdTicks = 2
-        settings.transition = .snap
+        let cues = cues.map { cue in
+            var cue = cue
+            SettingKey.hold.set(.number(2), in: &cue)
+            SettingKey.transition.set(.style(.snap), in: &cue)
+            return cue
+        }
         let clock = self.clock
-        let c = ShowController(show: Show(title: "Test", cues: cues, settings: settings),
+        let c = ShowController(show: Show(title: "Test", cues: cues),
                                renderers: [.anagram: anagrams, .title: titles], now: { clock.time })
         c.runner.attach(stage)
         return c
@@ -44,7 +47,7 @@ struct AnagramGoTests {
     func stepped(_ number: String, continues: ContinueMode = .whenCued) -> Cue {
         Cue(number: number, continueMode: continues, content: .anagram(AnagramContent(
             anagrams: [Anagram(text: "RATS", working: ["TSAR"], answer: "STAR")],
-            overrides: AnagramOverrides(advance: .eachStep))))
+            settings: AnagramSettings(advance: .eachStep))))
     }
 
     @Test("Space carries a waiting cue on, step by step, and fires the next cue only after its last")
@@ -108,7 +111,7 @@ struct AnagramGoTests {
     @Test("A step of another cue fires that cue there, after its transition, the steps before already done")
     func fireAtStep() {
         var cue = stepped("2")
-        cue.transition = TransitionOverrides(style: .fade, fadeMs: 200)
+        cue.transition = Transition(style: .fade, fadeMs: 200)
         let c = controller([titleCue("FIRST"), cue, titleCue("NEXT")])
         c.go()
         runUntilIdle(c)

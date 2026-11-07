@@ -12,15 +12,15 @@ public struct MapContent: Equatable, Sendable {
     /// Two places on the map whose latitude and longitude are known, for the
     /// coordinates on screen. Without them, none are shown.
     public var reference: MapReference?
-    public var overrides: MapOverrides
+    public var settings: MapSettings
 
     public init(text: String = "", src: String = "", route: [RoutePoint] = [], reference: MapReference? = nil,
-                overrides: MapOverrides = .init()) {
+                settings: MapSettings = .init()) {
         self.text = text
         self.src = src
         self.route = route
         self.reference = reference
-        self.overrides = overrides
+        self.settings = settings
     }
 
     /// Where the dot rests, as places in the route: the start, then every
@@ -157,46 +157,11 @@ public enum MapCamera: String, Codable, Sendable, CaseIterable {
     case still
 }
 
-/// A map cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct MapOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var holdTicks: Int?
-    /// Either GO choice waits for GO before the dot leaves for each stop.
-    public var advance: AnagramAdvance?
-    public var pauseTicks: Int?
-    public var camera: MapCamera?
-    public var zoom: Int?
-    public var trailSeconds: Int?
-
-    public init(clockMs: Int? = nil, holdTicks: Int? = nil, advance: AnagramAdvance? = nil, pauseTicks: Int? = nil, camera: MapCamera? = nil,
-                zoom: Int? = nil, trailSeconds: Int? = nil) {
-        self.clockMs = clockMs
-        self.holdTicks = holdTicks
-        self.advance = advance
-        self.pauseTicks = pauseTicks
-        self.camera = camera
-        self.zoom = zoom
-        self.trailSeconds = trailSeconds
-    }
-
-    public var isEmpty: Bool { self == MapOverrides() }
-
-    func clamped() -> MapOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        o.pauseTicks = pauseTicks.map { SettingRange.pauseTicks.clamp($0) }
-        o.zoom = zoom.map { SettingRange.mapZoom.clamp($0) }
-        o.trailSeconds = trailSeconds.map { SettingRange.trailSeconds.clamp($0) }
-        return o
-    }
-}
-
-/// The settings a map cue runs with, once its overrides are applied.
-public struct MapSettings: Equatable, Sendable {
+/// A map cue's settings.
+public struct MapSettings: Codable, Equatable, Sendable {
     public var clockMs: Int
     public var holdTicks: Int
+    /// Either GO choice waits for GO before the dot leaves for each stop.
     public var advance: AnagramAdvance
     public var pauseTicks: Int
     public var camera: MapCamera
@@ -215,6 +180,18 @@ public struct MapSettings: Equatable, Sendable {
         self.camera = camera
         self.zoom = zoom
         self.trailSeconds = trailSeconds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = MapSettings()
+        clockMs = try c.value(.clockMs, d.clockMs, in: SettingRange.clockMs)
+        holdTicks = try c.value(.holdTicks, d.holdTicks, in: SettingRange.holdTicks)
+        advance = try c.value(.advance, d.advance)
+        pauseTicks = try c.value(.pauseTicks, d.pauseTicks, in: SettingRange.pauseTicks)
+        camera = try c.value(.camera, d.camera)
+        zoom = try c.value(.zoom, d.zoom, in: SettingRange.mapZoom)
+        trailSeconds = try c.value(.trailSeconds, d.trailSeconds, in: SettingRange.trailSeconds)
     }
 
     /// Whether each stop waits for GO.

@@ -108,10 +108,10 @@ public final class TitleRenderer: CueRenderer {
         }
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .title(let content) = cue.content else { return }
-        reveal = TitleReveal(cue: content, settings: defaults.resolved(content.overrides), random: &random)
-        textScale = defaults.textScale
+        reveal = TitleReveal(cue: content, settings: content.settings, random: &random)
+        textScale = show.textScale
         current = nil
         fresh = true
         for tree in trees.values { fit(tree.surface) }
@@ -119,9 +119,9 @@ public final class TitleRenderer: CueRenderer {
 
     /// Text size is show-wide and only layout, so a title on stage refits
     /// straight away.
-    public func settingsChanged(_ defaults: ShowSettings) {
-        guard defaults.textScale != textScale else { return }
-        textScale = defaults.textScale
+    public func settingsChanged(_ show: ShowSettings) {
+        guard show.textScale != textScale else { return }
+        textScale = show.textScale
         for tree in trees.values { fit(tree.surface) }
     }
 

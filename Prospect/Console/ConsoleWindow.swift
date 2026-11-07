@@ -14,6 +14,8 @@ import ProspectStage
 final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     let controller: ShowController
     let preview = SurfaceView(role: .preview)
+    /// The cue standing by, finished, smaller than the live preview.
+    let nextPreview = SurfaceView(role: .preview)
 
     private let root = ConsoleRootView()
     private let header = HeaderView()
@@ -25,18 +27,31 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let status = Desk.label("", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
     private let divider = PanelView(fill: Desk.line)
     private let warning = WarningBox()
-    private let previewHeading = Desk.label("What the audience sees", font: Desk.sans(12.5), colour: Desk.dim)
+    private let previewHeading = Desk.label("On screen", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
+    /// The Inspector's outline, around its tabs and forms, so it reads as a
+    /// place even with nothing in it. It has no fill: the desk shows through.
+    private let inspectorFrame = PanelView(border: Desk.line, radius: 8)
+    private let nextHeading = Desk.label("Up next", font: Desk.sans(12.5), colour: Desk.dim)
+    private let nextFrame = PanelView(fill: .black, border: Desk.line, radius: 2)
     private(set) var editor = CueEditorPanel(scope: .common)
     private(set) var kindEditor = CueEditorPanel(scope: .kind)
     private let cueTransitions = CueSettingsPanel(scope: .transitions)
-    private var showSettings: ShowSettingsWindowController?
+    private let showSettingsPanel = ShowSettingsPanel()
+    /// The Inspector shows the Show Settings rather than a cue. Choosing a cue
+    /// or a transition in the list switches it off.
+    private var showingShowSettings = false
     /// Edit mode's panels, one at a time beneath the preview.
     /// The Inspector's tabs: everything a cue has in common, then what this
     /// kind of cue runs with, named for the kind.
-    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings", "Transitions"],
+    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
                                           trackingMode: .selectOne, target: nil, action: nil)
-    private var inspectorPanels: [NSView] { [editor, kindEditor, cueTransitions] }
+    private var inspectorPanels: [NSView] { [editor, kindEditor] }
+    /// The cue whose transition in is selected in the cue list, if one is.
+    /// The Inspector then shows that transition alone, without the tabs.
+    private var selectedTransition: UUID?
+    /// The cue that stood by at the last refresh: a different one deselects the transition.
+    private var lastStandby: UUID?
     /// What the Inspector says with no cue standing by. It takes the tabs'
     /// place rather than sitting under them: with nothing to inspect, tabs
     /// onto empty forms are only noise.
@@ -47,6 +62,30 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         return label
     }()
     private let keybar = KeyBar()
+    /// What the cue list column says when the show has no cues, in place of
+    /// everything else in it.
+    private let cueListEmpty: NSTextField = {
+        let label = Desk.label("", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
+        label.alignment = .center
+        return label
+    }()
+
+    // The columns: the cue list, the previews, and in edit mode the Inspector.
+    // The list and the Inspector are as wide as the operator drags them; the
+    // previews take what is left.
+    private let listDivider = ColumnDivider()
+    private let inspectorDivider = ColumnDivider()
+    private var listWidth: CGFloat = ConsoleWindowController.savedWidth("ConsoleListWidth", default: 340)
+    private var inspectorWidth: CGFloat = ConsoleWindowController.savedWidth("ConsoleInspectorWidth", default: 350)
+    private static let listRange: ClosedRange<CGFloat> = 260...520
+    private static let inspectorRange: ClosedRange<CGFloat> = 300...640
+    /// The least the previews are left, whatever the columns beside them ask.
+    private static let previewMinWidth: CGFloat = 260
+
+    private static func savedWidth(_ key: String, default value: CGFloat) -> CGFloat {
+        let saved = UserDefaults.standard.double(forKey: key)
+        return saved > 0 ? CGFloat(saved) : value
+    }
 
     /// Copies a dropped or chosen file into the show for a cue.
     var importMedia: (URL, UUID, ShowDocument.MediaSlot?) -> Void = { _, _, _ in }
@@ -97,6 +136,10 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         preview.controller = controller
         controller.runner.attach(preview.surface)
         previewFrame.addSubview(preview)
+        nextPreview.controller = controller
+        nextPreview.runner = controller.nextRunner
+        controller.nextRunner.attach(nextPreview.surface)
+        nextFrame.addSubview(nextPreview)
 
         gotoField.font = Desk.mono(12.5)
         gotoField.placeholderString = "e.g. P12"
@@ -107,25 +150,51 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.state.onOpenProjector = { [weak self] in self?.openProjectorPressed() }
         header.state.onMode = { [weak self] editing in self?.modeChosen(editing) }
         header.state.onAddCue = { [weak self] kind in self?.addCueChosen(kind) }
-        header.state.onAddTransition = { [weak self] in self?.addTransition() }
-        header.state.onShowSettings = { [weak self] in self?.showShowSettings() }
+        header.state.onShowSettings = { [weak self] on in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.root)
+            self.setShowSettings(on)
+        }
+        showSettingsPanel.onTextScale = { [weak controller] value, continuous in
+            controller?.setTextScale(value, coalescing: continuous)
+        }
+        showSettingsPanel.onTitle = { [weak controller] title in controller?.setTitle(title, coalescing: true) }
+        showSettingsPanel.onGeometry = { [weak controller] g in controller?.setGeometry(g, coalescing: true) }
+        showSettingsPanel.onGuides = { [weak controller] on in controller?.showsGuides = on }
+        showSettingsPanel.finishedEditing = { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.root)
+        }
         // An edit still open is finished first, so it lands on the cue it was
         // made for rather than the one the click stands by.
         cueList.onClick = { [weak self] id in
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
+            self.selectedTransition = nil
+            self.showingShowSettings = false
             self.controller.standBy(id)
+            self.refresh()
+        }
+        cueList.onTransitionClick = { [weak self] id in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.root)
+            self.selectedTransition = id
+            self.showingShowSettings = false
+            self.refresh()
         }
         cueList.onStepClick = { [weak self] id, step in
             guard let self else { return }
             self.window?.makeFirstResponder(self.root)
+            self.selectedTransition = nil
+            self.showingShowSettings = false
             self.controller.standBy(id, step: step)
+            self.refresh()
         }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
         cueList.onClearTransition = { [weak controller] id in
             controller?.edit("Clear Transition") { show in
-                if let i = show.cues.firstIndex(where: { $0.id == id }) { show.cues[i].transition = TransitionOverrides() }
+                if let i = show.cues.firstIndex(where: { $0.id == id }) { show.cues[i].transition = .standard }
             }
         }
         cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
@@ -143,13 +212,28 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         kindEditor.onSetting = { [weak controller] key, value, continuous in
             guard let controller, let id = controller.standingByCue?.id else { return }
-            controller.setOverride(key, to: value, for: id, coalescing: continuous)
+            controller.setSetting(key, to: value, for: id, coalescing: continuous)
         }
-        for panel in [cueTransitions] {
-            panel.onChange = { [weak controller] key, value, continuous in
-                guard let controller, let id = controller.standingByCue?.id else { return }
-                controller.setOverride(key, to: value, for: id, coalescing: continuous)
-            }
+        cueTransitions.onChange = { [weak self] key, value, continuous in
+            guard let self, let id = self.selectedTransition else { return }
+            self.controller.setSetting(key, to: value, for: id, coalescing: continuous)
+        }
+        listDivider.onDrag = { [weak self] x in
+            guard let self else { return }
+            self.listWidth = x
+            self.root.needsLayout = true
+        }
+        inspectorDivider.onDrag = { [weak self] x in
+            guard let self else { return }
+            // The divider stands in the middle of the gap before the Inspector.
+            self.inspectorWidth = self.root.bounds.width - 16 - (x + Self.columnGap / 2)
+            self.root.needsLayout = true
+        }
+        listDivider.onFinished = { [weak self] in
+            if let self { UserDefaults.standard.set(Double(self.listWidth.clamped(to: Self.listRange)), forKey: "ConsoleListWidth") }
+        }
+        inspectorDivider.onFinished = { [weak self] in
+            if let self { UserDefaults.standard.set(Double(self.inspectorWidth.clamped(to: Self.inspectorRange)), forKey: "ConsoleInspectorWidth") }
         }
         tabs.selectedSegment = 0
         tabs.refusesFirstResponder = true
@@ -157,8 +241,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         tabs.action = #selector(tabChosen)
 
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, editor, kindEditor, cueTransitions, tabs, inspectorEmpty,
-                     keybar] as [NSView] {
+                     warning, previewHeading, previewFrame, nextHeading, nextFrame, inspectorFrame, editor, kindEditor, cueTransitions, showSettingsPanel, tabs, inspectorEmpty,
+                     keybar, cueListEmpty, listDivider, inspectorDivider] as [NSView] {
             root.addSubview(view)
         }
         refresh()
@@ -238,10 +322,25 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let show = controller.show, playhead = controller.playhead, projector = controller.projector
         let live = playhead.live.flatMap { show[$0] }
         let next = playhead.standby.flatMap { show[$0] }
+        controller.updateNextPreview()
+        previewHeading.stringValue = live.map { "On screen: cue \($0.number)" } ?? "On screen"
+        nextHeading.stringValue = next.map { cue in
+            let prompt = cue.line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return "Up next: cue \(cue.number)" + (prompt.isEmpty ? "" : " \u{2014} \(prompt)")
+        } ?? "Up next"
         // A step of a cue may stand by rather than the cue itself: GO carries
         // the live cue on or back to it, or fires another cue straight at it.
         let goPoint = controller.standingByGoPoint
         synchronizeWindowTitleWithDocumentName()
+
+        // A transition stays selected until a cue is clicked, standing by moves on,
+        // or it is no longer in the list: the first cue has none, and show mode shows none.
+        if playhead.standby != lastStandby { selectedTransition = nil; showingShowSettings = false }
+        if controller.mode != .edit { showingShowSettings = false }
+        lastStandby = playhead.standby
+        if let id = selectedTransition, controller.mode != .edit || show.index(of: id).map({ $0 < 1 }) != false {
+            selectedTransition = nil
+        }
 
         let isLive = projector.display != nil
         header.update(
@@ -250,17 +349,19 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             live: isLive && !playhead.blackout,
             warn: playhead.blackout || projector.warning != nil,
             projectorOpen: projector.isOpen,
+            showSettingsOn: showingShowSettings,
             goEnabled: next != nil,
             goTip: goPoint.map { $0.cue.id == playhead.live ? "Carry cue \($0.cue.number) on" : "Fire cue \($0.cue.number) at GO \($0.number)" }
                 ?? next.map { "Fire cue \($0.number)" } ?? "End of the cue sheet"
         )
         standby.update(standby: next, live: live, goPoint: goPoint, entry: playhead.entry, arm: controller.standbyArmState)
         cueList.update(show: show, standby: playhead.standby, standbyStep: playhead.standbyStep, live: playhead.live,
-                       taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit)
+                       taken: playhead.goPointsTaken, issues: Set(show.issues.flatMap(\.cues)), editing: controller.mode == .edit,
+                       selectedTransition: selectedTransition)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing, goPoint: controller.standingByGoPoint)
         kindEditor.update(cue: editing, goPoint: controller.standingByGoPoint)
-        cueTransitions.update(cue: editing, defaults: show.settings)
+        cueTransitions.update(cue: selectedTransition.flatMap { show[$0] })
         // The second tab is named for the kind of cue standing by, so what
         // it holds is plain before it is opened.
         let kindTab = editing.map(\.kind.heading) ?? "Settings"
@@ -272,14 +373,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         status.stringValue = controller.message ?? ""
         warning.message = projector.warning ?? ""
-        if let settings = showSettings?.state {
-            settings.title = show.title
-            settings.fallback = document?.displayName ?? "Untitled"
-            settings.settings = show.settings
-            settings.geometry = show.settings.geometry
-            settings.guidesOn = controller.showsGuides
-            settings.outputAspect = previewAspect
-        }
+        showSettingsPanel.update(title: show.title, fallback: document?.displayName ?? "Untitled",
+                                 settings: show.settings, guidesOn: controller.showsGuides, outputAspect: previewAspect)
         root.needsLayout = true
     }
 
@@ -294,15 +389,22 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private func layoutContent() {
         let b = root.bounds
-        let headerHeight: CGFloat = 54, keybarHeight: CGFloat = 40, leftWidth: CGFloat = 340
+        let headerHeight: CGFloat = 54, keybarHeight: CGFloat = 40
+        let leftWidth = listWidth.clamped(to: Self.listRange)
         header.frame = NSRect(x: 0, y: 0, width: b.width, height: headerHeight)
         keybar.frame = NSRect(x: 0, y: b.height - keybarHeight, width: b.width, height: keybarHeight)
         let top = headerHeight + 1, bottom = b.height - keybarHeight
 
-        // Left: standby, the cue list, Go to, and the status line.
-        let standbyHeight = standby.height(width: leftWidth)
-        standby.frame = NSRect(x: 0, y: top, width: leftWidth, height: standbyHeight)
-        cuesHeading.frame = NSRect(x: 16, y: standby.frame.maxY + 15, width: leftWidth - 32, height: 18)
+        // Left: the cue list, Go to, and the status line, or with no cues,
+        // just a note.
+        let noCues = controller.show.cues.isEmpty
+        for view in [cuesHeading, cueList, gotoLabel, gotoField, status] as [NSView] { view.isHidden = noCues }
+        cueListEmpty.isHidden = !noCues
+        cueListEmpty.stringValue = controller.mode == .edit
+            ? "No cues yet. Add one with Add Cue at the top."
+            : "No cues yet. Switch to Edit mode to add some."
+        centre(cueListEmpty, in: NSRect(x: 16, y: top, width: leftWidth - 32, height: max(0, bottom - top)))
+        cuesHeading.frame = NSRect(x: 16, y: top + 15, width: leftWidth - 32, height: 18)
         let statusHeight = Desk.height(of: status, width: leftWidth - 32)
         status.frame = NSRect(x: 16, y: bottom - 12 - statusHeight, width: leftWidth - 32, height: statusHeight)
         let gotoY = status.frame.minY - (statusHeight > 0 ? 10 : 0) - 26
@@ -312,7 +414,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         cueList.frame = NSRect(x: 6, y: listTop, width: leftWidth - 12, height: max(0, gotoY - 12 - listTop))
         divider.frame = NSRect(x: leftWidth, y: top - 1, width: 1, height: bottom - top + 1)
 
-        // Right: warnings, the preview, and in edit mode the projection area.
+        // Right: warnings, the previews, and in edit mode the Inspector.
         let x = leftWidth + 1 + 16, width = b.width - x - 16
         var y = top + 16
         warning.isHidden = warning.message.isEmpty
@@ -321,49 +423,53 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             warning.frame = NSRect(x: x, y: y, width: width, height: h)
             y += h + 14
         }
-        let headingHeight: CGFloat = 27, gap: CGFloat = 24
+        let headingHeight: CGFloat = 27, gap = Self.columnGap
         let editing = controller.mode == .edit
         // In edit mode with nothing standing by there is no cue to inspect,
         // so the message stands alone where the tabs would be.
-        let inspecting = editing && controller.standingByCue != nil
+        let settingsOn = editing && showingShowSettings
+        let transitionSelected = editing && !settingsOn && selectedTransition != nil
+        let inspecting = editing && !settingsOn && !transitionSelected && controller.standingByCue != nil
+        showSettingsPanel.isHidden = !settingsOn
         tabs.isHidden = !inspecting
         for (i, panel) in inspectorPanels.enumerated() { panel.isHidden = !inspecting || i != tabs.selectedSegment }
-        inspectorEmpty.isHidden = !editing || inspecting
+        cueTransitions.isHidden = !transitionSelected
+        inspectorEmpty.isHidden = !editing || settingsOn || inspecting || transitionSelected
+        // The Inspector is always there: in edit mode it edits the cue
+        // standing by, and in show mode it says what stands by and what is on screen.
+        standby.isHidden = editing
         let tabsSize = tabs.fittingSize
 
-        // Given the room, the editor stands beside the preview in a column of
-        // its own, full height, so neither squashes the other and a long
-        // panel scrolls rather than shrinking the picture.
-        if editing, width >= Self.sideBySideWidth {
-            let editorWidth = CGFloat(350)
-            let previewWidth = width - editorWidth - gap
-            let editorX = x + previewWidth + gap
-            centre(inspectorEmpty, in: NSRect(x: editorX, y: y, width: editorWidth, height: max(0, bottom - 16 - y)))
-            tabs.frame = NSRect(x: editorX, y: y, width: tabsSize.width, height: tabsSize.height)
-            let panelTop = y + tabsSize.height + 10
-            let panelFrame = NSRect(x: editorX, y: panelTop, width: editorWidth, height: max(0, bottom - 16 - panelTop))
+        listDivider.frame = NSRect(x: leftWidth - 4, y: top, width: 9, height: max(0, bottom - top))
+        // The Inspector is a column of its own, full height, so a long
+        // panel scrolls rather than shrinking the pictures.
+        let editorWidth = inspectorWidth.clamped(to: Self.inspectorRange)
+            .clamped(to: 0...max(0, width - gap - Self.previewMinWidth))
+        let previewWidth = width - editorWidth - gap
+        let editorX = x + previewWidth + gap
+        let region = NSRect(x: editorX, y: y, width: editorWidth, height: max(0, bottom - 16 - y))
+        inspectorFrame.frame = region
+        inspectorDivider.frame = NSRect(x: editorX - gap / 2 - 4, y: y, width: 9, height: region.height)
+        if editing {
+            let inner = region.insetBy(dx: Self.inspectorPadding, dy: Self.inspectorPadding)
+            centre(inspectorEmpty, in: inner)
+            tabs.frame = NSRect(x: inner.minX, y: inner.minY, width: tabsSize.width, height: tabsSize.height)
+            let panelTop = inner.minY + tabsSize.height + 10
+            let panelFrame = NSRect(x: inner.minX, y: panelTop, width: inner.width, height: max(0, inner.maxY - panelTop))
             for panel in inspectorPanels { panel.frame = panelFrame }
-            placePreview(x: x, y: y, width: previewWidth, available: bottom - 16 - y - headingHeight,
-                         headingHeight: headingHeight)
-            return
+            cueTransitions.frame = inner
+            showSettingsPanel.frame = inner
+        } else {
+            // The panel pads itself.
+            standby.frame = NSRect(x: region.minX, y: region.minY, width: region.width,
+                                   height: min(standby.height(width: region.width), region.height))
         }
-
-        // Narrower, the editor sits beneath the preview, every panel the same
-        // height so the preview doesn't jump as the tabs change.
-        var available = bottom - 16 - y - headingHeight
-        if inspecting {
-            let h = [editor.preferredHeight, kindEditor.preferredHeight, cueTransitions.preferredHeight].max() ?? 0
-            let panelFrame = NSRect(x: x, y: bottom - 16 - h, width: width, height: h)
-            for panel in inspectorPanels { panel.frame = panelFrame }
-            tabs.frame = NSRect(x: x, y: panelFrame.minY - 10 - tabsSize.height, width: tabsSize.width, height: tabsSize.height)
-            available -= h + 16 + tabsSize.height + 10
-        } else if editing {
-            let h = Self.emptyInspectorHeight
-            centre(inspectorEmpty, in: NSRect(x: x, y: bottom - 16 - h, width: width, height: h))
-            available -= h + 16
-        }
-        placePreview(x: x, y: y, width: width, available: available, headingHeight: headingHeight)
+        placePreview(x: x, y: y, width: previewWidth, available: bottom - 16 - y - headingHeight,
+                     headingHeight: headingHeight)
     }
+
+    /// The space between the previews and the Inspector, where its divider stands.
+    private static let columnGap: CGFloat = 24
 
     /// Centres a wrapping label in the space it is given, across and down.
     private func centre(_ label: NSTextField, in rect: NSRect) {
@@ -373,26 +479,29 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         label.frame = NSRect(x: rect.midX - width / 2, y: rect.midY - h / 2, width: width, height: h)
     }
 
-    /// The band the Inspector keeps under the preview with nothing standing
-    /// by: room enough for its message to sit in rather than cling to an edge.
-    private static let emptyInspectorHeight: CGFloat = 120
-
-    /// How wide the space right of the cue list must be before the editor
-    /// moves alongside the preview rather than under it.
-    private static let sideBySideWidth: CGFloat = 1000
+    /// Space between the Inspector panel's edge and what it holds.
+    private static let inspectorPadding: CGFloat = 12
 
     /// The preview, as large as its space allows at the projector's shape,
     /// centred in it, with its heading just above its corner.
     private func placePreview(x: CGFloat, y: CGFloat, width: CGFloat, available: CGFloat, headingHeight: CGFloat) {
-        var w = width, h = (width / previewAspect).rounded()
-        if h > available {
-            h = max(available, 0)
-            w = (h * previewAspect).rounded()
-        }
-        let left = x + ((width - w) / 2).rounded(), blockTop = y + ((available - h) / 2).rounded()
-        previewHeading.frame = NSRect(x: left, y: blockTop, width: w, height: 18)
-        previewFrame.frame = NSRect(x: left, y: blockTop + headingHeight, width: w, height: h)
+        // The live preview, and under it the up-next preview, smaller, both
+        // centred across the space and together centred down it.
+        let ratio: CGFloat = 0.6, gap: CGFloat = 14
+        let room = max(0, available - headingHeight - gap)
+        let w = min(width, (room * previewAspect / (1 + ratio)).rounded(.down))
+        let h = (w / previewAspect).rounded()
+        let nw = (w * ratio).rounded(), nh = (nw / previewAspect).rounded()
+        let total = headingHeight + h + gap + headingHeight + nh
+        let top = y + max(0, ((available + headingHeight - total) / 2).rounded())
+        let left = x + ((width - w) / 2).rounded()
+        previewHeading.frame = NSRect(x: left, y: top, width: w, height: 18)
+        previewFrame.frame = NSRect(x: left, y: top + headingHeight, width: w, height: h)
         preview.frame = previewFrame.bounds.insetBy(dx: 1, dy: 1)
+        let nextLeft = x + ((width - nw) / 2).rounded(), nextTop = previewFrame.frame.maxY + gap
+        nextHeading.frame = NSRect(x: nextLeft, y: nextTop, width: nw, height: 18)
+        nextFrame.frame = NSRect(x: nextLeft, y: nextTop + headingHeight, width: nw, height: nh)
+        nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
     }
 
     // MARK: Actions
@@ -414,14 +523,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.makeFirstResponder(root)
     }
 
-    /// Gives the cue standing by a transition of its own, which shows as a row
-    /// above it, and opens the Transitions tab to adjust it.
-    func addTransition() {
-        guard controller.addTransition() != nil else { return }
-        showInspectorTab(2)
-        window?.makeFirstResponder(root)
-    }
-
     private func modeChosen(_ editing: Bool) {
         setMode(editing)
         window?.makeFirstResponder(root)
@@ -433,34 +534,19 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.makeFirstResponder(root)
     }
 
-    /// The show's defaults and its projection area, in a window of their
-    /// own: neither is touched often enough to sit beside the cue editor.
-    func showShowSettings() {
-        let settings = showSettings ?? {
-            let made = ShowSettingsWindowController()
-            let controller = self.controller
-            made.state.onDefault = { [weak controller] key, value, continuous in
-                controller?.setDefault(key, to: value, coalescing: continuous)
-            }
-            made.state.onTitle = { [weak controller] title in controller?.setTitle(title, coalescing: true) }
-            made.state.onGeometry = { [weak controller] g in controller?.setGeometry(g, coalescing: true) }
-            made.state.onGuides = { [weak controller] on in controller?.showsGuides = on }
-            made.state.onFinishedEditing = { [weak self] in
-                guard let self else { return }
-                self.window?.makeFirstResponder(self.root)
-            }
-            showSettings = made
-            return made
-        }()
+    /// Show Settings in the Inspector, or back to the cue standing by.
+    func setShowSettings(_ on: Bool) {
+        guard !on || controller.mode == .edit else { return }
+        showingShowSettings = on
+        if on { selectedTransition = nil }
         refresh()
-        settings.showWindow(nil)
-        settings.window?.makeKeyAndOrderFront(nil)
     }
 
-    #if DEBUG
-    /// The Show Settings window's content, for the snapshot tool.
-    var showSettingsView: NSView? { showSettings?.window?.contentView }
-    #endif
+    /// Show › Show Settings: the show's title, text size and projection area
+    /// in the Inspector, where the header's toggle shows them.
+    func showShowSettings() {
+        setShowSettings(true)
+    }
 
     /// For the snapshot tool: shows one of the Inspector's tabs.
     func showInspectorTab(_ index: Int) {
@@ -578,5 +664,35 @@ final class ConsoleRootView: NSView {
     /// A click on empty space takes the keyboard back from the Go-to field.
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+    }
+}
+
+extension CGFloat {
+    fileprivate func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+/// A thin strip between two columns, dragged sideways to resize them. It
+/// reports where the pointer is, in the console's own coordinates.
+final class ColumnDivider: NSView {
+    var onDrag: (CGFloat) -> Void = { _ in }
+    var onFinished: () -> Void = {}
+
+    override var isFlipped: Bool { true }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let superview else { return }
+        onDrag(superview.convert(event.locationInWindow, from: nil).x)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        onFinished()
     }
 }

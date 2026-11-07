@@ -37,7 +37,7 @@ public final class StageRunner {
         /// A whole fade's length. A fade that begins partway takes less.
         var seconds: Double
         /// The cue waiting for the curtain to come down.
-        var next: (cue: Cue, defaults: ShowSettings, step: Int?)?
+        var next: (cue: Cue, show: ShowSettings, step: Int?)?
     }
 
     private var change: Change?
@@ -118,22 +118,22 @@ public final class StageRunner {
     /// down to black and up on the cue, whose clock starts as it appears.
     /// With a step, the cue comes up at that GO point, the steps before it
     /// already done.
-    public func change(to cue: Cue, defaults: ShowSettings, transition: Transition, at time: Double, startingAt step: Int? = nil) {
+    public func change(to cue: Cue, show: ShowSettings, transition: Transition, at time: Double, startingAt step: Int? = nil) {
         switch transition.style {
         case .snap:
-            load(cue, defaults: defaults, presentation: .run, at: time, startingAt: step)
+            load(cue, show: show, presentation: .run, at: time, startingAt: step)
         case .crossfade where self.cue != nil:
-            dissolveInto(cue, defaults: defaults, at: time, seconds: transition.fadeSeconds, step: step)
+            dissolveInto(cue, show: show, at: time, seconds: transition.fadeSeconds, step: step)
         case .fade, .crossfade:
             if self.cue == nil {
                 // Nothing to fade out, so straight up from black.
                 curtain = 1
-                bringUp(cue, defaults: defaults, at: time, seconds: transition.fadeSeconds, step: step)
+                bringUp(cue, show: show, at: time, seconds: transition.fadeSeconds, step: step)
             } else {
                 // Down from wherever the curtain is, so nothing flashes up:
                 // a fade out carries on, and a fade in turns round.
                 change = Change(phase: .out, start: time, from: curtain, seconds: transition.fadeSeconds,
-                                next: (cue, defaults, step))
+                                next: (cue, show, step))
             }
         }
     }
@@ -142,7 +142,7 @@ public final class StageRunner {
     /// up and runs underneath at once, and the photograph fades away over it.
     /// The old cue is frozen for the length of the dissolve, which nobody
     /// sees, because a cue has settled before the next one fires.
-    private func dissolveInto(_ cue: Cue, defaults: ShowSettings, at time: Double, seconds: Double, step: Int?) {
+    private func dissolveInto(_ cue: Cue, show: ShowSettings, at time: Double, seconds: Double, step: Int?) {
         let old = self.cue.flatMap { renderers[$0.kind] as? Snapshots }
         // Taken before anything is wiped, and with any fade or crossfade
         // already under way in it, so a quick second GO dissolves from what
@@ -152,7 +152,7 @@ public final class StageRunner {
             let size = CGSize(width: s.inset.bounds.width * scale, height: s.inset.bounds.height * scale)
             return s.snapshot(replacing: change == nil ? old?.snapshot(size: size) : nil)
         }
-        put(cue, defaults: defaults, presentation: .run, at: time, step: step)
+        put(cue, show: show, presentation: .run, at: time, step: step)
         curtain = 0
         for (s, image) in zip(surfaces, images) { s.startDissolve(from: image) }
         dissolve = 1
@@ -162,20 +162,20 @@ public final class StageRunner {
     /// Puts a cue on stage at once, with no transition. `.run` starts it from
     /// its hold; `.settled` puts it up finished, with nothing animating, as
     /// when resuming after a crash.
-    public func load(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double,
+    public func load(_ cue: Cue, show: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double,
                      startingAt step: Int? = nil) {
         change = nil
         curtain = 0
         dissolve = 0
-        put(cue, defaults: defaults, presentation: presentation, at: time, step: step)
+        put(cue, show: show, presentation: presentation, at: time, step: step)
     }
 
-    private func bringUp(_ cue: Cue, defaults: ShowSettings, at time: Double, seconds: Double, step: Int?) {
-        put(cue, defaults: defaults, presentation: .run, at: time, step: step)
+    private func bringUp(_ cue: Cue, show: ShowSettings, at time: Double, seconds: Double, step: Int?) {
+        put(cue, show: show, presentation: .run, at: time, step: step)
         change = Change(phase: .into, start: time, from: curtain, seconds: seconds)
     }
 
-    private func put(_ cue: Cue, defaults: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double, step: Int?) {
+    private func put(_ cue: Cue, show: ShowSettings, presentation: Playhead.Fire.Presentation, at time: Double, step: Int?) {
         dissolve = 0
         // Every renderer is wiped on every surface, not just the incoming one.
         for (kind, renderer) in renderers {
@@ -196,10 +196,10 @@ public final class StageRunner {
             return
         }
 
-        renderer.prepare(cue, defaults: defaults)
+        renderer.prepare(cue, show: show)
         for surface in surfaces { renderer.fit(surface) }
 
-        let timing = cue.timing(defaults: defaults)
+        let timing = cue.timing
         clock = TickClock(start: time, tickMs: timing.clockMs, holdTicks: timing.holdTicks,
                           isInstant: renderer.isInstant || timing.isInstant)
 
@@ -239,10 +239,10 @@ public final class StageRunner {
         paint(at: time)
     }
 
-    /// The show's defaults changed. Most take effect when a cue next runs;
+    /// The show's settings changed. Most take effect when a cue next runs;
     /// renderers apply what can change on stage, such as text size.
-    public func settingsChanged(_ defaults: ShowSettings) {
-        for renderer in renderers.values { renderer.settingsChanged(defaults) }
+    public func settingsChanged(_ show: ShowSettings) {
+        for renderer in renderers.values { renderer.settingsChanged(show) }
     }
 
     /// How ready a cue is, if its renderer prepares cues ahead of GO.
@@ -251,14 +251,14 @@ public final class StageRunner {
     }
 
     /// Gets a cue that may fire next ready, so firing it doesn't wait.
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
-        renderers[cue.kind]?.preload(cue, defaults: defaults)
+    public func preload(_ cue: Cue, show: ShowSettings) {
+        renderers[cue.kind]?.preload(cue, show: show)
     }
 
     /// Shows an edited cue finished, at once, without counting as the cue
     /// settling: a redraw in edit mode, or a resume, must never set off a continue.
-    public func redraw(_ cue: Cue, defaults: ShowSettings, at time: Double) {
-        load(cue, defaults: defaults, presentation: .settled, at: time)
+    public func redraw(_ cue: Cue, show: ShowSettings, at time: Double) {
+        load(cue, show: show, presentation: .settled, at: time)
         settlePending = false
     }
 
@@ -301,7 +301,7 @@ public final class StageRunner {
             curtain = change.from + (1 - change.from) * Self.ease(done)
             guard done >= 1, let next = change.next else { return }
             // In the dark: the next cue goes up from the moment it went black.
-            bringUp(next.cue, defaults: next.defaults, at: change.start + length, seconds: change.seconds, step: next.step)
+            bringUp(next.cue, show: next.show, at: change.start + length, seconds: change.seconds, step: next.step)
             advanceChange(to: time)
         case .into:
             let length = change.seconds * change.from

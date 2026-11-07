@@ -16,10 +16,13 @@ struct ShowControllerTests {
     let stage = surface()
 
     func controller(_ cues: [Cue], hold: Int = 2) -> ShowController {
-        var settings = ShowSettings()
-        settings.holdTicks = hold
+        let cues = cues.map { cue in
+            var cue = cue
+            SettingKey.hold.set(.number(hold), in: &cue)
+            return cue
+        }
         let clock = self.clock
-        let c = ShowController(show: Show(title: "Test", cues: cues, settings: settings),
+        let c = ShowController(show: Show(title: "Test", cues: cues),
                                renderers: [.title: renderer], now: { clock.time })
         c.runner.attach(stage)
         return c

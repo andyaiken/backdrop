@@ -11,9 +11,12 @@ struct VideoShowTests {
     let stage = surface(width: 640, height: 360)
 
     func controller(_ cues: [Cue]) -> ShowController {
-        var settings = ShowSettings()
-        settings.holdTicks = 0
-        let c = ShowController(show: Show(cues: cues, settings: settings), renderers: [
+        let cues = cues.map { cue in
+            var cue = cue
+            SettingKey.hold.set(.number(0), in: &cue)
+            return cue
+        }
+        let c = ShowController(show: Show(cues: cues), renderers: [
             .title: titles,
             .video: VideoRenderer(media: { TestClips.folder.appendingPathComponent($0) }),
         ])

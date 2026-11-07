@@ -17,19 +17,17 @@ struct StageRunnerTests {
 
     @Test("A cue settles after its hold and its reveal, on the tick clock")
     func settlesOnTheClock() throws {
-        var defaults = ShowSettings()
-        defaults.holdTicks = 4
-        let cue = titleCue("THE LOUVRE", sub: "PARIS", key: "VITRUVIAN")
+        let cue = titleCue("THE LOUVRE", sub: "PARIS", key: "VITRUVIAN", settings: TitleSettings(holdTicks: 4))
 
         // The renderer's first draws are the plans, so the same seed gives
         // the same plans here.
         var random = SeededRandom(seed: 5)
         guard case .title(let content) = cue.content else { return }
-        let reveal = TitleReveal(cue: content, settings: defaults.resolved(content.overrides), random: &random)
+        let reveal = TitleReveal(cue: content, settings: content.settings, random: &random)
         let settleFrame = max(reveal.titlePlan.duration, reveal.scenePlan.duration)
         let expected = 10 + Double(settleFrame + 4) * 0.044
 
-        runner.load(cue, defaults: defaults, presentation: .run, at: 10)
+        runner.load(cue, show: ShowSettings(), presentation: .run, at: 10)
         #expect(runner.isRunning)
 
         // Tick at 60 Hz until it settles.
@@ -51,16 +49,16 @@ struct StageRunnerTests {
 
     @Test("The first frame is painted when the cue loads, not on the next tick")
     func paintsImmediately() {
-        runner.load(titleCue("THE LOUVRE"), defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(titleCue("THE LOUVRE"), show: ShowSettings(), presentation: .run, at: 0)
         #expect(tree(renderer, on: live)!.title.runs.count == 10)
         #expect(!tree(renderer, on: live)!.root.isHidden)
     }
 
     @Test("A cue nothing can paint yet shows black and settles at once")
     func unpaintableKindsShowBlack() {
-        runner.load(titleCue("THE LOUVRE"), defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(titleCue("THE LOUVRE"), show: ShowSettings(), presentation: .run, at: 0)
         let image = Cue(number: "2", content: .image(ImageContent(text: "THE LOUVRE")))
-        runner.load(image, defaults: ShowSettings(), presentation: .run, at: 1)
+        runner.load(image, show: ShowSettings(), presentation: .run, at: 1)
         #expect(tree(renderer, on: live)!.root.isHidden)
         #expect(tree(renderer, on: live)!.title.runs.isEmpty)
         #expect(runner.tick(at: 1.01) == image.id)
@@ -69,7 +67,7 @@ struct StageRunnerTests {
     @Test("Resuming puts a cue up finished, with nothing to run")
     func settledPresentation() {
         let cue = titleCue("TEMPLE CHURCH", sub: "LONDON")
-        runner.load(cue, defaults: ShowSettings(), presentation: .settled, at: 0)
+        runner.load(cue, show: ShowSettings(), presentation: .settled, at: 0)
         #expect(!runner.isRunning)
         #expect(text(of: tree(renderer, on: live)!.title.runs) == "TEMPLE CHURCH")
         #expect(runner.tick(at: 0.01) == cue.id)
@@ -89,7 +87,7 @@ struct StageRunnerTests {
 
     @Test("Geometry changes move the inset and refit the cue")
     func relayout() {
-        runner.load(titleCue("ROSSLYN CHAPEL"), defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(titleCue("ROSSLYN CHAPEL"), show: ShowSettings(), presentation: .run, at: 0)
         live.geometry = Geometry(width: 50, height: 50)
         runner.relayout(live)
         #expect(live.inset.frame == CGRect(x: 480, y: 270, width: 960, height: 540))
@@ -98,7 +96,7 @@ struct StageRunnerTests {
 
     @Test("Detaching a surface takes its layers away")
     func detach() {
-        runner.load(titleCue("THE LOUVRE"), defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(titleCue("THE LOUVRE"), show: ShowSettings(), presentation: .run, at: 0)
         runner.detach(live)
         // Only the surface's own layers remain: its curtain, its crossfade layer and its guides.
         #expect(live.inset.sublayers?.count == 3)

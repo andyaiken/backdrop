@@ -13,14 +13,15 @@ public struct Cue: Identifiable, Equatable, Sendable {
     public var line: String
     /// What happens after this cue: GO, a timed wait, or this cue finishing.
     public var continueMode: ContinueMode
-    /// The cue's own transition in, where it differs from the show's.
-    public var transition: TransitionOverrides
+    /// How the stage changes to this cue.
+    public var transition: Transition
     public var content: Content
 
     public enum Content: Equatable, Sendable {
         case title(TitleContent)
         case anagram(AnagramContent)
         case image(ImageContent)
+        case text(TextContent)
         case morph(MorphContent)
         case map(MapContent)
         case video(VideoContent)
@@ -29,7 +30,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, morph, map, video, blank, layered
+        case title, anagram, image, text, morph, map, video, blank, layered
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -52,6 +53,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .title: "lock.open.rotation"
             case .anagram: "shuffle"
             case .image: "photo"
+            case .text: "textformat"
             case .morph: "rectangle.2.swap"
             case .map: "map"
             case .video: "film"
@@ -66,6 +68,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .title: "Letters scramble and resolve into a line of text."
             case .anagram: "Shows a phrase, then rearranges its letters into another."
             case .image: "Shows a picture, fitted to the projection area."
+            case .text: "Shows words in a font and colour you choose."
             case .morph: "Dissolves one image or text into another."
             case .map: "Draws a route across a map."
             case .video: "Plays a video file."
@@ -75,13 +78,13 @@ public struct Cue: Identifiable, Equatable, Sendable {
         }
 
         /// The kinds a show uses most, which the Add Cue menus list first.
-        public static let common: [Kind] = [.image, .video]
+        public static let common: [Kind] = [.image, .text, .video]
         /// The rest, after a separator, by the name they show.
         public static let others: [Kind] = [.anagram, .blank, .title, .layered, .map, .morph]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
-                transition: TransitionOverrides = .init(), content: Content) {
+                transition: Transition = .standard, content: Content) {
         self.id = id
         self.number = number
         self.line = line
@@ -95,6 +98,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .title: .title
         case .anagram: .anagram
         case .image: .image
+        case .text: .text
         case .morph: .morph
         case .map: .map
         case .video: .video
@@ -111,10 +115,11 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .title(let c): c.text
             case .anagram(let c): c.anagrams.first?.text ?? ""
             case .image(let c): c.text
+            case .text(let c): c.text
             case .morph(let c): c.text
             case .map(let c): c.text
             case .video(let c): c.text
-            case .blank(let c): c.text
+            case .blank: ""
             case .layered(let c): c.text
             }
         }
@@ -126,10 +131,11 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 c.anagrams[0].text = newValue
                 content = .anagram(c)
             case .image(var c): c.text = newValue; content = .image(c)
+            case .text(var c): c.text = newValue; content = .text(c)
             case .morph(var c): c.text = newValue; content = .morph(c)
             case .map(var c): c.text = newValue; content = .map(c)
             case .video(var c): c.text = newValue; content = .video(c)
-            case .blank(var c): c.text = newValue; content = .blank(c)
+            case .blank: break
             case .layered(var c): c.text = newValue; content = .layered(c)
             }
         }
@@ -143,7 +149,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch content {
             case .title(let c): c.sub
             case .anagram(let c): c.anagrams.first?.answer ?? ""
-            case .image, .morph, .map, .layered: ""
+            case .image, .text, .morph, .map, .layered: ""
             case .video(let c): c.sub
             case .blank: ""
             }
@@ -155,7 +161,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 if c.anagrams.isEmpty { c.anagrams = [Anagram()] }
                 c.anagrams[0].answer = newValue
                 content = .anagram(c)
-            case .image, .morph, .map, .layered: break
+            case .image, .text, .morph, .map, .layered: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .blank: break
             }
@@ -163,7 +169,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
     }
 
     /// Instant cues have nothing to resolve, so they skip the hold.
-    public var isInstant: Bool { kind == .blank }
+    public var isInstant: Bool { kind == .blank || kind == .text }
 }
 
 // MARK: - Coding
@@ -176,8 +182,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
 // and answer, in place of the cue's own text and answer.
 extension Cue: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, into, pairs, pictures, route, reference, colour, atEnd
-        case overrides, layers
+        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, src, into, pairs, pictures, route, reference, colour, atEnd, font, align, valign, background
+        case settings, layers
     }
 
     public init(from decoder: Decoder) throws {
@@ -186,7 +192,7 @@ extension Cue: Codable {
         number = try Self.decodeNumber(c)
         line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""
         continueMode = try c.decodeIfPresent(ContinueMode.self, forKey: .continueMode) ?? .whenCued
-        transition = (try c.decodeIfPresent(TransitionOverrides.self, forKey: .transition) ?? .init()).clamped()
+        transition = try c.value(.transition, Transition.standard)
 
         let text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         let sub = try c.decodeIfPresent(String.self, forKey: .sub) ?? ""
@@ -198,7 +204,7 @@ extension Cue: Codable {
                 text: text,
                 sub: sub,
                 key: try c.decodeIfPresent(String.self, forKey: .key) ?? "",
-                overrides: (try c.decodeIfPresent(TitleOverrides.self, forKey: .overrides) ?? .init()).clamped()
+                settings: try c.value(.settings, TitleSettings())
             ))
         case .anagram:
             var anagrams = try c.decodeIfPresent([Anagram].self, forKey: .anagrams)
@@ -208,26 +214,35 @@ extension Cue: Codable {
             }
             content = .anagram(AnagramContent(
                 anagrams: anagrams ?? [],
-                overrides: (try c.decodeIfPresent(AnagramOverrides.self, forKey: .overrides) ?? .init()).clamped()
+                settings: try c.value(.settings, AnagramSettings())
             ))
         case .image:
             content = .image(ImageContent(
                 text: text,
                 src: src,
-                overrides: (try c.decodeIfPresent(ImageOverrides.self, forKey: .overrides) ?? .init()).clamped()
+                settings: try c.value(.settings, ImageSettings())
+            ))
+        case .text:
+            content = .text(TextContent(
+                text: text,
+                font: try c.decodeIfPresent(String.self, forKey: .font) ?? "",
+                colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? RGB(255, 255, 255),
+                alignment: try c.decodeIfPresent(TextAlign.self, forKey: .align) ?? .centre,
+                vertical: try c.decodeIfPresent(TextVertical.self, forKey: .valign) ?? .middle,
+                background: try c.decodeIfPresent(RGB.self, forKey: .background) ?? .black
             ))
         case .morph:
-            let overrides = (try c.decodeIfPresent(MorphOverrides.self, forKey: .overrides) ?? .init()).clamped()
+            let settings = try c.value(.settings, MorphSettings())
             if var pictures = try c.decodeIfPresent([MorphPicture].self, forKey: .pictures) {
                 if !pictures.isEmpty { pictures[0].pairs = []; pictures[0].morphMs = nil }
-                content = .morph(MorphContent(text: text, pictures: pictures, overrides: overrides))
+                content = .morph(MorphContent(text: text, pictures: pictures, settings: settings))
             } else {
                 content = .morph(MorphContent(
                     text: text,
                     src: src,
                     into: try c.decodeIfPresent(String.self, forKey: .into) ?? "",
                     pairs: try c.decodeIfPresent([MorphPair].self, forKey: .pairs) ?? [],
-                    overrides: overrides
+                    settings: settings
                 ))
             }
         case .map:
@@ -236,7 +251,7 @@ extension Cue: Codable {
                 src: src,
                 route: try c.decodeIfPresent([RoutePoint].self, forKey: .route) ?? [],
                 reference: try c.decodeIfPresent(MapReference.self, forKey: .reference),
-                overrides: (try c.decodeIfPresent(MapOverrides.self, forKey: .overrides) ?? .init()).clamped()
+                settings: try c.value(.settings, MapSettings())
             ))
         case .video:
             content = .video(VideoContent(
@@ -250,11 +265,10 @@ extension Cue: Codable {
                 text: text,
                 base: src,
                 layers: try c.decodeIfPresent([ImageLayer].self, forKey: .layers) ?? [],
-                overrides: (try c.decodeIfPresent(LayeredOverrides.self, forKey: .overrides) ?? .init()).clamped()
+                settings: try c.value(.settings, LayeredSettings())
             ))
         case .blank:
             content = .blank(BlankContent(
-                text: text,
                 colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? .black
             ))
         }
@@ -275,23 +289,29 @@ extension Cue: Codable {
         try c.encode(kind, forKey: .kind)
         try c.encode(line, forKey: .line)
         if continueMode != .whenCued { try c.encode(continueMode, forKey: .continueMode) }
-        if !transition.isEmpty { try c.encode(transition, forKey: .transition) }
+        try c.encode(transition, forKey: .transition)
         if case .anagram(let a) = content, !a.isPlain {
             try c.encode(a.anagrams, forKey: .anagrams)
-        } else {
+        } else if kind != .blank {
             try c.encode(text, forKey: .text)
         }
         switch content {
         case .title(let t):
             try c.encode(t.sub, forKey: .sub)
             try c.encode(t.key, forKey: .key)
-            if !t.overrides.isEmpty { try c.encode(t.overrides, forKey: .overrides) }
+            try c.encode(t.settings, forKey: .settings)
         case .anagram(let a):
             if a.isPlain { try c.encode(a.anagrams.first?.answer ?? "", forKey: .answer) }
-            if !a.overrides.isEmpty { try c.encode(a.overrides, forKey: .overrides) }
+            try c.encode(a.settings, forKey: .settings)
         case .image(let i):
             try c.encode(i.src, forKey: .src)
-            if !i.overrides.isEmpty { try c.encode(i.overrides, forKey: .overrides) }
+            try c.encode(i.settings, forKey: .settings)
+        case .text(let t):
+            try c.encode(t.font, forKey: .font)
+            try c.encode(t.colour, forKey: .colour)
+            try c.encode(t.alignment, forKey: .align)
+            try c.encode(t.vertical, forKey: .valign)
+            try c.encode(t.background, forKey: .background)
         case .morph(let m):
             if m.isPlain {
                 try c.encode(m.pictures.first?.src ?? "", forKey: .src)
@@ -300,12 +320,12 @@ extension Cue: Codable {
             } else {
                 try c.encode(m.pictures, forKey: .pictures)
             }
-            if !m.overrides.isEmpty { try c.encode(m.overrides, forKey: .overrides) }
+            try c.encode(m.settings, forKey: .settings)
         case .map(let m):
             try c.encode(m.src, forKey: .src)
             try c.encode(m.route, forKey: .route)
             try c.encodeIfPresent(m.reference, forKey: .reference)
-            if !m.overrides.isEmpty { try c.encode(m.overrides, forKey: .overrides) }
+            try c.encode(m.settings, forKey: .settings)
         case .video(let v):
             try c.encode(v.sub, forKey: .sub)
             try c.encode(v.src, forKey: .src)
@@ -313,7 +333,7 @@ extension Cue: Codable {
         case .layered(let l):
             try c.encode(l.base, forKey: .src)
             try c.encode(l.layers, forKey: .layers)
-            if !l.overrides.isEmpty { try c.encode(l.overrides, forKey: .overrides) }
+            try c.encode(l.settings, forKey: .settings)
         case .blank(let b):
             try c.encode(b.colour, forKey: .colour)
         }

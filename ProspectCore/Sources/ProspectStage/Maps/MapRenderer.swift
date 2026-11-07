@@ -143,10 +143,10 @@ public final class MapRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO
         for text in [tree.header, tree.coordinates, tree.status, tree.place] { text.runs = [] }
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .map(let content) = cue.content else { return }
         token += 1
-        let settings = defaults.resolved(content.overrides)
+        let settings = content.settings
         plan = Plan(cue: MapCuePlan(content, settings: settings), content: content, settings: settings, number: cue.number,
                     timeline: GoTimeline(parts: MapCuePlan(content, settings: settings).parts), map: nil, aspect: 1, isReady: content.src.isEmpty)
         state = nil
@@ -184,9 +184,9 @@ public final class MapRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO
         }
     }
 
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
+    public func preload(_ cue: Cue, show: ShowSettings) {
         guard case .map(let content) = cue.content, !content.src.isEmpty, let url = media(content.src) else { return }
-        let settings = defaults.resolved(content.overrides)
+        let settings = content.settings
         map(url, path: content.src, maxPixels: Self.bucket(neededPixels(zoom: settings.zoom))) { _, _ in }
     }
 

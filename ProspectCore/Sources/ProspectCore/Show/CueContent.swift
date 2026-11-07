@@ -7,29 +7,29 @@ public struct TitleContent: Equatable, Sendable {
     public var sub: String
     /// Drives the ciphertext. Never shown on stage or in the cue list.
     public var key: String
-    public var overrides: TitleOverrides
+    public var settings: TitleSettings
 
-    public init(text: String = "", sub: String = "", key: String = "", overrides: TitleOverrides = .init()) {
+    public init(text: String = "", sub: String = "", key: String = "", settings: TitleSettings = .init()) {
         self.text = text
         self.sub = sub
         self.key = key
-        self.overrides = overrides
+        self.settings = settings
     }
 }
 
 public struct AnagramContent: Equatable, Sendable {
     /// On stage together, stacked, and solved one after another.
     public var anagrams: [Anagram]
-    public var overrides: AnagramOverrides
+    public var settings: AnagramSettings
 
-    public init(anagrams: [Anagram] = [], overrides: AnagramOverrides = .init()) {
+    public init(anagrams: [Anagram] = [], settings: AnagramSettings = .init()) {
         self.anagrams = anagrams
-        self.overrides = overrides
+        self.settings = settings
     }
 
     /// One anagram with no working, as most cues have.
-    public init(text: String, answer: String, overrides: AnagramOverrides = .init()) {
-        self.init(anagrams: [Anagram(text: text, answer: answer)], overrides: overrides)
+    public init(text: String, answer: String, settings: AnagramSettings = .init()) {
+        self.init(anagrams: [Anagram(text: text, answer: answer)], settings: settings)
     }
 
     /// One anagram with no working, not ignored, or none at all, which
@@ -42,12 +42,12 @@ public struct ImageContent: Equatable, Sendable {
     public var text: String
     /// Relative path inside the package. Empty shows the cue's label on black.
     public var src: String
-    public var overrides: ImageOverrides
+    public var settings: ImageSettings
 
-    public init(text: String = "", src: String = "", overrides: ImageOverrides = .init()) {
+    public init(text: String = "", src: String = "", settings: ImageSettings = .init()) {
         self.text = text
         self.src = src
-        self.overrides = overrides
+        self.settings = settings
     }
 }
 
@@ -57,19 +57,19 @@ public struct MorphContent: Equatable, Sendable {
     /// The pictures in turn, each becoming the next: a stage for each change.
     /// The first comes up with the cue's transition.
     public var pictures: [MorphPicture]
-    public var overrides: MorphOverrides
+    public var settings: MorphSettings
 
-    public init(text: String = "", pictures: [MorphPicture] = [], overrides: MorphOverrides = .init()) {
+    public init(text: String = "", pictures: [MorphPicture] = [], settings: MorphSettings = .init()) {
         self.text = text
         self.pictures = pictures
-        self.overrides = overrides
+        self.settings = settings
     }
 
     /// One picture becoming another, as a morph cue first was.
-    public init(text: String = "", src: String, into: String = "", pairs: [MorphPair] = [], overrides: MorphOverrides = .init()) {
+    public init(text: String = "", src: String, into: String = "", pairs: [MorphPair] = [], settings: MorphSettings = .init()) {
         var pictures = [MorphPicture(src: src), MorphPicture(src: into, pairs: pairs)].filter { !$0.src.isEmpty }
         if !pictures.isEmpty { pictures[0].pairs = [] }
-        self.init(text: text, pictures: pictures, overrides: overrides)
+        self.init(text: text, pictures: pictures, settings: settings)
     }
 
     /// Each change from one picture to the next: stage k becomes picture k + 1.
@@ -177,145 +177,48 @@ public enum VideoEnd: String, Codable, Sendable, CaseIterable {
     case loop
 }
 
-public struct BlankContent: Equatable, Sendable {
+/// How a text cue's lines sit across the picture.
+public enum TextAlign: String, Codable, Sendable, CaseIterable {
+    case left, centre, right
+
+    public var name: String { rawValue.capitalized }
+}
+
+/// Where a text cue's block of words sits down the picture.
+public enum TextVertical: String, Codable, Sendable, CaseIterable {
+    case top, middle, bottom
+
+    public var name: String { rawValue.capitalized }
+}
+
+/// A text cue: some words, set in a font and colour, aligned across the
+/// picture. Instant, like a blank.
+public struct TextContent: Equatable, Sendable {
     public var text: String
+    /// A font family, or empty for the stage font.
+    public var font: String
+    public var colour: RGB
+    public var alignment: TextAlign
+    public var vertical: TextVertical
+    /// What fills the picture behind the words.
+    public var background: RGB
+
+    public init(text: String = "", font: String = "", colour: RGB = RGB(255, 255, 255), alignment: TextAlign = .centre,
+                vertical: TextVertical = .middle, background: RGB = .black) {
+        self.text = text
+        self.font = font
+        self.colour = colour
+        self.alignment = alignment
+        self.vertical = vertical
+        self.background = background
+    }
+}
+
+public struct BlankContent: Equatable, Sendable {
     public var colour: RGB
 
-    public init(text: String = "BLANK", colour: RGB = .black) {
-        self.text = text
+    public init(colour: RGB = .black) {
         self.colour = colour
     }
 }
 
-// MARK: - Per-cue overrides
-
-/// A title cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct TitleOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var waveTicks: Int?
-    public var holdTicks: Int?
-    public var histogram: Bool?
-    public var sceneLine: Bool?
-    public var letters: TitleLetters?
-    public var bars: TitleBars?
-
-    public init(clockMs: Int? = nil, waveTicks: Int? = nil, holdTicks: Int? = nil, histogram: Bool? = nil, sceneLine: Bool? = nil,
-                letters: TitleLetters? = nil, bars: TitleBars? = nil) {
-        self.clockMs = clockMs
-        self.waveTicks = waveTicks
-        self.holdTicks = holdTicks
-        self.histogram = histogram
-        self.sceneLine = sceneLine
-        self.letters = letters
-        self.bars = bars
-    }
-
-    public var isEmpty: Bool { self == TitleOverrides() }
-
-    func clamped() -> TitleOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.waveTicks = waveTicks.map { SettingRange.waveTicks.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        return o
-    }
-}
-
-/// An anagram cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct AnagramOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var waveTicks: Int?
-    public var holdTicks: Int?
-    public var advance: AnagramAdvance?
-    public var pauseTicks: Int?
-    /// A font family's name. Empty is the stage's own type.
-    public var font: String?
-
-    public init(clockMs: Int? = nil, waveTicks: Int? = nil, holdTicks: Int? = nil, advance: AnagramAdvance? = nil, pauseTicks: Int? = nil,
-                font: String? = nil) {
-        self.clockMs = clockMs
-        self.waveTicks = waveTicks
-        self.holdTicks = holdTicks
-        self.advance = advance
-        self.pauseTicks = pauseTicks
-        self.font = font
-    }
-
-    public var isEmpty: Bool { self == AnagramOverrides() }
-
-    func clamped() -> AnagramOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.waveTicks = waveTicks.map { SettingRange.waveTicks.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        o.pauseTicks = pauseTicks.map { SettingRange.pauseTicks.clamp($0) }
-        return o
-    }
-}
-
-/// A morph cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct MorphOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var holdTicks: Int?
-    public var morphMs: Int?
-    /// Either GO choice waits for GO before each stage.
-    public var advance: AnagramAdvance?
-    public var pauseTicks: Int?
-
-    public init(clockMs: Int? = nil, holdTicks: Int? = nil, morphMs: Int? = nil, advance: AnagramAdvance? = nil, pauseTicks: Int? = nil) {
-        self.clockMs = clockMs
-        self.holdTicks = holdTicks
-        self.morphMs = morphMs
-        self.advance = advance
-        self.pauseTicks = pauseTicks
-    }
-
-    public var isEmpty: Bool { self == MorphOverrides() }
-
-    func clamped() -> MorphOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        o.morphMs = morphMs.map { SettingRange.morphMs.clamp($0) }
-        o.pauseTicks = pauseTicks.map { SettingRange.pauseTicks.clamp($0) }
-        return o
-    }
-}
-
-/// An image cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct ImageOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var waveTicks: Int?
-    public var holdTicks: Int?
-    public var gridColumns: Int?
-    public var flipMs: Int?
-    public var order: TileOrder?
-    public var reveal: TileReveal?
-
-    public init(clockMs: Int? = nil, waveTicks: Int? = nil, holdTicks: Int? = nil, gridColumns: Int? = nil, flipMs: Int? = nil,
-                order: TileOrder? = nil, reveal: TileReveal? = nil) {
-        self.clockMs = clockMs
-        self.waveTicks = waveTicks
-        self.holdTicks = holdTicks
-        self.gridColumns = gridColumns
-        self.flipMs = flipMs
-        self.order = order
-        self.reveal = reveal
-    }
-
-    public var isEmpty: Bool { self == ImageOverrides() }
-
-    func clamped() -> ImageOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.waveTicks = waveTicks.map { SettingRange.waveTicks.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        o.gridColumns = gridColumns.map { SettingRange.gridColumns.clamp($0) }
-        o.flipMs = flipMs.map { SettingRange.flipMs.clamp($0) }
-        return o
-    }
-}

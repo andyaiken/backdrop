@@ -109,10 +109,10 @@ struct AnagramTests {
         #expect(p.progress(of: comma, at: comma.start + AnagramPlan.fadeFrames / 2) == 0.5, "fades take half as long")
     }
 
-    @Test("An anagram cue keeps both phrases and its overrides in show.json")
+    @Test("An anagram cue keeps both phrases and its settings in show.json")
     func roundTrips() throws {
         let cue = Cue(number: "4", content: .anagram(AnagramContent(text: Self.louvre.from, answer: Self.louvre.to,
-                                                                    overrides: AnagramOverrides(waveTicks: 2))))
+                                                                    settings: AnagramSettings(waveTicks: 2))))
         let data = try JSONEncoder().encode(cue)
         let json = try #require(String(data: data, encoding: .utf8))
         #expect(json.contains("\"kind\":\"anagram\"") && json.contains("\"answer\""))
@@ -121,28 +121,25 @@ struct AnagramTests {
         #expect(cue.finishes && !cue.isInstant)
     }
 
-    @Test("Font: the stage's own type unless a family is named, for the show or for one cue")
+    @Test("Font: the stage's own type unless a family is named for the cue")
     func font() throws {
-        #expect(ShowSettings().anagramFont == "")
+        #expect(AnagramSettings().font == "")
         #expect(SettingKey.font.format(.font("")) == "SF Mono" && SettingKey.font.format(.font("Marker Felt")) == "Marker Felt")
         var cue = Cue(content: .anagram(AnagramContent(text: "A", answer: "A")))
-        SettingKey.font.setOverride(.font("Noteworthy"), in: &cue)
+        SettingKey.font.set(.font("Noteworthy"), in: &cue)
         guard case .anagram(let content) = cue.content else { return }
-        #expect(ShowSettings().resolved(content.overrides).font == "Noteworthy")
+        #expect(content.settings.font == "Noteworthy")
         let back = try JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(cue))
-        #expect(SettingKey.font.override(in: back) == .font("Noteworthy"))
-        var s = ShowSettings()
-        SettingKey.font.set(.font("Chalkboard SE"), in: &s)
-        #expect(try JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).anagramFont == "Chalkboard SE")
+        #expect(SettingKey.font.value(in: back) == .font("Noteworthy"))
         #expect(!SettingKey.font.applies(to: .title))
     }
 
-    @Test("An anagram overrides the timing, and runs on its own clock")
+    @Test("An anagram sets its own timing, and runs on its own clock")
     func settings() {
         #expect(SettingKey.allCases.filter { $0.applies(to: .anagram) } == [.clock, .wave, .hold, .advance, .pause, .font, .transition, .fade])
         var cue = Cue(content: .anagram(AnagramContent(text: "A", answer: "A")))
-        SettingKey.hold.setOverride(.number(10), in: &cue)
-        #expect(cue.timing(defaults: ShowSettings()) == CueTiming(clockMs: 44, holdTicks: 10, isInstant: false))
+        SettingKey.hold.set(.number(10), in: &cue)
+        #expect(cue.timing == CueTiming(clockMs: 44, holdTicks: 10, isInstant: false))
     }
 
     @Test("The sheet flags an anagram that isn't exact, or is missing a phrase")

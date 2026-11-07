@@ -116,7 +116,7 @@ struct VideoRendererTests {
     }
 
     func armed(_ cue: Cue) async -> Bool {
-        renderer.preload(cue, defaults: ShowSettings())
+        renderer.preload(cue, show: ShowSettings())
         return await eventually { renderer.armState(for: cue.id) == .armed }
     }
 
@@ -127,10 +127,10 @@ struct VideoRendererTests {
     @Test("Arming loads, prerolls and decodes a poster before GO; audio is muted")
     func arming() async throws {
         let cue = videoCue(try await TestClips.clip("arm.mov", seconds: 0.5))
-        renderer.preload(cue, defaults: ShowSettings())
+        renderer.preload(cue, show: ShowSettings())
         #expect(renderer.armState(for: cue.id) == .arming)
         #expect(await eventually { renderer.armState(for: cue.id) == .armed })
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         let clip = try #require(renderer.current)
         #expect(clip.poster != nil)
         #expect(clip.player.isMuted && clip.player.volume == 0)
@@ -141,7 +141,7 @@ struct VideoRendererTests {
     func liveAndPreviewDiffer() async throws {
         let cue = videoCue(try await TestClips.clip("split.mov", seconds: 1))
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         let liveTree = try #require(renderer.tree(for: live)), previewTree = try #require(renderer.tree(for: preview))
         #expect(liveTree.players[cue.id]?.opacity == 1)
@@ -156,7 +156,7 @@ struct VideoRendererTests {
     func snapshotForACrossfade() async throws {
         let cue = videoCue(try await TestClips.clip("snap.mov", seconds: 1, red: 200, green: 40, blue: 40))
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         #expect(await eventually { renderer.current!.player.rate > 0 })
         // A 160 x 90 clip on a 400 x 400 stage: 16:9 across the middle, black above and below.
@@ -182,7 +182,7 @@ struct VideoRendererTests {
         let src = try await TestClips.clip("moving.mov", seconds: 1.5, firstFrame: (40, 200, 40))
         let cue = videoCue(src)
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         #expect(await eventually { renderer.current!.player.currentTime().seconds > 0.3 })
         let image = try #require(renderer.snapshot(size: CGSize(width: 400, height: 400)))
@@ -203,7 +203,7 @@ struct VideoRendererTests {
                                            topHalf: (40, 200, 40))
         let cue = videoCue(src)
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         #expect(await eventually { renderer.current!.player.currentTime().seconds > 0.3 })
 
@@ -231,7 +231,7 @@ struct VideoRendererTests {
     func hold() async throws {
         let cue = videoCue(try await TestClips.clip("hold.mov", seconds: 0.4))
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         #expect(!renderer.frame(0))
         #expect(await eventually { renderer.frame(1) })
         #expect(renderer.tree(for: live)?.players[cue.id]?.opacity == 1, "still showing")
@@ -242,7 +242,7 @@ struct VideoRendererTests {
     func black() async throws {
         let cue = videoCue(try await TestClips.clip("black.mov", seconds: 0.4), atEnd: .black)
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         #expect(await eventually { renderer.frame(1) })
         #expect(renderer.tree(for: live)?.players[cue.id]?.opacity == 0)
@@ -253,7 +253,7 @@ struct VideoRendererTests {
     func loop() async throws {
         let cue = videoCue(try await TestClips.clip("loop.mov", seconds: 0.3), atEnd: .loop)
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         try await Task.sleep(for: .milliseconds(800))
         #expect(!renderer.frame(1))
@@ -266,12 +266,12 @@ struct VideoRendererTests {
         var messages: [String] = []
         renderer.onProblem = { messages.append($0) }
         let cue = videoCue("media/gone.mov")
-        renderer.preload(cue, defaults: ShowSettings())
+        renderer.preload(cue, show: ShowSettings())
         guard case .failed = renderer.armState(for: cue.id) else {
             Issue.record("should fail straight away")
             return
         }
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         #expect(renderer.frame(0), "settled, so the show can still continue")
         #expect(renderer.tree(for: live)?.players[cue.id]?.opacity == 0)
         // Once when it was armed, and again as it fires.
@@ -285,7 +285,7 @@ struct VideoRendererTests {
         var messages: [String] = []
         renderer.onProblem = { messages.append($0) }
         let cue = videoCue("broken.mov")
-        renderer.preload(cue, defaults: ShowSettings())
+        renderer.preload(cue, show: ShowSettings())
         #expect(await eventually {
             if case .failed = renderer.armState(for: cue.id) { return true }
             return false
@@ -297,7 +297,7 @@ struct VideoRendererTests {
     func clearRearms() async throws {
         let cue = videoCue(try await TestClips.clip("again.mov", seconds: 1))
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         #expect(await eventually { renderer.current!.elapsed.seconds > 0.1 })
         let player = renderer.current!.player
@@ -312,14 +312,14 @@ struct VideoRendererTests {
     func resume() async throws {
         let held = videoCue(try await TestClips.clip("resume.mov", seconds: 0.5))
         #expect(await armed(held))
-        renderer.prepare(held, defaults: ShowSettings())
+        renderer.prepare(held, show: ShowSettings())
         #expect(renderer.frame(StageRunner.settledFrame))
         #expect(renderer.current!.player.rate == 0)
 
         let blackCue = videoCue("resume.mov", atEnd: .black, number: "8")
         #expect(await armed(blackCue))
         renderer.clear(live)
-        renderer.prepare(blackCue, defaults: ShowSettings())
+        renderer.prepare(blackCue, show: ShowSettings())
         #expect(renderer.frame(StageRunner.settledFrame))
         #expect(renderer.tree(for: live)?.players[blackCue.id]?.opacity == 0)
     }
@@ -327,7 +327,7 @@ struct VideoRendererTests {
     @Test("Only a handful of players are kept")
     func eviction() async throws {
         let name = try await TestClips.clip("many.mov", seconds: 0.3)
-        for n in 1...7 { renderer.preload(videoCue(name, number: "\(n)"), defaults: ShowSettings()) }
+        for n in 1...7 { renderer.preload(videoCue(name, number: "\(n)"), show: ShowSettings()) }
         #expect(renderer.tree(for: live)!.players.count <= VideoRenderer.keep)
     }
 
@@ -341,7 +341,7 @@ struct VideoRendererTests {
     func previewSnapshot() async throws {
         let cue = videoCue(try await TestClips.clip("look.mov", seconds: 2, red: 40, green: 90, blue: 160))
         #expect(await armed(cue))
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(0)
         try await Task.sleep(for: .milliseconds(600))
         _ = renderer.frame(1)

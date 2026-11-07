@@ -29,7 +29,7 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     var finishedEditing: () -> Void = {}
 
     /// Set on the kind's tab: a change to one of the cue's settings.
-    var onSetting: (SettingKey, SettingValue?, Bool) -> Void = { _, _, _ in }
+    var onSetting: (SettingKey, SettingValue, Bool) -> Void = { _, _, _ in }
     private let scope: CueField.Scope
 
     private(set) var cue: Cue?
@@ -38,7 +38,7 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
 
     init(scope: CueField.Scope) {
         self.scope = scope
-        super.init(rootView: CueEditorView(scope: scope, cue: nil, goPoint: nil, defaults: ShowSettings(),
+        super.init(rootView: CueEditorView(scope: scope, cue: nil, goPoint: nil,
                                            morphPictures: MorphPicturesState(), layeredStrip: LayeredStripState(), edit: { _, _ in }, typing: { _, _ in },
                                            onFinished: {},
                                            onChooseMedia: {}, onRemoveMedia: {}, onDropMedia: { _ in }, onEditRoute: {},
@@ -54,22 +54,20 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     func update(cue: Cue?, goPoint: ShowController.StandingByGoPoint? = nil) {
         self.cue = cue
         let point = cue != nil && goPoint?.cue.id == cue?.id ? goPoint : nil
-        let settings = controller?.show.settings ?? ShowSettings()
         if case .morph(let c) = cue?.content {
             if morphPictures.pictures != c.pictures { morphPictures.pictures = c.pictures }
-            let morphMs = settings.resolved(c.overrides).morphMs
+            let morphMs = c.settings.morphMs
             if morphPictures.cueMorphMs != morphMs { morphPictures.cueMorphMs = morphMs }
         }
         if case .layered(let c) = cue?.content {
             if layeredStrip.layers != c.layers { layeredStrip.layers = c.layers }
-            let layerMs = settings.resolved(c.overrides).layerMs
+            let layerMs = c.settings.layerMs
             if layeredStrip.cueLayerMs != layerMs { layeredStrip.cueLayerMs = layerMs }
         }
         rootView = CueEditorView(
             scope: scope,
             cue: cue,
             goPoint: point,
-            defaults: settings,
             morphPictures: morphPictures,
             layeredStrip: layeredStrip,
             edit: { [weak self] name, body in

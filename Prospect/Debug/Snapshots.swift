@@ -18,15 +18,15 @@ enum Snapshots {
         show.cues.insert(Cue(number: "1.5", content: .video(VideoContent(text: "CRYPTEX", sub: "REVEAL", src: "media/cryptex.mov"))), at: 1)
         // Two transitions of their own: a snap into the first blank, and a
         // slower fade into the second picture.
-        show.cues[3].transition = TransitionOverrides(style: .snap)
-        show.cues[5].transition = TransitionOverrides(fadeMs: 1200)
+        show.cues[3].transition = Transition(style: .snap)
+        show.cues[5].transition = Transition(fadeMs: 1200)
         // And a timed continue, on the cue the editor shows.
         show.cues[4].continueMode = .after(ms: 5000)
         show.cues[7].continueMode = .whenFinished
         // The first picture goes in a golden spiral, so the frame caught
         // mid-reveal shows its shape.
         if case .image(var first) = show.cues[2].content {
-            first.overrides.order = .spiral
+            first.settings.order = .spiral
             show.cues[2].content = .image(first)
         }
         show.cues[5].continueMode = .whenFinished(waitMs: 2000)
@@ -76,11 +76,11 @@ enum Snapshots {
         save(console, "console-edit-image", to: directory)
 
         // The settings tabs: the image cue with two values of its own, then
-        // the show's defaults.
+        // the show's settings.
         let image = controller.show.cues[5].id
-        controller.setOverride(.grid, to: .number(20), for: image)
-        controller.setOverride(.order, to: .order(.spiral), for: image)
-        controller.setOverride(.reveal, to: .reveal(.sharpen), for: image)
+        controller.setSetting(.grid, to: .number(20), for: image)
+        controller.setSetting(.order, to: .order(.spiral), for: image)
+        controller.setSetting(.reveal, to: .reveal(.sharpen), for: image)
         console.showInspectorTab(1)
         save(console, "console-cue-settings", to: directory)
         // Wide enough that the inspector stands beside the preview.
@@ -92,7 +92,7 @@ enum Snapshots {
         console.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 860), display: false)
         // A decryption cue whose letters are on dials.
         let decryption = controller.show.cues[4].id
-        controller.setOverride(.letters, to: .letters(.dials), for: decryption)
+        controller.setSetting(.letters, to: .letters(.dials), for: decryption)
         controller.standBy(decryption)
         console.showInspectorTab(1)
         save(console, "console-cue-settings-decryption", to: directory)
@@ -112,20 +112,19 @@ enum Snapshots {
             }
             save(console, "console-edit-anagram", to: directory)
             // Its settings, set in a hand.
-            controller.setOverride(.font, to: .font("Noteworthy"), for: anagram)
+            controller.setSetting(.font, to: .font("Noteworthy"), for: anagram)
             console.showInspectorTab(1)
             save(console, "console-cue-settings-anagram", to: directory)
 
             // In show mode, each anagram on GO: the first solved, through
             // its working, and the second standing by in the cue's place.
-            controller.setOverride(.advance, to: .advance(.eachAnagram), for: anagram)
-            controller.setOverride(.font, to: nil, for: anagram)
+            controller.setSetting(.advance, to: .advance(.eachAnagram), for: anagram)
+            controller.setSetting(.font, to: .font(""), for: anagram)
             // Each GO with its own cue point, the second typed in the Cue tab
             // with that GO standing by.
-            let defaults = controller.show.settings
             controller.updateCue(anagram, "Change GO Cue Point") { cue in
-                cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0, defaults: defaults)
-                cue.setCuePoint("LANGDON: \u{201C}The Mona Lisa\u{2026}\u{201D}", ofGoPoint: 1, defaults: defaults)
+                cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0)
+                cue.setCuePoint("LANGDON: \u{201C}The Mona Lisa\u{2026}\u{201D}", ofGoPoint: 1)
             }
             console.showInspectorTab(0)
             controller.standBy(anagram, step: 1)
@@ -202,7 +201,7 @@ enum Snapshots {
             // The stage itself, full size, partway along the road: following
             // the dot, and held still.
             var still = controller.show[map]
-            if var cue = still { SettingKey.camera.setOverride(.camera(.still), in: &cue); still = cue }
+            if var cue = still { SettingKey.camera.set(.camera(.still), in: &cue); still = cue }
             for (cue, name) in [(controller.show[map], "map-stage"), (still, "map-stage-still")] {
                 guard let cue else { continue }
                 let stage = SurfaceLayer(role: .live)
@@ -214,11 +213,11 @@ enum Snapshots {
                 renderer.setVisible(true, on: stage)
                 var ready = false
                 renderer.onReady = { ready = true }
-                renderer.prepare(cue, defaults: controller.show.settings)
+                renderer.prepare(cue, show: controller.show.settings)
                 let deadline = Date().addingTimeInterval(10)
                 while !ready, Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
                 // 4.2 s into the drive, just as the dot lights.
-                _ = renderer.paint(at: 4200.0 / Double(controller.show.settings.clockMs))
+                _ = renderer.paint(at: 4200.0 / Double(cue.timing.clockMs))
                 func display(_ layer: CALayer) {
                     layer.displayIfNeeded()
                     layer.sublayers?.forEach(display)
@@ -241,19 +240,6 @@ enum Snapshots {
                     try? rep.representation(using: .png, properties: [:])?
                         .write(to: URL(fileURLWithPath: directory).appendingPathComponent("map-route.png"))
                 }
-            }
-        }
-
-        // Show › Show Settings: the show's defaults and its projection area.
-        console.showShowSettings()
-        if let view = console.showSettingsView {
-            view.layoutSubtreeIfNeeded()
-            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-                view.effectiveAppearance.performAsCurrentDrawingAppearance {
-                    view.cacheDisplay(in: view.bounds, to: rep)
-                }
-                try? rep.representation(using: .png, properties: [:])?
-                    .write(to: URL(fileURLWithPath: directory).appendingPathComponent("show-settings.png"))
             }
         }
 

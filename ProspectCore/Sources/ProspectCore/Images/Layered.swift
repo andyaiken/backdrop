@@ -15,13 +15,13 @@ public struct LayeredContent: Equatable, Sendable {
     /// The layers in the order they arrive, which is also the order they
     /// stack: the last to arrive sits on top.
     public var layers: [ImageLayer]
-    public var overrides: LayeredOverrides
+    public var settings: LayeredSettings
 
-    public init(text: String = "", base: String = "", layers: [ImageLayer] = [], overrides: LayeredOverrides = .init()) {
+    public init(text: String = "", base: String = "", layers: [ImageLayer] = [], settings: LayeredSettings = .init()) {
         self.text = text
         self.base = base
         self.layers = layers
-        self.overrides = overrides
+        self.settings = settings
     }
 }
 
@@ -328,37 +328,36 @@ extension LayeredContent {
     }
 }
 
-// MARK: - Overrides
+// MARK: - Settings
 
-/// A layered cue's own values for settings the show holds defaults for. Nil
-/// inherits the show's default.
-public struct LayeredOverrides: Codable, Equatable, Sendable {
-    public var clockMs: Int?
-    public var holdTicks: Int?
+/// A layered cue's settings.
+public struct LayeredSettings: Codable, Equatable, Sendable {
+    public var clockMs: Int
+    public var holdTicks: Int
     /// Either GO choice waits for GO before each step.
-    public var advance: AnagramAdvance?
-    public var pauseTicks: Int?
+    public var advance: AnagramAdvance
+    public var pauseTicks: Int
     /// How long a layer takes to arrive.
-    public var layerMs: Int?
+    public var layerMs: Int
     /// What the base picture sits at, as a percentage.
-    public var baseLevel: Int?
+    public var baseLevel: Int
     /// What happens to the layers already standing, and how far it goes.
-    public var context: LayerContext?
-    public var contextLevel: Int?
+    public var context: LayerContext
+    public var contextLevel: Int
     /// How long the treatment lasts, in clock ticks.
-    public var contextTicks: Int?
+    public var contextTicks: Int
     /// What the arriving layer does.
-    public var entrance: LayerEntrance?
-    public var camera: LayeredCamera?
+    public var entrance: LayerEntrance
+    public var camera: LayeredCamera
     /// The closest the frame comes: the picture's width over this.
-    public var zoom: Int?
+    public var zoom: Int
     /// How long a camera move takes.
-    public var cameraMs: Int?
+    public var cameraMs: Int
 
-    public init(clockMs: Int? = nil, holdTicks: Int? = nil, advance: AnagramAdvance? = nil, pauseTicks: Int? = nil,
-                layerMs: Int? = nil, baseLevel: Int? = nil, context: LayerContext? = nil, contextLevel: Int? = nil,
-                contextTicks: Int? = nil, entrance: LayerEntrance? = nil, camera: LayeredCamera? = nil, zoom: Int? = nil,
-                cameraMs: Int? = nil) {
+    public init(clockMs: Int = 44, holdTicks: Int = 44, advance: AnagramAdvance = .byItself, pauseTicks: Int = 44,
+                layerMs: Int = 800, baseLevel: Int = 25, context: LayerContext = .desaturate, contextLevel: Int = 60,
+                contextTicks: Int = 22, entrance: LayerEntrance = .outline, camera: LayeredCamera = .still, zoom: Int = 3,
+                cameraMs: Int = 1200) {
         self.clockMs = clockMs
         self.holdTicks = holdTicks
         self.advance = advance
@@ -374,39 +373,23 @@ public struct LayeredOverrides: Codable, Equatable, Sendable {
         self.cameraMs = cameraMs
     }
 
-    public var isEmpty: Bool { self == LayeredOverrides() }
-
-    func clamped() -> LayeredOverrides {
-        var o = self
-        o.clockMs = clockMs.map { SettingRange.clockMs.clamp($0) }
-        o.holdTicks = holdTicks.map { SettingRange.holdTicks.clamp($0) }
-        o.pauseTicks = pauseTicks.map { SettingRange.pauseTicks.clamp($0) }
-        o.layerMs = layerMs.map { SettingRange.layerMs.clamp($0) }
-        o.baseLevel = baseLevel.map { SettingRange.baseLevel.clamp($0) }
-        o.contextLevel = contextLevel.map { SettingRange.contextLevel.clamp($0) }
-        o.contextTicks = contextTicks.map { SettingRange.contextTicks.clamp($0) }
-        o.zoom = zoom.map { SettingRange.mapZoom.clamp($0) }
-        o.cameraMs = cameraMs.map { SettingRange.cameraMs.clamp($0) }
-        return o
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = LayeredSettings()
+        clockMs = try c.value(.clockMs, d.clockMs, in: SettingRange.clockMs)
+        holdTicks = try c.value(.holdTicks, d.holdTicks, in: SettingRange.holdTicks)
+        advance = try c.value(.advance, d.advance)
+        pauseTicks = try c.value(.pauseTicks, d.pauseTicks, in: SettingRange.pauseTicks)
+        layerMs = try c.value(.layerMs, d.layerMs, in: SettingRange.layerMs)
+        baseLevel = try c.value(.baseLevel, d.baseLevel, in: SettingRange.baseLevel)
+        context = try c.value(.context, d.context)
+        contextLevel = try c.value(.contextLevel, d.contextLevel, in: SettingRange.contextLevel)
+        contextTicks = try c.value(.contextTicks, d.contextTicks, in: SettingRange.contextTicks)
+        entrance = try c.value(.entrance, d.entrance)
+        camera = try c.value(.camera, d.camera)
+        zoom = try c.value(.zoom, d.zoom, in: SettingRange.mapZoom)
+        cameraMs = try c.value(.cameraMs, d.cameraMs, in: SettingRange.cameraMs)
     }
-}
-
-/// The settings a layered cue runs with, once its overrides are applied.
-public struct LayeredSettings: Equatable, Sendable {
-    public var clockMs: Int
-    public var holdTicks: Int
-    /// Either GO choice waits for GO before each step.
-    public var advance: AnagramAdvance
-    public var pauseTicks: Int
-    public var layerMs: Int
-    public var baseLevel: Int
-    public var context: LayerContext
-    public var contextLevel: Int
-    public var contextTicks: Int
-    public var entrance: LayerEntrance
-    public var camera: LayeredCamera
-    public var zoom: Int
-    public var cameraMs: Int
 
     /// Whether each step waits for GO.
     public var eachStepOnGO: Bool { advance != .byItself }

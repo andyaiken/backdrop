@@ -83,7 +83,7 @@ struct MorphTests {
     @Test("A morph cue keeps both pictures and its points in show.json, each point as [x, y]")
     func roundTrips() throws {
         let cue = Cue(number: "9", content: .morph(MorphContent(text: "LEONARDO", src: "media/leonardo.jpg", into: "media/mona-lisa.jpg",
-                                                               pairs: Self.face, overrides: MorphOverrides(morphMs: 4000))))
+                                                               pairs: Self.face, settings: MorphSettings(morphMs: 4000))))
         let data = try JSONEncoder().encode(cue)
         let json = try #require(String(data: data, encoding: .utf8))
         #expect(json.contains("\"kind\":\"morph\"") && json.contains("\"into\":\"media\\/mona-lisa.jpg\"") && json.contains("\"from\":[0.38,0.4]"))
@@ -96,14 +96,13 @@ struct MorphTests {
     func settings() {
         #expect(SettingKey.allCases.filter { $0.applies(to: .morph) } == [.clock, .hold, .advance, .pause, .morphTime, .transition, .fade])
         var cue = Cue(content: .morph(MorphContent()))
-        SettingKey.morphTime.setOverride(.number(4250), in: &cue)
-        #expect(SettingKey.morphTime.override(in: cue) == .number(4300), "snapped to a tenth of a second")
+        SettingKey.morphTime.set(.number(4250), in: &cue)
+        #expect(SettingKey.morphTime.value(in: cue) == .number(4300), "snapped to a tenth of a second")
         #expect(SettingKey.morphTime.format(.number(4300)) == "4.3 s")
-        #expect(cue.timing(defaults: ShowSettings()) == CueTiming(clockMs: 44, holdTicks: 44, isInstant: false))
-        #expect(ShowSettings().morphMs == 3000)
-        var s = ShowSettings()
-        SettingKey.morphTime.set(.number(5000), in: &s)
-        #expect(try! JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).morphMs == 5000)
+        #expect(cue.timing == CueTiming(clockMs: 44, holdTicks: 44, isInstant: false))
+        #expect(MorphSettings().morphMs == 3000)
+        SettingKey.morphTime.set(.number(5000), in: &cue)
+        #expect(try! JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(cue)) == cue)
     }
 
     @Test("The sheet flags a morph missing a picture, and prints each picture with the points into it")

@@ -4,8 +4,8 @@ import QuartzCore
 @testable import ProspectStage
 
 /// A title cue, as the sheet holds it.
-func titleCue(_ text: String, sub: String = "", key: String = "SANGREAL", overrides: TitleOverrides = .init()) -> Cue {
-    Cue(number: "1", content: .title(TitleContent(text: text, sub: sub, key: key, overrides: overrides)))
+func titleCue(_ text: String, sub: String = "", key: String = "SANGREAL", settings: TitleSettings = .init()) -> Cue {
+    Cue(number: "1", content: .title(TitleContent(text: text, sub: sub, key: key, settings: settings)))
 }
 
 /// A surface of a given size, with its inset placed.

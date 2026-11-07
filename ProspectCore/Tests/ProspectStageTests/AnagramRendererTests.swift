@@ -23,8 +23,8 @@ struct AnagramRendererTests {
                                                           answer: "Leonardo da Vinci! The Mona Lisa!")))
     }
 
-    func cue(_ anagrams: [Anagram], advance: AnagramAdvance? = nil, pause: Int? = nil) -> Cue {
-        Cue(number: "1", content: .anagram(AnagramContent(anagrams: anagrams, overrides: AnagramOverrides(advance: advance, pauseTicks: pause))))
+    func cue(_ anagrams: [Anagram], advance: AnagramAdvance = .byItself, pause: Int = 44) -> Cue {
+        Cue(number: "1", content: .anagram(AnagramContent(anagrams: anagrams, settings: AnagramSettings(advance: advance, pauseTicks: pause))))
     }
 
     /// The letters of anagram `t` on a surface, as last painted.
@@ -38,7 +38,7 @@ struct AnagramRendererTests {
 
     /// Prepares a cue and paints frame `f`: what anagram 0 shows, and its layout.
     func prepared(_ cue: Cue, at f: Int = -10) throws -> (shown: AnagramRenderer.Shown, layout: AnagramLayout) {
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         _ = renderer.frame(f)
         return (try #require(renderer.shown(0, at: f)), try currentLayout())
     }
@@ -76,9 +76,8 @@ struct AnagramRendererTests {
     @Test("A proportional font sets each letter at its own width, and lands it there")
     func proportional() throws {
         guard StageFont.has(family: "Marker Felt") else { return }
-        var settings = ShowSettings()
-        settings.anagramFont = "Marker Felt"
-        renderer.prepare(Cue(content: .anagram(AnagramContent(text: "MILL", answer: "LIMIT LIM"))), defaults: settings)
+        renderer.prepare(Cue(content: .anagram(AnagramContent(text: "MILL", answer: "LIMIT LIM", settings: AnagramSettings(font: "Marker Felt")))),
+                         show: ShowSettings())
         let layout = try currentLayout()
         #expect(CTFontCopyFamilyName(layout.font) as String == "Marker Felt")
         let x = (0..<4).map { layout.centre(of: .init(line: 0, column: $0), track: 0, step: 0).x }
@@ -94,9 +93,9 @@ struct AnagramRendererTests {
     @Test("A hand-drawn font, in flight and landed")
     func handDrawn() throws {
         guard StageFont.has(family: "Noteworthy") else { return }
-        var settings = ShowSettings()
-        settings.anagramFont = "Noteworthy"
-        renderer.prepare(louvre(), defaults: settings)
+        var hand = louvre()
+        SettingKey.font.set(.font("Noteworthy"), in: &hand)
+        renderer.prepare(hand, show: ShowSettings())
         _ = renderer.frame(22)
         let late = surface()
         renderer.mount(on: late)
@@ -116,9 +115,8 @@ struct AnagramRendererTests {
     func missingFont() throws {
         var said: [String] = []
         renderer.onProblem = { said.append($0) }
-        var settings = ShowSettings()
-        settings.anagramFont = "No Such Hand"
-        renderer.prepare(Cue(number: "7", content: .anagram(AnagramContent(text: "RATS", answer: "STAR"))), defaults: settings)
+        renderer.prepare(Cue(number: "7", content: .anagram(AnagramContent(text: "RATS", answer: "STAR", settings: AnagramSettings(font: "No Such Hand")))),
+                         show: ShowSettings())
         #expect(said == ["Cue 7\u{2019}s font, No Such Hand, isn\u{2019}t on this Mac, so it shows in SF Mono instead."])
         #expect(CTFontCopyFamilyName(try currentLayout().font) as String == CTFontCopyFamilyName(StageFont.title(size: 12)) as String)
     }
@@ -201,7 +199,7 @@ struct AnagramRendererTests {
     @Test("Several anagrams stack down the stage, and each waits until the one before is solved and a pause has passed")
     func several() throws {
         let rats = Anagram(text: "RATS", answer: "STAR"), listen = Anagram(text: "LISTEN", answer: "SILENT")
-        renderer.prepare(cue([rats, listen], pause: 10), defaults: ShowSettings())
+        renderer.prepare(cue([rats, listen], pause: 10), show: ShowSettings())
         let plan = try #require(renderer.plan)
         let first = plan.tracks[0].moves[0], second = plan.tracks[1].moves[0]
         #expect(second.offset == first.plan.duration + 10)
@@ -231,7 +229,7 @@ struct AnagramRendererTests {
     @Test("Working stays slate, with the letters it doesn't use dimmed on a line beneath; the answer lands in bone")
     func working() throws {
         let anagram = Anagram(text: "O, Draconian devil!", working: ["LEONARDO"], answer: "Leonardo da Vinci!")
-        renderer.prepare(cue([anagram]), defaults: ShowSettings())
+        renderer.prepare(cue([anagram]), show: ShowSettings())
         let plan = try #require(renderer.plan)
         let into = plan.tracks[0].moves[0], out = plan.tracks[0].moves[1]
 
@@ -248,7 +246,7 @@ struct AnagramRendererTests {
 
         // The answer sets off: its letters stand where LEONARDO's landed, the
         // dimmed ones still dim, and brighten as they rise.
-        let start = into.plan.duration + ShowSettings().pauseTicks
+        let start = into.plan.duration + AnagramSettings().pauseTicks
         #expect(out.offset == start)
         _ = renderer.frame(start - 1)
         let before = Dictionary(uniqueKeysWithValues: zip(shown.plan.pieces, pieces()).compactMap { p, l in p.to.map { ($0, l.position) } })
@@ -273,7 +271,7 @@ struct AnagramRendererTests {
 
     @Test("Each step on GO: the cue waits, and GO carries it on")
     func eachStepOnGO() throws {
-        renderer.prepare(cue([Anagram(text: "RATS", working: ["TSAR"], answer: "STAR")], advance: .eachStep), defaults: ShowSettings())
+        renderer.prepare(cue([Anagram(text: "RATS", working: ["TSAR"], answer: "STAR")], advance: .eachStep), show: ShowSettings())
         let plan = try #require(renderer.plan)
         #expect(!renderer.frame(0) && renderer.isWaiting(at: 0), "nothing moves before the first GO")
         #expect(renderer.shown(0, at: 50)?.start == nil)
@@ -292,7 +290,7 @@ struct AnagramRendererTests {
     @Test("Put up finished, a cue that waits for GO shows every anagram solved")
     func finishedWithoutGO() throws {
         renderer.prepare(cue([Anagram(text: "RATS", working: ["TSAR"], answer: "STAR"), Anagram(text: "LISTEN", answer: "SILENT")],
-                             advance: .eachAnagram), defaults: ShowSettings())
+                             advance: .eachAnagram), show: ShowSettings())
         renderer.carryOnToEnd()
         #expect(renderer.frame(1_000_000))
         for t in 0..<2 {
@@ -305,7 +303,7 @@ struct AnagramRendererTests {
     func skipped() throws {
         let anagrams = [Anagram(text: "Leonardo da Vinci!"), Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!", ignored: true),
                         Anagram(text: "RATS", answer: "STAR")]
-        renderer.prepare(cue(anagrams), defaults: ShowSettings())
+        renderer.prepare(cue(anagrams), show: ShowSettings())
         let plan = try #require(renderer.plan)
         #expect(plan.tracks[2].moves[0].offset == 0, "RATS goes first")
         _ = renderer.frame(1)

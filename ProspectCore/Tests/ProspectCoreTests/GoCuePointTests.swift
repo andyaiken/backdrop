@@ -9,24 +9,26 @@ struct GoCuePointTests {
         Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!"),
     ]
 
-    func defaults(_ advance: AnagramAdvance) -> ShowSettings {
-        var s = ShowSettings()
-        s.advance = advance
-        return s
+    /// The cue waiting for GO in the way given.
+    func advancing(_ advance: AnagramAdvance, _ cue: Cue) -> Cue {
+        var cue = cue
+        SettingKey.advance.set(.advance(advance), in: &cue)
+        return cue
     }
 
     @Test("An anagram GO's cue point stays with the step it moves to, whichever way the cue waits")
     func anagram() {
-        var cue = Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: anagrams)))
-        cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0, defaults: defaults(.eachStep))
-        cue.setCuePoint("  LANGDON turns.  ", ofGoPoint: 2, defaults: defaults(.eachStep))
-        #expect(cue.goPoints(defaults: defaults(.eachStep)).map(\.cuePoint)
+        var cue = advancing(.eachStep, Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: anagrams))))
+        cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0)
+        cue.setCuePoint("  LANGDON turns.  ", ofGoPoint: 2)
+        #expect(cue.goPoints().map(\.cuePoint)
                 == ["SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", "", "LANGDON turns."])
-        #expect(cue.goPoints(defaults: defaults(.eachAnagram)).map(\.cuePoint) == ["SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", "LANGDON turns."],
+        #expect(advancing(.eachAnagram, cue).goPoints().map(\.cuePoint) == ["SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", "LANGDON turns."],
                 "each anagram waits before its first move: the same moments")
-        #expect(cue.goPoints(defaults: defaults(.byItself)).isEmpty)
-        cue.setCuePoint("", ofGoPoint: 1, defaults: defaults(.eachAnagram))
-        #expect(cue.goPoints(defaults: defaults(.eachStep)).map(\.cuePoint).last == "", "empty clears it")
+        #expect(advancing(.byItself, cue).goPoints().isEmpty)
+        cue = advancing(.eachAnagram, cue)
+        cue.setCuePoint("", ofGoPoint: 1)
+        #expect(advancing(.eachStep, cue).goPoints().map(\.cuePoint).last == "", "empty clears it")
     }
 
     @Test("Retyping the anagrams keeps each cue point whose step is still there")
@@ -41,26 +43,29 @@ struct GoCuePointTests {
 
     @Test("A morph stage's and a map stop's GOs have cue points too")
     func morphAndMap() {
-        var morph = Cue(content: .morph(MorphContent(text: "", pictures: [MorphPicture(src: "a.png"), MorphPicture(src: "b.png"), MorphPicture(src: "c.png")])))
-        morph.setCuePoint("Lights shift", ofGoPoint: 1, defaults: defaults(.eachStep))
-        #expect(morph.goPoints(defaults: defaults(.eachStep)).map(\.cuePoint) == ["", "Lights shift"])
+        var morph = advancing(.eachStep, Cue(content: .morph(MorphContent(text: "", pictures: [MorphPicture(src: "a.png"), MorphPicture(src: "b.png"), MorphPicture(src: "c.png")]))))
+        morph.setCuePoint("Lights shift", ofGoPoint: 1)
+        #expect(morph.goPoints().map(\.cuePoint) == ["", "Lights shift"])
         guard case .morph(let m) = morph.content else { return }
         #expect(m.pictures[2].cuePoint == "Lights shift" && !m.isPlain)
 
-        var map = Cue(content: .map(MapContent(route: [RoutePoint(at: PicturePoint(x: 0, y: 0)), RoutePoint(at: PicturePoint(x: 0.5, y: 0)),
-                                                       RoutePoint(at: PicturePoint(x: 1, y: 0), stop: MapStop(place: "BOW"))])))
-        map.setCuePoint("Phone rings", ofGoPoint: 0, defaults: defaults(.eachStep))
-        #expect(map.goPoints(defaults: defaults(.eachStep)).map(\.cuePoint) == ["Phone rings"])
-        map.setCuePoint("ignored", ofGoPoint: 0, defaults: defaults(.byItself))
-        #expect(map.goPoints(defaults: defaults(.eachStep)).map(\.cuePoint) == ["Phone rings"], "no GO by itself, nothing to set")
+        let route = [RoutePoint(at: PicturePoint(x: 0, y: 0)), RoutePoint(at: PicturePoint(x: 0.5, y: 0)),
+                     RoutePoint(at: PicturePoint(x: 1, y: 0), stop: MapStop(place: "BOW"))]
+        var map = advancing(.eachStep, Cue(content: .map(MapContent(route: route))))
+        map.setCuePoint("Phone rings", ofGoPoint: 0)
+        #expect(map.goPoints().map(\.cuePoint) == ["Phone rings"])
+        var byItself = advancing(.byItself, Cue(content: .map(MapContent(route: route))))
+        let before = byItself
+        byItself.setCuePoint("ignored", ofGoPoint: 0)
+        #expect(byItself.goPoints().isEmpty && byItself == before, "no GO by itself, nothing to set")
     }
 
     @Test("show.json keeps them, as version 6; a show without any stays as it was")
     func json() throws {
-        var cue = Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: [Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!")])))
+        var cue = advancing(.eachAnagram, Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: [Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!")]))))
         let plain = Show(cues: [cue])
         #expect(plain.version == 2)
-        cue.setCuePoint("SOPHIE looks up", ofGoPoint: 0, defaults: defaults(.eachAnagram))
+        cue.setCuePoint("SOPHIE looks up", ofGoPoint: 0)
         let data = try JSONEncoder().encode(cue)
         #expect(String(data: data, encoding: .utf8)?.contains("\"cuePoints\"") == true)
         #expect(try JSONDecoder().decode(Cue.self, from: data) == cue)
@@ -69,8 +74,8 @@ struct GoCuePointTests {
 
     @Test("The DSM sheet prints each GO's cue point on its row")
     func sheet() {
-        var cue = Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: anagrams, overrides: AnagramOverrides(advance: .eachAnagram))))
-        cue.setCuePoint("LANGDON turns.", ofGoPoint: 1, defaults: ShowSettings())
+        var cue = Cue(number: "4.8", content: .anagram(AnagramContent(anagrams: anagrams, settings: AnagramSettings(advance: .eachAnagram))))
+        cue.setCuePoint("LANGDON turns.", ofGoPoint: 1)
         let rows = CueSheet(show: Show(title: "T", cues: [cue]), title: "T", layout: .dsm).rows
         #expect(rows.map(\.cuePoint) == ["", "", "LANGDON turns."])
     }

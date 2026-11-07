@@ -126,15 +126,15 @@ public final class AnagramRenderer: CueRenderer, ReportsProblems, WaitsForGO {
         tree.tracks = []
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .anagram(let content) = cue.content else { return }
-        let settings = defaults.resolved(content.overrides)
+        let settings = content.settings
         let plan = AnagramCuePlan(content.anagrams, wave: settings.waveTicks, pause: settings.pauseTicks, advance: settings.advance,
                                   random: &random)
         self.plan = plan
         timeline = .init(parts: plan.parts)
         clockSeconds = Double(settings.clockMs) / 1000
-        textScale = defaults.textScale
+        textScale = show.textScale
         family = settings.font
         if !family.isEmpty, !StageFont.has(family: family) {
             let name = cue.number.isEmpty ? "This anagram" : "Cue \(cue.number)"
@@ -150,9 +150,9 @@ public final class AnagramRenderer: CueRenderer, ReportsProblems, WaitsForGO {
 
     /// Text size is show-wide and only layout, so an anagram on stage refits
     /// straight away.
-    public func settingsChanged(_ defaults: ShowSettings) {
-        guard defaults.textScale != textScale else { return }
-        textScale = defaults.textScale
+    public func settingsChanged(_ show: ShowSettings) {
+        guard show.textScale != textScale else { return }
+        textScale = show.textScale
         for tree in trees.values { fit(tree.surface) }
     }
 

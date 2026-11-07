@@ -41,10 +41,14 @@ struct StandbyPanelView: View {
                     .font(.system(size: 30, design: .monospaced))
                     .foregroundStyle(.tint)
                 Spacer(minLength: 0)
-                Text(name)
-                    .font(.system(size: 13, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if let swatch = standbySwatch {
+                    BlankSwatch(colour: swatch)
+                } else {
+                    Text(name)
+                        .font(.system(size: 13, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .padding(.top, 2)
 
@@ -66,10 +70,14 @@ struct StandbyPanelView: View {
                 Text(live?.number ?? "\u{2014}")
                     .font(.system(size: 17, design: .monospaced))
                 Spacer(minLength: 0)
-                Text(live.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "\u{2014}")
-                    .font(.system(size: 12, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                if case .blank(let blank)? = live?.content {
+                    BlankSwatch(colour: blank.colour)
+                } else {
+                    Text(live.map { $0.text.isEmpty ? "\u{2014}" : $0.text.replacingOccurrences(of: "\n", with: " \u{23CE} ") } ?? "\u{2014}")
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
             }
             .foregroundStyle(.secondary)
             .padding(.top, 2)
@@ -110,10 +118,17 @@ struct StandbyPanelView: View {
         return standby?.number ?? "\u{2014}"
     }
 
+    /// A blank has no words to name it, only its colour. Not while a step
+    /// stands by in its place, or a number is being typed.
+    private var standbySwatch: RGB? {
+        guard entry.isEmpty, goPoint == nil, case .blank(let blank)? = standby?.content else { return nil }
+        return blank.colour
+    }
+
     private var name: String {
         if !entry.isEmpty { return "" }
         if let goPoint { return goPoint.point.text }
-        return standby.map { $0.text.isEmpty ? "\u{2014}" : $0.text } ?? "end of sheet"
+        return standby.map { $0.text.isEmpty ? "\u{2014}" : $0.text.replacingOccurrences(of: "\n", with: " \u{23CE} ") } ?? "end of sheet"
     }
 
     /// A GO of a cue waits for its own cue point, if it has one.
@@ -141,5 +156,17 @@ struct StandbyPanelView: View {
         case .failed: ("No clip \u{2014} this cue goes to black", .orange)
         case nil: nil
         }
+    }
+}
+
+/// A blank cue's colour, as a small bordered swatch.
+struct BlankSwatch: View {
+    let colour: RGB
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(Color(red: Double(colour.r) / 255, green: Double(colour.g) / 255, blue: Double(colour.b) / 255))
+            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.tertiary, lineWidth: 1))
+            .frame(width: 34, height: 13)
     }
 }

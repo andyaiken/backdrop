@@ -62,7 +62,7 @@ final class MapRouteWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         window?.title = "Map Route \u{2014} Cue \(cue.number.isEmpty ? "(no number)" : cue.number)"
-        model.update(content, settings: controller.show.settings.resolved(content.overrides))
+        model.update(content, settings: content.settings)
     }
 }
 

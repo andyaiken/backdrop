@@ -113,13 +113,11 @@ final class ShowDocument: NSDocument {
                 .map: MapRenderer(media: media),
                 .layered: LayeredRenderer(media: media),
                 .video: VideoRenderer(media: media),
+                .text: TextRenderer(),
                 .blank: BlankRenderer(),
             ]
         )
         self.controller = controller
-        if initialShow.cues.isEmpty {
-            controller.say("Add a cue to begin, with Add Cue at the top or from the Edit menu.")
-        }
 
         // addWindowController sets the console's document. Setting it first
         // makes AppKit treat the console as already added, and the show is

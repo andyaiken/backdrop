@@ -6,8 +6,8 @@ private func layer(_ name: String, withPrevious: Bool = false, life: LayerLife =
     ImageLayer(src: "media/\(name).png", name: name, cuePoint: cue, exitCuePoint: exit, withPrevious: withPrevious, life: life)
 }
 
-private func layered(_ layers: [ImageLayer], overrides: LayeredOverrides = .init()) -> Cue {
-    Cue(number: "9", content: .layered(LayeredContent(text: "Last Supper", base: "media/base.png", layers: layers, overrides: overrides)))
+private func layered(_ layers: [ImageLayer], settings: LayeredSettings = .init()) -> Cue {
+    Cue(number: "9", content: .layered(LayeredContent(text: "Last Supper", base: "media/base.png", layers: layers, settings: settings)))
 }
 
 private func content(_ cue: Cue) -> LayeredContent {
@@ -26,7 +26,7 @@ struct LayeredModelTests {
         rich.highlight = LayerHighlight(context: LayerContext.dim)
         rich.frame = PictureRect(x: 0.2, y: 0.3, width: 0.3, height: 0.2)
         let cue = layered([layer("table"), rich, layer("chalice", withPrevious: true)],
-                          overrides: LayeredOverrides(advance: .eachStep, baseLevel: 30, context: .spotlight, camera: .push, zoom: 2))
+                          settings: LayeredSettings(advance: .eachStep, baseLevel: 30, context: .spotlight, camera: .push, zoom: 2))
         let show = Show(title: "T", cues: [cue])
         #expect(show.version == 7 && Show.formatVersion == 7)
         let back = try JSONDecoder().decode(Show.self, from: try JSONEncoder().encode(show))
@@ -46,10 +46,10 @@ struct LayeredModelTests {
 
     @Test("Decoding clamps what is out of range")
     func clamps() throws {
-        let json = #"{"kind":"layered","layers":[{"src":"a","level":500,"fadeMs":1}],"overrides":{"baseLevel":900,"zoom":99}}"#
+        let json = #"{"kind":"layered","layers":[{"src":"a","level":500,"fadeMs":1}],"settings":{"baseLevel":900,"zoom":99}}"#
         let c = content(try JSONDecoder().decode(Cue.self, from: Data(json.utf8)))
         #expect(c.layers[0].level == 100 && c.layers[0].fadeMs == 100)
-        #expect(c.overrides.baseLevel == 100 && c.overrides.zoom == SettingRange.mapZoom.upperBound)
+        #expect(c.settings.baseLevel == 100 && c.settings.zoom == SettingRange.mapZoom.upperBound)
     }
 
     @Test("mediaPaths covers the base and every layer, so Remove Unused Media keeps them")
@@ -137,13 +137,19 @@ struct LayeredStepTests {
 
 @Suite("Layered image cues: GOs and cue points")
 struct LayeredGoTests {
-    let goes = { () -> ShowSettings in var s = ShowSettings(); s.advance = .eachStep; return s }()
+    /// A cue that waits for GO before each step.
+    func onGo(_ cue: Cue) -> Cue {
+        var cue = cue
+        SettingKey.advance.set(.advance(.eachStep), in: &cue)
+        return cue
+    }
 
     @Test("A cue that moves on by itself has no GO points; on GO, one for each step")
     func goPoints() {
-        let cue = layered([layer("table", cue: "Look at the table"), layer("chalice", life: .untilNextGo, exit: "No chalice"), layer("robe")])
-        #expect(cue.goPoints(defaults: ShowSettings()).isEmpty)
-        let points = cue.goPoints(defaults: goes)
+        let plain = layered([layer("table", cue: "Look at the table"), layer("chalice", life: .untilNextGo, exit: "No chalice"), layer("robe")])
+        #expect(plain.goPoints().isEmpty)
+        let cue = onGo(plain)
+        let points = cue.goPoints()
         #expect(points.map(\.text) == ["table", "chalice", "chalice goes", "robe"] && points.allSatisfy { $0.unit == .layer })
         #expect(points.map(\.cuePoint) == ["Look at the table", "", "No chalice", ""])
         #expect(cue.hasGoCuePoints)
@@ -152,19 +158,19 @@ struct LayeredGoTests {
 
     @Test("A cue point set on a step lands on the layer that arrives, or on the one that goes")
     func setCuePoint() {
-        var cue = layered([layer("table"), layer("hands", withPrevious: true), layer("chalice", life: .untilNextGo), layer("robe")])
+        var cue = onGo(layered([layer("table"), layer("hands", withPrevious: true), layer("chalice", life: .untilNextGo), layer("robe")]))
         // Steps: table + hands, chalice, chalice goes, robe.
-        cue.setCuePoint("  The table  ", ofGoPoint: 0, defaults: goes)
-        cue.setCuePoint("There is no chalice", ofGoPoint: 2, defaults: goes)
-        cue.setCuePoint("Robe", ofGoPoint: 3, defaults: goes)
+        cue.setCuePoint("  The table  ", ofGoPoint: 0)
+        cue.setCuePoint("There is no chalice", ofGoPoint: 2)
+        cue.setCuePoint("Robe", ofGoPoint: 3)
         let c = content(cue)
         #expect(c.layers.map(\.cuePoint) == ["The table", "", "", "Robe"])
         #expect(c.layers[2].exitCuePoint == "There is no chalice")
-        cue.setCuePoint("", ofGoPoint: 2, defaults: goes)
+        cue.setCuePoint("", ofGoPoint: 2)
         #expect(content(cue).layers[2].exitCuePoint.isEmpty)
         // On its own it has no GOs to set.
         var byItself = layered([layer("a")])
-        byItself.setCuePoint("x", ofGoPoint: 0, defaults: ShowSettings())
+        byItself.setCuePoint("x", ofGoPoint: 0)
         #expect(content(byItself).layers[0].cuePoint.isEmpty)
     }
 
@@ -180,30 +186,27 @@ struct LayeredGoTests {
 
 @Suite("Layered image cues: settings")
 struct LayeredSettingsTests {
-    @Test("A cue takes the show's defaults unless it overrides them")
-    func resolving() {
-        var show = ShowSettings()
-        show.layerMs = 900
-        let c = show.resolved(LayeredOverrides(baseLevel: 40, entrance: .settle, zoom: 2))
-        #expect(c.layerMs == 900 && c.baseLevel == 40 && c.entrance == .settle && c.zoom == 2)
+    @Test("A cue's settings start at the built-in values, and each can be changed")
+    func values() {
+        let c = LayeredSettings(baseLevel: 40, entrance: .settle, zoom: 2)
+        #expect(c.layerMs == 800 && c.baseLevel == 40 && c.entrance == .settle && c.zoom == 2)
         #expect(c.context == .desaturate && c.camera == .still && !c.eachStepOnGO)
-        show.advance = .eachStep
-        #expect(show.resolved(LayeredOverrides()).eachStepOnGO)
-        #expect(LayeredOverrides().isEmpty && !LayeredOverrides(baseLevel: 1).isEmpty)
+        #expect(LayeredSettings(advance: .eachStep).eachStepOnGO)
     }
 
-    @Test("Show defaults are written only when changed, so older shows read as they did")
-    func codingDefaults() throws {
-        let plain = String(decoding: try JSONEncoder().encode(ShowSettings()), as: UTF8.self)
-        #expect(!plain.contains("layerMs") && !plain.contains("baseLevel"))
-        var s = ShowSettings()
-        s.baseLevel = 0
-        s.layeredCamera = .push
-        let back = try JSONDecoder().decode(ShowSettings.self, from: try JSONEncoder().encode(s))
-        #expect(back.baseLevel == 0 && back.layeredCamera == .push && back.layerMs == 800)
+    @Test("A cue's settings are written in full, and a short file fills in the rest")
+    func coding() throws {
+        var cue = layered([])
+        SettingKey.baseLevel.set(.number(0), in: &cue)
+        SettingKey.push.set(.push(.push), in: &cue)
+        let back = try JSONDecoder().decode(Cue.self, from: try JSONEncoder().encode(cue))
+        #expect(content(back).settings.baseLevel == 0 && content(back).settings.camera == .push && content(back).settings.layerMs == 800)
+        let json = Data(#"{ "kind": "layered", "num": "1", "settings": { "baseLevel": 10 } }"#.utf8)
+        let short = content(try JSONDecoder().decode(Cue.self, from: json)).settings
+        #expect(short == LayeredSettings(baseLevel: 10))
     }
 
-    @Test("The new keys read, choose and override like the others")
+    @Test("The new keys read, choose and set like the others")
     func keys() {
         #expect(SettingKey.layered.allSatisfy { $0.applies(to: .layered) })
         #expect(SettingKey.layered.allSatisfy { !$0.applies(to: .image) || SettingKey.image.contains($0) })
@@ -220,22 +223,19 @@ struct LayeredSettingsTests {
         #expect(SettingKey.groups.contains { $0.name == "Layered image cues" && $0.keys.contains(.push) })
 
         var cue = layered([])
-        SettingKey.baseLevel.setOverride(.number(33), in: &cue)
-        SettingKey.context.setOverride(.context(.dim), in: &cue)
-        SettingKey.push.setOverride(.push(.travel), in: &cue)
-        SettingKey.zoom.setOverride(.number(2), in: &cue)
-        #expect(content(cue).overrides == LayeredOverrides(baseLevel: 35, context: .dim, camera: .travel, zoom: 2), "snapped to its step of 5")
-        #expect(SettingKey.baseLevel.effective(for: cue, defaults: ShowSettings()) == (.number(35), true))
-        SettingKey.baseLevel.setOverride(nil, in: &cue)
-        #expect(SettingKey.baseLevel.effective(for: cue, defaults: ShowSettings()) == (.number(25), false))
+        SettingKey.baseLevel.set(.number(33), in: &cue)
+        SettingKey.context.set(.context(.dim), in: &cue)
+        SettingKey.push.set(.push(.travel), in: &cue)
+        SettingKey.zoom.set(.number(2), in: &cue)
+        #expect(content(cue).settings == LayeredSettings(baseLevel: 35, context: .dim, camera: .travel, zoom: 2), "snapped to its step of 5")
+        #expect(SettingKey.baseLevel.value(in: cue) == .number(35))
 
-        var defaults = ShowSettings()
-        SettingKey.strength.set(.number(80), in: &defaults)
-        SettingKey.length.set(.number(10), in: &defaults)
-        SettingKey.move.set(.number(2000), in: &defaults)
-        SettingKey.entrance.set(.entrance(.bloom), in: &defaults)
-        #expect(defaults.contextLevel == 80 && defaults.contextTicks == 10 && defaults.cameraMs == 2000 && defaults.layeredEntrance == .bloom)
-        #expect(cue.timing(defaults: defaults).clockMs == defaults.clockMs)
+        SettingKey.strength.set(.number(80), in: &cue)
+        SettingKey.length.set(.number(10), in: &cue)
+        SettingKey.move.set(.number(2000), in: &cue)
+        SettingKey.entrance.set(.entrance(.bloom), in: &cue)
+        let s = content(cue).settings
+        #expect(s.contextLevel == 80 && s.contextTicks == 10 && s.cameraMs == 2000 && s.entrance == .bloom)
     }
 }
 
@@ -252,8 +252,7 @@ struct LayeredSheetTests {
 
     @Test("Each GO has a row of its own in the DSM's book when the cue waits for GO")
     func goRows() {
-        var show = Show(title: "T", cues: [layered([layer("a", cue: "line a"), layer("b")])])
-        show.settings.advance = .eachStep
+        let show = Show(title: "T", cues: [layered([layer("a", cue: "line a"), layer("b")], settings: LayeredSettings(advance: .eachStep))])
         let rows = CueSheet(show: show, title: "T", layout: .dsm).rows
         #expect(rows.count == 3 && rows[1].go == 1 && rows[1].cuePoint == "line a" && rows[2].content == ["b"])
     }
@@ -263,10 +262,10 @@ struct LayeredSheetTests {
         var hands = layer("hands", cue: "")
         hands.level = 60
         hands.blend = .screen
-        let cue = layered([layer("table"), hands, layer("chalice", life: .untilNextGo)], overrides: LayeredOverrides(baseLevel: 30))
+        let cue = layered([layer("table"), hands, layer("chalice", life: .untilNextGo)], settings: LayeredSettings(baseLevel: 30))
         let rows = CueSheet(show: Show(title: "T", cues: [cue]), title: "T", layout: .operatorSettings).rows
         let settings = rows[0].settings
-        #expect(settings.first { $0.name == "Base picture" }?.overridden == true)
+        #expect(settings.first { $0.name == "Base picture" }?.value == "30%")
         #expect(settings.first { $0.name == "Base" }?.value == "base.png")
         #expect(settings.first { $0.name == "Layer 2" }?.value == "hands \u{00B7} hands.png \u{00B7} 60% \u{00B7} screen")
         #expect(settings.first { $0.name == "Layer 3" }?.value.hasSuffix("goes on its own GO") == true)
@@ -362,15 +361,15 @@ struct LayeredRecordedTests {
             ImageLayer(src: "media/m.png", name: "the M", fadeMs: 1500),
         ]
         var show = Show(title: "Da Vinci", cues: [Cue(number: "9", line: "Sophie looks up", content: .layered(
-            LayeredContent(text: "Last Supper", base: "media/base.png", layers: layers, overrides: LayeredOverrides(baseLevel: 30))))])
-        show.settings.advance = .eachStep
+            LayeredContent(text: "Last Supper", base: "media/base.png", layers: layers,
+                           settings: LayeredSettings(advance: .eachStep, baseLevel: 30))))])
         for (layout, want) in [(CueSheet.Layout.dsm, recorded.dsm), (.operatorSettings, recorded.operator)] {
             let rows = CueSheet(show: show, title: "T", layout: layout).rows
             #expect(rows.count == want.count)
             for (row, recordedRow) in zip(rows, want) {
                 #expect(row.number == recordedRow.number && row.type == recordedRow.type && row.content == recordedRow.content)
                 #expect(row.cuePoint == recordedRow.cuePoint && (row.go ?? 0) == recordedRow.go)
-                #expect(row.settings.map { [$0.name, $0.value, String($0.overridden)] } == recordedRow.settings.map { [$0.name, $0.value, String($0.overridden)] })
+                #expect(row.settings.map { [$0.name, $0.value] } == recordedRow.settings.map { [$0.name, $0.value] })
             }
         }
     }

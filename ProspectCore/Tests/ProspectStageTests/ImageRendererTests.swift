@@ -38,7 +38,7 @@ private let media: URL = {
 
 private func imageCue(_ src: String, columns: Int = 4, order: TileOrder = .diagonal, text: String = "THE LOUVRE") -> Cue {
     Cue(number: "2", content: .image(ImageContent(text: text, src: src,
-                                                   overrides: ImageOverrides(gridColumns: columns, order: order))))
+                                                   settings: ImageSettings(gridColumns: columns, order: order))))
 }
 
 @Suite("Image renderer")
@@ -54,21 +54,24 @@ struct ImageRendererTests {
     }
 
     /// Prepares a cue and waits for its picture, decoded in the background.
-    func prepare(_ cue: Cue, defaults: ShowSettings = ShowSettings()) async {
+    func prepare(_ cue: Cue, tweak: (inout ImageSettings) -> Void = { _ in }) async {
+        var cue = cue
+        if case .image(var content) = cue.content {
+            tweak(&content.settings)
+            cue.content = .image(content)
+        }
         await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
             renderer.onReady = { [renderer] in
                 renderer.onReady = nil
                 done.resume()
             }
-            renderer.prepare(cue, defaults: defaults)
+            renderer.prepare(cue, show: ShowSettings())
         }
     }
 
     @Test("Sharpening steps each tile through finer and finer blocks, then the picture")
     func sharpens() async throws {
-        var defaults = ShowSettings()
-        defaults.reveal = .sharpen
-        await prepare(imageCue("quadrants.png"), defaults: defaults)
+        await prepare(imageCue("quadrants.png")) { $0.reveal = .sharpen }
         let plan = try #require(renderer.plan)
         // 400 pixels across four tiles: 1, 2, 3, 5 and on to 34 blocks a
         // tile, never smaller than two pixels.
@@ -89,10 +92,7 @@ struct ImageRendererTests {
 
     @Test("A flip too short for every step still shows the coarse ones, a frame each, and leaves out the finest")
     func shortSharpen() async throws {
-        var defaults = ShowSettings()
-        defaults.reveal = .sharpen
-        defaults.flipMs = 150
-        await prepare(imageCue("quadrants.png"), defaults: defaults)
+        await prepare(imageCue("quadrants.png")) { $0.reveal = .sharpen; $0.flipMs = 150 }
         let plan = try #require(renderer.plan)
         let tiles = try #require(renderer.tree(for: live)?.tiles)
         #expect(plan.flipFrames == 4 && plan.levels.count == 8)
@@ -106,9 +106,7 @@ struct ImageRendererTests {
 
     @Test("A sharpening tile shows crisp blocks of its part of the picture, coarsest first")
     func sharpeningBlocks() async throws {
-        var defaults = ShowSettings()
-        defaults.reveal = .sharpen
-        await prepare(imageCue("gradient.png"), defaults: defaults)
+        await prepare(imageCue("gradient.png")) { $0.reveal = .sharpen }
         let plan = try #require(renderer.plan)
         let tiles = try #require(renderer.tree(for: live)?.tiles)
         let start = plan.schedule.starts[0]
@@ -170,7 +168,7 @@ struct ImageRendererTests {
 
     func revealCue(_ reveal: TileReveal, order: TileOrder = .diagonal, columns: Int = 4) -> Cue {
         Cue(number: "2", content: .image(ImageContent(text: "X", src: "quadrants.png",
-                                                       overrides: ImageOverrides(gridColumns: columns, order: order, reveal: reveal))))
+                                                       settings: ImageSettings(gridColumns: columns, order: order, reveal: reveal))))
     }
 
     /// The pixel at a share of the 864 x 432 picture, centred on the 960 x 540 surface.
@@ -202,9 +200,7 @@ struct ImageRendererTests {
 
     @Test("Sharpen from one colour: the whole surface opens as the picture's average, then each tile sharpens out of it")
     func sharpenFromOneColour() async throws {
-        var defaults = ShowSettings()
-        defaults.waveTicks = 3
-        await prepare(revealCue(.sharpen, order: .diagonal), defaults: defaults)
+        await prepare(revealCue(.sharpen, order: .diagonal)) { $0.waveTicks = 3 }
         _ = renderer.frame(-10)
         let opening = render(live)
         opening.save("image-sharpen-opening")
@@ -221,12 +217,8 @@ struct ImageRendererTests {
 
     @Test("Sharpen in quarters: one block of the average, a rectangle at random splits into four, again and again, then the picture comes up")
     func quarters() async throws {
-        var defaults = ShowSettings()
-        defaults.waveTicks = 2
-        defaults.flipMs = 440
-        defaults.clockMs = 44
         // 4 columns is one split deep: the four quadrants.
-        await prepare(revealCue(.sharpen, order: .quarters, columns: 4), defaults: defaults)
+        await prepare(revealCue(.sharpen, order: .quarters, columns: 4)) { $0.waveTicks = 2; $0.flipMs = 440; $0.clockMs = 44 }
         let tree = try #require(renderer.tree(for: live))
         let plan = try #require(renderer.plan?.quarters)
         #expect(plan.schedule.depth == 1 && plan.schedule.splits == [0] && tree.blocks.count == 5)
@@ -255,9 +247,7 @@ struct ImageRendererTests {
 
     @Test("Deeper quarters: the count of rectangles follows one, four, seven, ten")
     func deeperQuarters() async throws {
-        var defaults = ShowSettings()
-        defaults.waveTicks = 1
-        await prepare(revealCue(.sharpen, order: .quarters, columns: 12), defaults: defaults)
+        await prepare(revealCue(.sharpen, order: .quarters, columns: 12)) { $0.waveTicks = 1 }
         let tree = try #require(renderer.tree(for: live))
         let plan = try #require(renderer.plan?.quarters)
         #expect(plan.schedule.depth == 3 && plan.schedule.splits.count == 21)
@@ -274,10 +264,7 @@ struct ImageRendererTests {
 
     @Test("Tiles turn on schedule, and the cue settles when the last flip has had time")
     func flipsOnSchedule() async throws {
-        var defaults = ShowSettings()
-        defaults.flipMs = 420
-        defaults.clockMs = 44
-        await prepare(imageCue("quadrants.png"), defaults: defaults)
+        await prepare(imageCue("quadrants.png")) { $0.flipMs = 420; $0.clockMs = 44 }
         let plan = try #require(renderer.plan)
         let tiles = try #require(renderer.tree(for: live)?.tiles)
         #expect(plan.flipFrames == 10, "420 ms at 44 ms a frame, rounded up")
@@ -334,7 +321,7 @@ struct ImageRendererTests {
         let cue = imageCue("quadrants.png")
         await prepare(cue)   // decoded and cached once
         renderer.clear(live)
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
         #expect(renderer.plan != nil, "no wait the second time")
     }
 

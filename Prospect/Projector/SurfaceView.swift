@@ -9,6 +9,8 @@ import QuartzCore
 final class SurfaceView: NSView {
     let surface: SurfaceLayer
     weak var controller: ShowController?
+    /// The runner this surface belongs to, if not the controller's main one.
+    weak var runner: StageRunner?
     private var link: CADisplayLink?
 
     /// Hide the cursor over this view. The projector never shows one.
@@ -38,13 +40,13 @@ final class SurfaceView: NSView {
     override func layout() {
         super.layout()
         surface.frame = bounds
-        controller?.runner.relayout(surface)
+        (runner ?? controller?.runner)?.relayout(surface)
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         surface.contentsScale = window?.backingScaleFactor ?? 2
-        controller?.runner.relayout(surface)
+        (runner ?? controller?.runner)?.relayout(surface)
     }
 
     // MARK: Clock

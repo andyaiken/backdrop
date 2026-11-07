@@ -124,12 +124,12 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         tree.zoomer.transform = CATransform3DIdentity
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .layered(let content) = cue.content else { return }
         token += 1
         self.cue = cue
         self.content = content
-        let settings = defaults.resolved(content.overrides)
+        let settings = content.settings
         self.settings = settings
         plan = nil
         pending = []
@@ -214,7 +214,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         }
     }
 
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
+    public func preload(_ cue: Cue, show: ShowSettings) {
         guard case .layered(let content) = cue.content else { return }
         for path in content.mediaPaths {
             guard let url = media(path) else { continue }

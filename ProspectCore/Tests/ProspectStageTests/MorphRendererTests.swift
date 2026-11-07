@@ -49,7 +49,7 @@ struct MorphRendererTests {
                 renderer.onReady = nil
                 done.resume()
             }
-            renderer.prepare(cue, defaults: ShowSettings())
+            renderer.prepare(cue, show: ShowSettings())
         }
     }
 
@@ -107,7 +107,7 @@ struct MorphRendererTests {
         runner.attach(surface(width: 960, height: 540))
         let cue = dotCue()
         await prepare(cue)
-        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(cue, show: ShowSettings(), presentation: .run, at: 0)
         let hold = 44 * 0.044
         _ = runner.tick(at: hold + 0.5)
         let a = renderer.progress
@@ -122,7 +122,7 @@ struct MorphRendererTests {
         let rest = MorphPair(from: PicturePoint(x: 0.5, y: 0.5), to: PicturePoint(x: 0.75, y: 0.5))
         return Cue(number: "9", content: .morph(MorphContent(text: "DOT", pictures: [
             MorphPicture(src: "media/left.png"), MorphPicture(src: "media/middle.png", pairs: [half]), MorphPicture(src: "media/right.png", pairs: [rest]),
-        ], overrides: MorphOverrides(advance: .eachStep))))
+        ], settings: MorphSettings(advance: .eachStep))))
     }
 
     /// Until both pictures of what is on stage have loaded.
@@ -167,12 +167,12 @@ struct MorphRendererTests {
         runner.attach(surface(width: 960, height: 540))
         let cue = threeStages()
         await prepare(cue)
-        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(cue, show: ShowSettings(), presentation: .run, at: 0)
         _ = runner.tick(at: 3)
         #expect(!runner.isRunning, "waiting for the first GO")
         runner.carryOn(at: 3)
         #expect(runner.isRunning)
-        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 10, startingAt: 1)
+        runner.load(cue, show: ShowSettings(), presentation: .run, at: 10, startingAt: 1)
         try await ready()
         _ = runner.tick(at: 10 + 0.044 * 44 + 0.01)
         #expect(renderer.shown.stage == 1, "the second stage, the first already done")
@@ -272,7 +272,7 @@ struct MorphLoadingTests {
     func notFinishedWhileLoading() {
         let renderer = MorphRenderer(media: { _ in nil }, onScreen: false)
         renderer.mount(on: surface(width: 960, height: 540))
-        renderer.prepare(Cue(content: .morph(MorphContent(text: "SLOW", src: "media/a.png", into: "media/b.png"))), defaults: ShowSettings())
+        renderer.prepare(Cue(content: .morph(MorphContent(text: "SLOW", src: "media/a.png", into: "media/b.png"))), show: ShowSettings())
         #expect(renderer.paint(at: 10_000) == false, "the pictures load on another thread, so aren't here yet")
     }
 }

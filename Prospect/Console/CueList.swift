@@ -1,10 +1,17 @@
 import AppKit
 import ProspectCore
 
+extension Desk {
+    /// A row under the pointer, and a selected one: the system's own tints,
+    /// so they follow the user's accent colour and light or dark mode.
+    static let hover = NSColor.quaternaryLabelColor
+    static let selected = NSColor.controlAccentColor.withAlphaComponent(0.14)
+}
+
 /// One row: number, a glyph for the kind, the name, and beneath it the
 /// subtitle and the cue point. The live cue sits on a raised background; the
-/// standby cue has a brass number and a brass bar. A transition in that isn't
-/// the show's default gets a row of its own above the cue, `TransitionRowView`.
+/// standby cue has a brass number and a brass bar. In edit mode every cue but
+/// the first has a row above it for the transition in, `TransitionRowView`.
 final class CueRowView: NSView {
     let cue: Cue
     var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true } } }
@@ -27,6 +34,7 @@ final class CueRowView: NSView {
     /// Dimmed while it's being dragged to a new place.
     var isLifted = false { didSet { alphaValue = isLifted ? 0.45 : 1 } }
     private var targeted = false { didSet { needsDisplay = true } }
+    private var isHovered = false { didSet { if isHovered != oldValue { needsDisplay = true } } }
     var onClick: (UUID) -> Void = { _ in }
     var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
@@ -46,6 +54,15 @@ final class CueRowView: NSView {
     }
 
     override var isFlipped: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     /// At the right of the row, for a cue that moves on by itself: a down
     /// arrow if it continues when finished, whatever the wait after, or the
@@ -81,20 +98,20 @@ final class CueRowView: NSView {
                 : c.stops.count < 2 ? "no stops" : "\(c.stops.count - 1) stop\(c.stops.count == 2 ? "" : "s")"
         case .video(let c): [c.sub, c.atEnd == .hold ? "" : c.atEnd.rawValue].filter { !$0.isEmpty }.joined(separator: "   ")
         case .blank(let c): c.colour.hex
+        case .text: ""
         case .layered(let c):
             c.layers.isEmpty ? "no layers" : "\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s")"
         }
     }
 
-    /// What the cue list says about a cue's own transition in, if it has one.
-    static func transitionNote(for cue: Cue, defaults: ShowSettings) -> String? {
-        guard !cue.transition.isEmpty else { return nil }
-        let transition = cue.transitionIn(defaults: defaults)
+    /// What the cue list says about a cue's transition in.
+    static func transitionNote(for cue: Cue) -> String {
+        let transition = cue.transition
         let length = SettingKey.fade.format(.number(transition.fadeMs))
-        switch transition.style {
-        case .snap: return "snap"
-        case .fade: return "fade " + length
-        case .crossfade: return "crossfade " + length
+        return switch transition.style {
+        case .snap: "snap"
+        case .fade: "fade " + length
+        case .crossfade: "crossfade " + length
         }
     }
 
@@ -143,6 +160,11 @@ final class CueRowView: NSView {
             Desk.lineBright.setStroke()
             path.stroke()
         }
+        // Standing by is a tint and a bar; the pointer over a row is a lighter tint.
+        if isStandby || (isHovered && !targeted) {
+            (isStandby ? Desk.selected : Desk.hover).setFill()
+            NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
+        }
         if isStandby {
             Desk.brass.setFill()
             NSRect(x: 0, y: 6, width: 2, height: bounds.height - 12).fill()
@@ -158,9 +180,12 @@ final class CueRowView: NSView {
         }
 
         var y: CGFloat = 8
-        // Text boxes are 18 high, with the glyphs sitting a point low in them.
-        let leftY = middleY - 9 - 1
-        draw(cue.number, Desk.mono(12), isStandby ? Desk.brass : Desk.dim, x: 8, y: leftY, width: 40, align: .right)
+        // A figure or a mark is centred by its own height, not its line's: a
+        // line has room below the baseline for descenders that digits never
+        // use, which would leave them sitting high beside the icons.
+        func centredY(_ font: NSFont) -> CGFloat { middleY + font.capHeight / 2 - font.ascender }
+        let numberFont = Desk.mono(12)
+        draw(cue.number, numberFont, isStandby ? Desk.brass : Desk.dim, x: 8, y: centredY(numberFont), width: 40, align: .right)
         drawSymbol(cue.kind.symbol, Desk.dim, centredIn: NSRect(x: 56, y: middleY - 8, width: 14, height: 14))
         // At the right: in edit mode the grip and delete; then how the cue
         // continues, then any problem.
@@ -171,14 +196,25 @@ final class CueRowView: NSView {
         let symbol = Self.continueSymbol(cue.continueMode)
         let marks = CGFloat((symbol == nil ? 0 : 1) + (hasIssue ? 1 : 0))
         let textX: CGFloat = 78, textWidth = bounds.width - textX - 10 - marks * 18 - controlsWidth
-        draw(cue.text.isEmpty ? "\u{2014}" : cue.text, Desk.mono(13), Desk.text, x: textX, y: y, width: textWidth, kern: 0.65)
+        if case .blank(let blank) = cue.content {
+            // A blank has no words, only a colour: a small bordered swatch of it.
+            let swatch = NSBezierPath(roundedRect: NSRect(x: textX + 0.5, y: y + 2.5, width: 34, height: 13), xRadius: 3, yRadius: 3)
+            NSColor(srgbRed: CGFloat(blank.colour.r) / 255, green: CGFloat(blank.colour.g) / 255,
+                    blue: CGFloat(blank.colour.b) / 255, alpha: 1).setFill()
+            swatch.fill()
+            Desk.lineBright.setStroke()
+            swatch.stroke()
+        } else {
+            draw(cue.text.isEmpty ? "\u{2014}" : cue.text.replacingOccurrences(of: "\n", with: " \u{23CE} "), Desk.mono(13), Desk.text, x: textX, y: y, width: textWidth, kern: 0.65)
+        }
         var markX = bounds.width - 22 - controlsWidth
         if let symbol {
             drawSymbol(symbol, isStandby ? Desk.brass : Desk.dim, centredIn: markRect(x: markX))
             markX -= 18
         }
         if hasIssue {
-            draw("!", Desk.mono(13, .bold), Desk.brass, x: markX + 2, y: middleY - 9 - 1, width: 12)
+            let bang = Desk.mono(13, .bold)
+            draw("!", bang, Desk.brass, x: markX + 2, y: centredY(bang), width: 12)
         }
         y += 18
         if !subtitle.isEmpty {
@@ -236,25 +272,30 @@ final class CueRowView: NSView {
     }
 }
 
-/// A cue's own transition in, where it differs from the show's, as a row above
-/// the cue it belongs to: "\u{2193} crossfade 0.5 s". It is derived from the
+/// A cue's transition in, as a row above the cue it belongs to: "\u{2193} crossfade 0.5 s".
+/// Edit mode shows one above every cue but the first. It is derived from the
 /// cue, never stored, so it has no number and standing by never lands on it.
-/// A click selects its cue; the right-click menu clears the override, which
-/// is also what removes the row. Console only: the printed sheet has its own
-/// settings lines and never shows this.
+/// A click selects it, and the Inspector shows its settings; the right-click
+/// menu puts a changed transition back to the standard fade. Console only: the
+/// printed sheet has its own settings lines and never shows this.
 final class TransitionRowView: NSView {
     let cue: UUID
     let note: String
+    /// Whether it differs from the standard fade, and so can be cleared.
+    let isChanged: Bool
+    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
+    private var isHovered = false { didSet { if isHovered != oldValue { needsDisplay = true } } }
     var onClick: (UUID) -> Void = { _ in }
     var onClear: (UUID) -> Void = { _ in }
 
     static let height: CGFloat = 18
 
-    init(cue: UUID, note: String) {
+    init(cue: UUID, note: String, isChanged: Bool) {
         self.cue = cue
         self.note = note
+        self.isChanged = isChanged
         super.init(frame: .zero)
-        toolTip = "This cue\u{2019}s own transition in. Right-click to clear it and use the show\u{2019}s."
+        toolTip = "How the stage changes to this cue." + (isChanged ? " Right-click to put it back to the standard fade." : "")
     }
 
     required init?(coder: NSCoder) {
@@ -263,8 +304,27 @@ final class TransitionRowView: NSView {
 
     override var isFlipped: Bool { true }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
+
     override func draw(_ dirtyRect: NSRect) {
-        NSAttributedString(string: "\u{2193} " + note, attributes: [.font: Desk.sans(10.5), .foregroundColor: Desk.brass])
+        if isSelected || isHovered {
+            (isSelected ? Desk.selected : Desk.hover).setFill()
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4).fill()
+        }
+        // Selected as a standby cue is: the brass bar at the left, brass text.
+        if isSelected {
+            Desk.brass.setFill()
+            NSRect(x: 0, y: 2, width: 2, height: bounds.height - 4).fill()
+        }
+        let colour = isChanged || isSelected ? Desk.brass : Desk.dim
+        NSAttributedString(string: "\u{2193} " + note, attributes: [.font: Desk.sans(10.5), .foregroundColor: colour])
             .draw(in: NSRect(x: 78, y: 2, width: max(0, bounds.width - 88), height: 14))
     }
 
@@ -273,6 +333,7 @@ final class TransitionRowView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
+        guard isChanged else { return nil }
         let menu = NSMenu()
         let item = NSMenuItem(title: "Clear Transition", action: #selector(clearPicked(_:)), keyEquivalent: "")
         item.target = self
@@ -295,6 +356,7 @@ final class CueListView: NSScrollView {
     private var steps: [UUID: [SubCueRowView]] = [:]
     private var shown: [Cue] = []
     private var shownNotes: [String?] = []
+    private var shownEditing = false
     /// The transition rows on screen, by the cue they sit above.
     private var transitionRows: [UUID: TransitionRowView] = [:]
     /// The cue rows on screen, in sheet order.
@@ -305,7 +367,9 @@ final class CueListView: NSScrollView {
     var onStepClick: (UUID, Int) -> Void = { _, _ in }
     var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
-    /// A transition row's menu: remove the cue's own transition.
+    /// A transition row clicked: the cue it leads into.
+    var onTransitionClick: (UUID) -> Void = { _ in }
+    /// A transition row's menu: put the cue's transition back to the standard.
     var onClearTransition: (UUID) -> Void = { _ in }
     /// A cue dragged to stand before the cue at this index, or at the end.
     var onMoveCue: (UUID, Int) -> Void = { _, _ in }
@@ -331,18 +395,23 @@ final class CueListView: NSScrollView {
     /// - Parameters:
     ///   - standbyStep: The GO of the standby cue that stands by, if one does.
     ///   - taken: How many of the live cue's GOs it has reached.
-    func update(show: Show, standby: UUID?, standbyStep: Int?, live: UUID?, taken: Int, issues: Set<UUID>, editing: Bool) {
-        let cues = show.cues, defaults = show.settings
-        let notes = cues.map { CueRowView.transitionNote(for: $0, defaults: defaults) }
-        if cues != shown || notes != shownNotes {
+    ///   - selectedTransition: The cue whose transition in is selected, if one is.
+    func update(show: Show, standby: UUID?, standbyStep: Int?, live: UUID?, taken: Int, issues: Set<UUID>, editing: Bool,
+                selectedTransition: UUID? = nil) {
+        let cues = show.cues
+        // Edit mode puts a transition between each pair of cues, so none above the first.
+        let notes: [String?] = cues.enumerated().map { i, cue in
+            editing && i > 0 ? CueRowView.transitionNote(for: cue) : nil
+        }
+        if cues != shown || notes != shownNotes || editing != shownEditing {
             cueRows.values.forEach { $0.removeFromSuperview() }
             transitionRows.values.forEach { $0.removeFromSuperview() }
             cueRows = [:]
             transitionRows = [:]
             for (cue, note) in zip(cues, notes) {
                 if let note {
-                    let transition = TransitionRowView(cue: cue.id, note: note)
-                    transition.onClick = { [weak self] in self?.onClick($0) }
+                    let transition = TransitionRowView(cue: cue.id, note: note, isChanged: cue.transition != .standard)
+                    transition.onClick = { [weak self] in self?.onTransitionClick($0) }
                     transition.onClear = { [weak self] in self?.onClearTransition($0) }
                     document.addSubview(transition, positioned: .below, relativeTo: insertion)
                     transitionRows[cue.id] = transition
@@ -358,7 +427,9 @@ final class CueListView: NSScrollView {
             }
             shown = cues
             shownNotes = notes
+            shownEditing = editing
         }
+        for (id, row) in transitionRows { row.isSelected = id == selectedTransition }
         var open: [UUID: [SubCueRowView]] = [:]
         for row in cueRows.values {
             let id = row.cue.id
@@ -369,7 +440,7 @@ final class CueListView: NSScrollView {
             row.isEditing = editing
             // A cue's GOs open out while it is live or standing by, and fold
             // to a count otherwise.
-            let points = row.cue.goPoints(defaults: defaults)
+            let points = row.cue.goPoints()
             let opens = !points.isEmpty && (id == live || id == standby)
             row.foldedGoes = opens ? 0 : points.count
             guard opens else { continue }

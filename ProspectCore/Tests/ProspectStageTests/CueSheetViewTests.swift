@@ -22,7 +22,7 @@ struct CueSheetViewTests {
         for n in 1...40 {
             switch n % 4 {
             case 1: cues.append(Cue(number: "\(n)", line: n % 8 == 1 ? "LANGDON: \u{201C}\u{2026}the rose line.\u{201D} Langdon crosses down left and kneels by the brass strip." : "",
-                                    content: .title(TitleContent(text: "THE LOUVRE \(n)", sub: "PARIS", key: "VITRUVIAN", overrides: n == 5 ? TitleOverrides(clockMs: 30) : .init()))))
+                                    content: .title(TitleContent(text: "THE LOUVRE \(n)", sub: "PARIS", key: "VITRUVIAN", settings: n == 5 ? TitleSettings(clockMs: 30) : .init()))))
             case 2: cues.append(Cue(number: "\(n)", line: "Lights fade on the gallery", continueMode: n == 10 ? .whenFinished : .whenCued,
                                     content: .image(ImageContent(text: "GRAND GALLERY \(n)"))))
             case 3: cues.append(Cue(number: "\(n)", content: .video(VideoContent(text: "CRYPTEX \(n)", src: "media/cryptex.mov", atEnd: .black))))
@@ -91,8 +91,7 @@ struct CueSheetViewTests {
         let all = (0..<document.pageCount).map { text(of: document, page: $0) }.joined(separator: "\n")
         #expect(all.contains("SETTINGS"))
         #expect(all.contains("Hold") && all.contains("cut to black") && all.contains("cryptex.mov"))
-        #expect(all.contains("30 ms *"), "the one override is marked")
-        #expect(all.contains("are set for that cue"), "and the key to the marking is printed")
+        #expect(all.contains("30 ms"))
         #expect(!all.contains("Lights fade on the gallery"))
     }
 
@@ -116,7 +115,7 @@ struct CueSheetViewTests {
         let anagram = Cue(number: "4.8", line: "SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", content: .anagram(AnagramContent(
             anagrams: [Anagram(text: "O, Draconian devil!", working: ["Dracula? No."], answer: "Leonardo da Vinci!"),
                        Anagram(text: "Oh, lame saint!", answer: "The Mona Lisa!")],
-            overrides: AnagramOverrides(advance: .eachStep))))
+            settings: AnagramSettings(advance: .eachStep))))
         let sheetShow = Show(title: "The Da Vinci Code", cues: [show.cues[0], anagram, show.cues[1]])
         let view = CueSheetView(sheet: CueSheet(show: sheetShow, title: "The Da Vinci Code", layout: .dsm),
                                 printed: Date(timeIntervalSince1970: 1_792_051_200))

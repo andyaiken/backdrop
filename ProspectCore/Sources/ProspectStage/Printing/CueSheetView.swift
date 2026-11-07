@@ -69,10 +69,7 @@ public final class CueSheetView: NSView {
 
     // MARK: Pages
 
-    /// The operator's sheet adds a line explaining the starred values.
-    private var printsKey: Bool { sheet.layout == .operatorSettings && sheet.hasOverrides }
-
-    var headerHeight: CGFloat { Self.margin + 60 + (printsKey ? 14 : 0) }
+    var headerHeight: CGFloat { Self.margin + 60 }
 
     private func paginate() {
         pages = [[]]
@@ -187,8 +184,8 @@ public final class CueSheetView: NSView {
         for (i, setting) in row.settings.enumerated() {
             if i > 0 { out.append(NSAttributedString(string: "\n")) }
             out.append(NSAttributedString(string: setting.name + "\t", attributes: [.font: Self.bodyFont, .foregroundColor: NSColor.black]))
-            out.append(NSAttributedString(string: setting.value + (setting.overridden ? " *" : ""), attributes: [
-                .font: setting.overridden ? Self.leadFont : Self.bodyFont, .foregroundColor: NSColor.black,
+            out.append(NSAttributedString(string: setting.value, attributes: [
+                .font: Self.bodyFont, .foregroundColor: NSColor.black,
             ]))
         }
         out.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: out.length))
@@ -223,11 +220,6 @@ public final class CueSheetView: NSView {
         let date = DateFormatter.localizedString(from: printed, dateStyle: .long, timeStyle: .short)
         Self.text("Projection cue sheet \u{00B7} \(sheet.layout.name) \u{00B7} printed \(date)", Self.metaFont)
             .draw(with: NSRect(x: left, y: y, width: width, height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        if printsKey {
-            y += 14
-            Self.text("Values marked * are set for that cue; the rest are the show\u{2019}s defaults.", Self.metaFont)
-                .draw(with: NSRect(x: left, y: y, width: width, height: 14), options: .usesLineFragmentOrigin)
-        }
         y += 24
 
         let c = columns

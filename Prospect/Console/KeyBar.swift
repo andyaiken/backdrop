@@ -34,8 +34,6 @@ struct KeyBarView: View {
                     Text(meaning)
                 }
             }
-            Spacer(minLength: 22)
-            Text("These work in the projector window too.")
         }
         .font(.system(size: 12.5))
         .foregroundStyle(.secondary)

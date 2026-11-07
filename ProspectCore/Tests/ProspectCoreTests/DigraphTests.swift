@@ -48,18 +48,15 @@ struct DigraphTests {
         #expect(settled.letterCounts.reduce(0, +) == Self.keystone.count(where: \.isLetter), "letters still counted")
     }
 
-    @Test("Bars: letters or digraphs, a show default any decryption cue can override")
+    @Test("Bars: letters or digraphs, set on any decryption cue")
     func setting() throws {
-        #expect(ShowSettings().bars == .letters)
+        #expect(TitleSettings().bars == .letters)
         #expect(SettingKey.bars.format(.bars(.digraphs)) == "digraphs")
         #expect(SettingKey.bars.choice(at: 1) == .bars(.digraphs) && SettingKey.bars.choiceIndex(of: .bars(.digraphs)) == 1)
         var cue = Cue(content: .title(TitleContent(text: Self.keystone)))
-        SettingKey.bars.setOverride(.bars(.digraphs), in: &cue)
+        SettingKey.bars.set(.bars(.digraphs), in: &cue)
         let back = try JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(cue))
-        #expect(SettingKey.bars.override(in: back) == .bars(.digraphs))
-        var s = ShowSettings()
-        SettingKey.bars.set(.bars(.digraphs), in: &s)
-        #expect(try JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).bars == .digraphs)
+        #expect(SettingKey.bars.value(in: back) == .bars(.digraphs))
         #expect(!SettingKey.bars.applies(to: .anagram) && !SettingKey.bars.applies(to: .image))
     }
 }

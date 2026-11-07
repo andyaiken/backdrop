@@ -5,30 +5,44 @@ import Testing
 
 private func sampleShow() -> Show {
     var settings = ShowSettings()
-    settings.clockMs = 30
+    settings.textScale = 80
     settings.geometry = Geometry(width: 90, height: 80, across: -5, down: 3)
     settings.projector = DisplayIdentity(uuid: "ABC-123", name: "Epson EB-L1100U", vendor: 1234, model: 5678)
     return Show(title: "The Da Vinci Code", cues: [
         Cue(number: "1", line: "LANGDON: \u{201C}\u{2026}the rose line.\u{201D}", content: .title(TitleContent(
-            text: "THE LOUVRE", sub: "PARIS", key: "VITRUVIAN", overrides: TitleOverrides(holdTicks: 20, sceneLine: false)))),
+            text: "THE LOUVRE", sub: "PARIS", key: "VITRUVIAN", settings: TitleSettings(holdTicks: 20, sceneLine: false)))),
         Cue(number: "2", content: .image(ImageContent(text: "THE LOUVRE", src: "media/louvre-gallery.jpg",
-            overrides: ImageOverrides(gridColumns: 20, order: .random)))),
+            settings: ImageSettings(gridColumns: 20, order: .random)))),
         Cue(number: "2.5", continueMode: .whenFinished,
             content: .video(VideoContent(text: "CRYPTEX", sub: "REVEAL", src: "media/cryptex-reveal.mov", atEnd: .black))),
-        Cue(number: "P3", content: .blank(BlankContent(text: "WASH", colour: RGB(0x12, 0x34, 0x56)))),
+        Cue(number: "P3", content: .blank(BlankContent(colour: RGB(0x12, 0x34, 0x56)))),
     ], settings: settings)
 }
 
 @Suite("Cue kinds")
 struct CueKindTests {
-    @Test("The Add Cue menus list every kind once: the two commonest, then the rest by name")
+    @Test("The Add Cue menus list every kind once: the commonest, then the rest by name")
     func menuOrderCoversEveryKind() {
         let listed = Cue.Kind.common + Cue.Kind.others
         #expect(Set(listed) == Set(Cue.Kind.allCases), "every kind is offered")
         #expect(listed.count == Cue.Kind.allCases.count, "and none of them twice")
-        #expect(Cue.Kind.common == [.image, .video], "image and video come first")
+        #expect(Cue.Kind.common == [.image, .text, .video], "image, text and video come first")
         let byName = Cue.Kind.others.sorted { $0.heading < $1.heading }
         #expect(Cue.Kind.others == byName, "the rest read alphabetically: \(Cue.Kind.others.map(\.heading))")
+    }
+
+    @Test("A text cue keeps its words, font, colours and alignments, and nothing else")
+    func textCueRoundTrips() throws {
+        let cue = Cue(number: "4", content: .text(TextContent(text: "INTERVAL", font: "Georgia", colour: RGB(0xAA, 0xBB, 0xCC), alignment: .right,
+                                                          vertical: .bottom, background: RGB(0x10, 0x20, 0x30))))
+        let show = Show(title: "T", cues: [cue])
+        let json = try JSONSerialization.jsonObject(with: show.jsonData()) as! [String: Any]
+        let saved = (json["cues"] as! [[String: Any]])[0]
+        #expect(Set(saved.keys) == ["id", "num", "kind", "line", "transition", "text", "font", "colour", "align", "valign", "background"])
+        let reopened = try Show(jsonData: show.jsonData())
+        #expect(reopened.cues[0].content == cue.content)
+        #expect(reopened.cues[0].text == "INTERVAL", "the cue list names it by its words")
+        #expect(cue.isInstant && !cue.finishes)
     }
 
     @Test("Every kind has its own icon")
@@ -59,21 +73,16 @@ struct ShowCodingTests {
         #expect(json["version"] as? Int == 2, "a plain sheet is still readable by a version 2 Prospect")
         let cues = json["cues"] as! [[String: Any]]
 
-        #expect(Set(cues[0].keys) == ["id", "num", "kind", "line", "text", "sub", "key", "overrides"])
-        #expect(Set(cues[1].keys) == ["id", "num", "kind", "line", "text", "src", "overrides"], "an image cue has no caption")
-        #expect(Set(cues[2].keys) == ["id", "num", "kind", "line", "continue", "text", "sub", "src", "atEnd"],
+        #expect(Set(cues[0].keys) == ["id", "num", "kind", "line", "transition", "text", "sub", "key", "settings"])
+        #expect(Set(cues[1].keys) == ["id", "num", "kind", "line", "transition", "text", "src", "settings"], "an image cue has no caption")
+        #expect(Set(cues[2].keys) == ["id", "num", "kind", "line", "transition", "continue", "text", "sub", "src", "atEnd"],
                 "continue only where the cue continues")
         #expect(cues[2]["continue"] as? [String: Double] == ["finished": 0])
-        #expect(Set(cues[3].keys) == ["id", "num", "kind", "line", "text", "colour"])
+        #expect(Set(cues[3].keys) == ["id", "num", "kind", "line", "transition", "colour"])
         #expect(cues[3]["colour"] as? String == "#123456")
-        let overrides = cues[0]["overrides"] as? [String: Any] ?? [:]
-        #expect(Set(overrides.keys) == ["holdTicks", "sceneLine"], "only what the cue overrides")
-    }
-
-    @Test func overridesAreOmittedWhenEmpty() throws {
-        let show = Show(cues: [Cue(number: "1", content: .title(TitleContent(text: "X")))])
-        let text = String(decoding: try show.jsonData(), as: UTF8.self)
-        #expect(!text.contains("overrides"))
+        let settings = cues[0]["settings"] as? [String: Any] ?? [:]
+        #expect(Set(settings.keys) == ["clockMs", "waveTicks", "holdTicks", "histogram", "sceneLine", "letters", "bars"], "every setting the kind has")
+        #expect(settings["holdTicks"] as? Int == 20 && settings["sceneLine"] as? Bool == false)
     }
 
     @Test func handEditedFilesAreReadLeniently() throws {
@@ -84,10 +93,10 @@ struct ShowCodingTests {
             { "kind": "title", "num": 4, "text": "TEMPLE CHURCH" },
             { "kind": "blank", "num": "5", "colour": "rebeccapurple" },
             { "kind": "blank", "num": 9.5, "colour": "not a colour" },
-            { "kind": "image", "num": "6", "overrides": { "gridColumns": 99, "clockMs": 1 } },
+            { "kind": "image", "num": "6", "settings": { "gridColumns": 99, "clockMs": 1 } },
             { "kind": "video", "num": "7" }
           ],
-          "settings": { "holdTicks": 500, "order": "random", "geometry": { "width": 5 } }
+          "settings": { "textScale": 500, "geometry": { "width": 5 } }
         }
         """
         let show = try Show(jsonData: Data(json.utf8))
@@ -101,11 +110,10 @@ struct ShowCodingTests {
         }
         #expect(purple.colour.hex == "#663399")
         #expect(junk.colour == .black)
-        #expect(image.overrides.gridColumns == 28 && image.overrides.clockMs == 18, "clamped to the slider ranges")
+        #expect(image.settings.gridColumns == 28 && image.settings.clockMs == 18, "clamped to the slider ranges")
         #expect(video.atEnd == .hold && video.src.isEmpty)
-        #expect(show.settings.holdTicks == 80)
-        #expect(show.settings.order == .random)
-        #expect(show.settings.clockMs == 44, "missing settings take their defaults")
+        #expect(show.settings.textScale == SettingRange.textScale.upperBound, "clamped to the slider range")
+        #expect(show.cues[0].timing.clockMs == 44, "missing settings take their built-in values")
         #expect(show.settings.geometry == Geometry(width: 20))
     }
 
@@ -123,26 +131,31 @@ struct ShowCodingTests {
     }
 }
 
-@Suite("Show defaults and overrides")
+@Suite("Show and cue settings")
 struct SettingsTests {
-    @Test func overridesWinAndTheRestInherit() {
-        var defaults = ShowSettings()
-        defaults.clockMs = 30
-        defaults.histogram = false
-
-        let title = defaults.resolved(TitleOverrides(waveTicks: 7, histogram: true))
-        #expect(title == TitleSettings(clockMs: 30, waveTicks: 7, holdTicks: 44, histogram: true, sceneLine: true))
-
-        let image = defaults.resolved(ImageOverrides(holdTicks: 0, order: .random))
-        #expect(image == ImageSettings(clockMs: 30, waveTicks: 3, holdTicks: 0, gridColumns: 12, flipMs: 420, order: .random))
+    @Test func cueSettingsStartAtTheBuiltInValues() {
+        let title = TitleSettings()
+        #expect(title.clockMs == 44 && title.waveTicks == 3 && title.holdTicks == 44)
+        #expect(title.histogram && title.sceneLine)
+        let image = ImageSettings()
+        #expect(image.gridColumns == 12 && image.flipMs == 420 && image.order == .diagonal && image.reveal == .flip)
+        #expect(Cue(content: .image(ImageContent())).transition == .standard)
     }
 
-    @Test func defaultsAreTheShowsOwn() {
+    @Test func showSettingsHoldOnlyWhatIsShowWide() {
         let s = ShowSettings()
-        let numbers: [Int] = [s.clockMs, s.waveTicks, s.holdTicks, s.textScale, s.gridColumns, s.flipMs]
-        #expect(numbers == [44, 3, 44, 100, 12, 420])
-        #expect(s.histogram && s.sceneLine && s.order == .diagonal)
+        #expect(s.textScale == 100)
         #expect(s.geometry == Geometry(width: 100, height: 100, across: 0, down: 0))
+    }
+
+    @Test func cueSettingsRoundTripAndAreClamped() throws {
+        var show = Show(cues: [Cue(content: .title(TitleContent(settings: TitleSettings(clockMs: 30, histogram: false))))])
+        show.cues[0].transition = Transition(style: .snap, fadeMs: 900)
+        let back = try Show(jsonData: show.jsonData())
+        #expect(back.cues[0] == show.cues[0])
+        let wild = Data(#"{ "cues": [ { "kind": "title", "num": "1", "settings": { "clockMs": 9999, "waveTicks": 2 } } ] }"#.utf8)
+        guard case .title(let c) = try Show(jsonData: wild).cues[0].content else { Issue.record("not a title"); return }
+        #expect(c.settings.clockMs == SettingRange.clockMs.upperBound && c.settings.waveTicks == 2 && c.settings.holdTicks == 44)
     }
 
     @Test func insetGeometryIsPercentagesOfTheOutput() {
@@ -153,14 +166,12 @@ struct SettingsTests {
             == CGRect(x: 672, y: 162, width: 960, height: 540))
     }
 
-    @Test func cueTimingFollowsOverrides() {
-        var defaults = ShowSettings()
-        defaults.clockMs = 30
-        let title = Cue(content: .title(TitleContent(overrides: TitleOverrides(holdTicks: 10))))
-        #expect(title.timing(defaults: defaults) == CueTiming(clockMs: 30, holdTicks: 10, isInstant: false))
-        let image = Cue(content: .image(ImageContent(overrides: ImageOverrides(clockMs: 60))))
-        #expect(image.timing(defaults: defaults) == CueTiming(clockMs: 60, holdTicks: 44, isInstant: false))
-        #expect(Cue(content: .blank(BlankContent())).timing(defaults: defaults).isInstant)
+    @Test func cueTimingFollowsTheCue() {
+        let title = Cue(content: .title(TitleContent(settings: TitleSettings(holdTicks: 10))))
+        #expect(title.timing == CueTiming(clockMs: 44, holdTicks: 10, isInstant: false))
+        let image = Cue(content: .image(ImageContent(settings: ImageSettings(clockMs: 60))))
+        #expect(image.timing == CueTiming(clockMs: 60, holdTicks: 44, isInstant: false))
+        #expect(Cue(content: .blank(BlankContent())).timing.isInstant)
     }
 
     @Test func displaysAreFoundByUUIDThenModelThenName() {

@@ -153,7 +153,7 @@ public struct Playhead: Equatable, Sendable {
 
     /// How many steps a cue has: its GO points, with the settings it runs with.
     private func points(of id: UUID, in show: Show) -> Int {
-        show[id]?.goPoints(defaults: show.settings).count ?? 0
+        show[id]?.goPoints().count ?? 0
     }
 
     /// The row after a cue, or after one of its steps: its next step, or the

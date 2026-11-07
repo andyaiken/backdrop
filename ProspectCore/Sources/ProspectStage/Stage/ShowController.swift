@@ -10,6 +10,10 @@ public final class ShowController {
     public private(set) var show: Show
     public private(set) var playhead: Playhead
     public let runner: StageRunner
+    /// A second stage, for the console's "up next" preview: it paints the
+    /// cue standing by, finished, and never runs, fires or reports anything.
+    public let nextRunner: StageRunner
+    private var lastNext: (cue: Cue?, settings: ShowSettings)?
     private let now: () -> Double
     /// The live cue's timed continue, from GO or from it finishing: when
     /// the next cue fires by itself.
@@ -56,7 +60,7 @@ public final class ShowController {
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(),
-            .video: VideoRenderer(), .blank: BlankRenderer(),
+            .text: TextRenderer(), .video: VideoRenderer(), .blank: BlankRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
     ) {
@@ -64,6 +68,12 @@ public final class ShowController {
         self.mode = mode
         playhead = Playhead(show: show)
         runner = StageRunner(renderers: renderers)
+        // Fresh renderers of its own, as a renderer paints one cue at a time.
+        // No video: a second copy would play it twice, so it shows black.
+        nextRunner = StageRunner(renderers: [
+            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
+            .map: MapRenderer(), .layered: LayeredRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+        ])
         self.now = now
         message = Self.openingMessage(show, warnings: warnings)
         runner.geometry = show.settings.geometry
@@ -82,6 +92,8 @@ public final class ShowController {
     /// and the first cue stands by.
     public func open(_ show: Show, warnings: [String] = []) {
         runner.unload()
+        nextRunner.unload()
+        lastNext = nil
         self.show = show
         playhead = Playhead(show: show)
         runner.blackout = false
@@ -98,6 +110,20 @@ public final class ShowController {
             return warnings.count > 1 ? "\(warning) (and \(warnings.count - 1) more)" : warning
         }
         return show.issues.first.map(show.message(for:))
+    }
+
+    /// Brings the "up next" stage in line with the cue standing by. Cheap
+    /// when nothing about that cue or the show's settings has changed.
+    public func updateNextPreview() {
+        let cue = playhead.standby.flatMap { show[$0] }
+        if let last = lastNext, last.cue == cue, last.settings == show.settings { return }
+        lastNext = (cue, show.settings)
+        nextRunner.geometry = show.settings.geometry
+        if let cue, nextRunner.kinds.contains(cue.kind) {
+            nextRunner.redraw(cue, show: show.settings, at: now())
+        } else {
+            nextRunner.unload()
+        }
     }
 
     // MARK: The operator's keys
@@ -189,7 +215,7 @@ public final class ShowController {
 
     public var standingByGoPoint: StandingByGoPoint? {
         guard let index = playhead.standbyStep, let id = playhead.standby, let cue = show[id] else { return nil }
-        let points = cue.goPoints(defaults: show.settings)
+        let points = cue.goPoints()
         guard points.indices.contains(index) else { return nil }
         return StandingByGoPoint(cue: cue, point: points[index], number: index + 1, count: points.count)
     }
@@ -246,20 +272,18 @@ public final class ShowController {
         edit("Change Show Title", coalescing: coalescing) { $0.title = title.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
-    /// Changes one of the show's defaults. Every cue that doesn't set its own
-    /// value runs with it from its next run; text size refits at once.
-    public func setDefault(_ key: SettingKey, to value: SettingValue, coalescing: Bool = false) {
-        edit("Change Default \(key.label)", coalescing: coalescing) { key.set(value, in: &$0.settings) }
+    /// Changes the size of decryption and anagram text, which refits at once.
+    public func setTextScale(_ value: Int, coalescing: Bool = false) {
+        edit("Change Text Size", coalescing: coalescing) { $0.settings.textScale = min(max(value, SettingRange.textScale.lowerBound), SettingRange.textScale.upperBound) }
     }
 
-    /// Sets a cue's own value for a setting, or with nil puts it back on the
-    /// show's default. Ignored for settings the cue's kind doesn't have.
-    public func setOverride(_ key: SettingKey, to value: SettingValue?, for id: UUID, coalescing: Bool = false) {
+    /// Sets one of a cue's settings. Ignored for settings the cue's kind
+    /// doesn't have.
+    public func setSetting(_ key: SettingKey, to value: SettingValue, for id: UUID, coalescing: Bool = false) {
         guard let cue = show[id], key.applies(to: cue.kind) else { return }
-        let name = value == nil ? "Use Show\u{2019}s \(key.label)" : "Change \(key.label) for Cue \(cue.number)"
-        edit(name, coalescing: coalescing) { show in
+        edit("Change \(key.label) for Cue \(cue.number)", coalescing: coalescing) { show in
             guard let i = show.index(of: id) else { return }
-            key.setOverride(value, in: &show.cues[i])
+            key.set(value, in: &show.cues[i])
         }
     }
 
@@ -319,7 +343,7 @@ public final class ShowController {
     /// after running; R runs it again from the start. A deleted cue comes
     /// off. A video is left playing, and R restarts it with any change.
     ///
-    /// Only the cue itself, or a default its kind uses, counts. Geometry and
+    /// Only the cue itself counts. Geometry and
     /// text size relayout what is there; redrawing for them would rebuild an
     /// image's tiles on every tick of a slider and flash the projector.
     private func redrawLiveCue(comparedWith before: Show) {
@@ -329,14 +353,10 @@ public final class ShowController {
             return
         }
         // A transition only matters when the cue next arrives.
-        let defaultsChanged = SettingKey.allCases.contains {
-            $0.applies(to: cue.kind) && !SettingKey.transitions.contains($0)
-                && $0.value(in: show.settings) != $0.value(in: before.settings)
-        }
         var unchanged = before[id]
         unchanged?.transition = cue.transition
-        guard cue.kind != .video, cue != unchanged || defaultsChanged else { return }
-        runner.redraw(cue, defaults: show.settings, at: now())
+        guard cue.kind != .video, cue != unchanged else { return }
+        runner.redraw(cue, show: show.settings, at: now())
         // Finished, it waits for no more GOs.
         playhead.liveCueRedrawn(in: show)
         needsTicks(true)
@@ -352,31 +372,18 @@ public final class ShowController {
         case .title: cue = Cue(content: .title(TitleContent()))
         case .anagram: cue = Cue(content: .anagram(AnagramContent()))
         case .image: cue = Cue(content: .image(ImageContent()))
+        case .text: cue = Cue(content: .text(TextContent()))
         case .morph: cue = Cue(content: .morph(MorphContent()))
         case .map: cue = Cue(content: .map(MapContent()))
         case .layered: cue = Cue(content: .layered(LayeredContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
-        case .blank: cue = Cue(content: .blank(BlankContent(text: "")))
+        case .blank: cue = Cue(content: .blank(BlankContent()))
         }
         let after = playhead.standby.flatMap { show.index(of: $0) }
         guard edit("Add \(kind.heading) Cue", { $0.insert(cue, after: after) }) else { return nil }
         playhead.standBy(cue.id)
         changed()
         return cue.id
-    }
-
-    /// Gives the cue standing by a transition of its own, a crossfade as the
-    /// one that differs most from the show's default, unless it has one
-    /// already. Deleting the row clears it. Nil when there is nothing to
-    /// change.
-    @discardableResult
-    public func addTransition() -> UUID? {
-        guard let id = playhead.standby, let cue = show[id], cue.transition.isEmpty else { return nil }
-        let style: TransitionStyle = show.settings.transition == .crossfade ? .fade : .crossfade
-        guard edit("Add Transition", { show in
-            if let i = show.index(of: id) { show.cues[i].transition = TransitionOverrides(style: style) }
-        }) else { return nil }
-        return id
     }
 
     /// - Parameter coalescing: For a value changed as it is typed: a run of
@@ -469,7 +476,7 @@ public final class ShowController {
         switch fire.presentation {
         case .run:
             let time = now()
-            runner.change(to: cue, defaults: show.settings, transition: cue.transitionIn(defaults: show.settings), at: time,
+            runner.change(to: cue, show: show.settings, transition: cue.transition, at: time,
                           startingAt: fire.step)
             // Timed from GO, whatever the cue's transition.
             if case .after(let ms) = cue.continueMode {
@@ -481,7 +488,7 @@ public final class ShowController {
             // Back up after a crash: there, at once, and not counted as
             // settling, so nothing continues from it until GO.
             continueAt = nil
-            runner.redraw(cue, defaults: show.settings, at: now())
+            runner.redraw(cue, show: show.settings, at: now())
         }
         if !runner.kinds.contains(cue.kind) {
             message = "Cue \(cue.number) is \(cue.kind == .image ? "an" : "a") \(cue.kind.name) cue, which this build doesn\u{2019}t draw yet, so the stage is black."
@@ -502,7 +509,7 @@ public final class ShowController {
     /// current cue runs, rather than when GO is pressed.
     private func preloadNext() {
         for id in playhead.cuesThatMayFireNext(in: show) {
-            if let cue = show[id] { runner.preload(cue, defaults: show.settings) }
+            if let cue = show[id] { runner.preload(cue, show: show.settings) }
         }
     }
 }

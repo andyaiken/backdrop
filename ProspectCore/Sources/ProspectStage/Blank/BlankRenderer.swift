@@ -41,7 +41,7 @@ public final class BlankRenderer: CueRenderer {
         fill(for: surface)?.backgroundColor = colour.cgColor
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .blank(let content) = cue.content else { return }
         colour = content.colour
         for fill in fills.values { fill.backgroundColor = colour.cgColor }

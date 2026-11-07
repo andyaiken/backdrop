@@ -129,18 +129,13 @@ struct MapTests {
     func json() throws {
         var content = route()
         content.reference = MapReference(a: MapAnchor(at: p(0, 0), latitude: 52, longitude: -1), b: MapAnchor(at: p(1, 1), latitude: 51, longitude: 0))
-        content.overrides = MapOverrides(zoom: 4, trailSeconds: 3)
+        content.settings = MapSettings(zoom: 4, trailSeconds: 3)
         let cue = Cue(number: "12", content: .map(content))
         let data = try JSONEncoder().encode(cue)
         #expect(try JSONDecoder().decode(Cue.self, from: data) == cue)
         #expect(cue.mediaPaths == ["media/london.png"])
         #expect(cue.finishes && !cue.isInstant)
         #expect(Show(cues: [cue]).version == 5)
-        let plain = try #require(String(data: JSONEncoder().encode(ShowSettings()), encoding: .utf8))
-        #expect(!plain.contains("mapZoom") && !plain.contains("trailSeconds"))
-        var s = ShowSettings()
-        s.mapZoom = 5
-        #expect(try JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).mapZoom == 5)
     }
 
     @Test("A map has Clock, Hold, Advance, Pause, View, Zoom and Trail, and Advance offers Each stop on GO")
@@ -151,8 +146,8 @@ struct MapTests {
         #expect(SettingKey.advance.choices(for: .map).map(\.label) == ["By itself", "Each stop on GO"])
         #expect(SettingKey.zoom.format(.number(3)) == "3\u{00D7}" && SettingKey.trail.format(.number(0)) == "none")
         var cue = Cue(content: .map(MapContent()))
-        SettingKey.zoom.setOverride(.number(5), in: &cue)
-        #expect(SettingKey.zoom.override(in: cue) == .number(5))
+        SettingKey.zoom.set(.number(5), in: &cue)
+        #expect(SettingKey.zoom.value(in: cue) == .number(5))
     }
 
     @Test("Held still, the view frames the whole route, the stage's shape, no closer than Zoom, inside the map")
@@ -168,10 +163,6 @@ struct MapTests {
         let corner = view([p(0.05, 0.05), p(0.1, 0.1)], aspect: 1, stage: 1, zoom: 4)
         #expect(corner.centre == p(0.125, 0.125), "kept inside the map's edges")
         #expect(MapCuePlan(MapContent(), settings: MapSettings(camera: .still)).stillView(stageAspect: 1).width == 1)
-        var s = ShowSettings()
-        s.mapCamera = .still
-        #expect(try! JSONDecoder().decode(ShowSettings.self, from: JSONEncoder().encode(s)).mapCamera == .still)
-        #expect(!(String(data: try! JSONEncoder().encode(ShowSettings()), encoding: .utf8) ?? "").contains("mapCamera"))
     }
 
     @Test("The sheet flags a map without its picture or a stop, and lists the stops")

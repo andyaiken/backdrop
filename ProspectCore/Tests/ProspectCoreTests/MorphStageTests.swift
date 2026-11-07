@@ -8,12 +8,12 @@ struct MorphStageTests {
 
     /// Three pictures, so two stages: into the second with a point, into
     /// the third, a dissolve, in a second of its own.
-    func painting(_ overrides: MorphOverrides = .init()) -> MorphContent {
+    func painting(_ settings: MorphSettings = .init()) -> MorphContent {
         MorphContent(text: "PAINTING", pictures: [
             MorphPicture(src: "media/sketch.png"),
             MorphPicture(src: "media/wash.png", pairs: [pair]),
             MorphPicture(src: "media/finished.png", morphMs: 1000),
-        ], overrides: overrides)
+        ], settings: settings)
     }
 
     /// 100 ms frames, so a 3 s stage is 30 frames, and a pause of 10.
@@ -66,14 +66,11 @@ struct MorphStageTests {
 
     @Test("Each stage on GO is a GO point, named by the picture it becomes; by itself there are none")
     func goPoints() {
-        var defaults = ShowSettings()
         let cue = Cue(content: .morph(painting()))
-        #expect(cue.goPoints(defaults: defaults).isEmpty)
-        defaults.advance = .eachAnagram
-        #expect(cue.goPoints(defaults: defaults) == [GoPoint(unit: .stage, text: "wash"), GoPoint(unit: .stage, text: "finished")],
-                "the show's Advance default, shared with anagrams")
-        let own = Cue(content: .morph(painting(MorphOverrides(advance: .byItself))))
-        #expect(own.goPoints(defaults: defaults).isEmpty, "the cue's own Advance wins")
+        #expect(cue.goPoints().isEmpty)
+        let onGo = Cue(content: .morph(painting(MorphSettings(advance: .eachAnagram))))
+        #expect(onGo.goPoints() == [GoPoint(unit: .stage, text: "wash"), GoPoint(unit: .stage, text: "finished")],
+                "either GO choice waits before each stage")
     }
 
     @Test("A morph's Advance offers By itself or Each stage on GO, and reads so")
@@ -83,10 +80,10 @@ struct MorphStageTests {
         #expect(SettingKey.advance.choiceIndex(of: .advance(.eachAnagram), for: .morph) == 1)
         #expect(SettingKey.advance.format(.advance(.eachAnagram), for: .morph) == "each stage on GO")
         var cue = Cue(content: .morph(MorphContent()))
-        SettingKey.advance.setOverride(.advance(.eachStep), in: &cue)
-        SettingKey.pause.setOverride(.number(20), in: &cue)
+        SettingKey.advance.set(.advance(.eachStep), in: &cue)
+        SettingKey.pause.set(.number(20), in: &cue)
         guard case .morph(let c) = cue.content else { return }
-        #expect(c.overrides == MorphOverrides(advance: .eachStep, pauseTicks: 20))
+        #expect(c.settings == MorphSettings(advance: .eachStep, pauseTicks: 20))
     }
 
     @Test("Two pictures keep show.json's flat shape; more, or a stage's own time, take a list and version 4")
@@ -134,12 +131,11 @@ struct MorphStageTests {
 
     @Test("The DSM sheet names the pictures, and gives each stage on GO a row")
     func sheet() {
-        var show = Show(title: "T", cues: [Cue(number: "9", content: .morph(painting(MorphOverrides(advance: .eachStep))))])
+        let show = Show(title: "T", cues: [Cue(number: "9", content: .morph(painting(MorphSettings(advance: .eachStep))))])
         let rows = CueSheet(show: show, title: "T", layout: .dsm).rows
         #expect(rows.map(\.type) == ["Morph", "GO 1", "GO 2"])
         #expect(rows[0].content == ["PAINTING", "sketch \u{2192} wash \u{2192} finished"])
         #expect(rows[1].content == ["wash"])
-        show.settings.advance = .byItself
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[0].settings
         #expect(settings.first { $0.name == "Advance" }?.value == "each stage on GO")
         #expect(settings.filter { $0.name.hasPrefix("Picture") }.map(\.value)

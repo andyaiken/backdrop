@@ -4,38 +4,33 @@ import Testing
 
 @Suite("Transitions in the model")
 struct TransitionModelTests {
-    @Test("Every cue fades through black for half a second unless told otherwise")
+    @Test("A new cue fades through black for half a second")
     func defaults() {
         let cue = Cue(content: .blank(BlankContent()))
-        #expect(cue.transitionIn(defaults: ShowSettings()) == Transition(style: .fade, fadeMs: 500))
-        var settings = ShowSettings()
-        settings.transition = .snap
-        #expect(cue.transitionIn(defaults: settings).style == .snap)
+        #expect(cue.transition == Transition(style: .fade, fadeMs: 500))
     }
 
-    @Test("A cue can override the style, the fade time, or both")
-    func overrides() {
+    @Test("A cue can change the style, the fade time, or both")
+    func changes() {
         var cue = Cue(content: .blank(BlankContent()))
         cue.transition.fadeMs = 1200
-        #expect(cue.transitionIn(defaults: ShowSettings()) == Transition(style: .fade, fadeMs: 1200))
+        #expect(cue.transition == Transition(style: .fade, fadeMs: 1200))
         cue.transition.style = .snap
-        #expect(cue.transitionIn(defaults: ShowSettings()) == Transition(style: .snap, fadeMs: 1200))
+        #expect(cue.transition == Transition(style: .snap, fadeMs: 1200))
     }
 
-    @Test("show.json keeps a cue's own transition, and nothing when it has none")
+    @Test("show.json keeps a cue's transition")
     func coding() throws {
         var cue = Cue(number: "1", content: .title(TitleContent(text: "THE LOUVRE", key: "KEY")))
-        let plain = String(decoding: try JSONEncoder().encode(cue), as: UTF8.self)
-        #expect(!plain.contains("transition"))
-        cue.transition = TransitionOverrides(style: .snap, fadeMs: 9000)
+        cue.transition = Transition(style: .snap, fadeMs: 9000)
         let back = try JSONDecoder().decode(Cue.self, from: try JSONEncoder().encode(cue))
-        #expect(back.transition == TransitionOverrides(style: .snap, fadeMs: SettingRange.fadeMs.upperBound), "clamped on the way in")
+        #expect(back.transition == Transition(style: .snap, fadeMs: SettingRange.fadeMs.upperBound), "clamped on the way in")
     }
 
-    @Test("A show saved before transitions existed opens with the default")
+    @Test("A cue with no transition in its file opens with the standard one")
     func olderShows() throws {
-        let settings = try JSONDecoder().decode(ShowSettings.self, from: Data(#"{ "clockMs": 44 }"#.utf8))
-        #expect(settings.transition == .fade && settings.fadeMs == 500)
+        let cue = try JSONDecoder().decode(Cue.self, from: Data(#"{ "kind": "blank", "num": "1" }"#.utf8))
+        #expect(cue.transition == .standard)
     }
 
     @Test("Transition and fade read and choose like the other settings")
@@ -48,12 +43,10 @@ struct TransitionModelTests {
         #expect(SettingKey.transition.choiceIndex(of: .style(.fade)) == 0)
         #expect(SettingKey.order.choiceIndex(of: .order(.random)) == 1)
         var cue = Cue(content: .video(VideoContent()))
-        SettingKey.transition.setOverride(.style(.snap), in: &cue)
-        SettingKey.fade.setOverride(.number(730), in: &cue)
-        #expect(cue.transition == TransitionOverrides(style: .snap, fadeMs: 700), "fade time snaps to its step")
-        #expect(SettingKey.fade.effective(for: cue, defaults: ShowSettings()) == (.number(700), true))
-        SettingKey.fade.setOverride(nil, in: &cue)
-        #expect(SettingKey.fade.effective(for: cue, defaults: ShowSettings()) == (.number(500), false))
+        SettingKey.transition.set(.style(.snap), in: &cue)
+        SettingKey.fade.set(.number(730), in: &cue)
+        #expect(cue.transition == Transition(style: .snap, fadeMs: 700), "fade time snaps to its step")
+        #expect(SettingKey.fade.value(in: cue) == .number(700))
     }
 
     @Test("A crossfade is a style like the others: chosen, stored, formatted, and with a length")
@@ -68,8 +61,5 @@ struct TransitionModelTests {
         let json = String(decoding: try JSONEncoder().encode(cue), as: UTF8.self)
         #expect(json.contains("crossfade"))
         #expect(try JSONDecoder().decode(Cue.self, from: Data(json.utf8)).transition.style == .crossfade)
-        var settings = ShowSettings()
-        settings.transition = .crossfade
-        #expect(cue.transitionIn(defaults: settings).style == .crossfade)
     }
 }

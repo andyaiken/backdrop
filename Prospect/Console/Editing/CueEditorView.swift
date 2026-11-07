@@ -23,7 +23,8 @@ enum CueField: String, Hashable, CaseIterable {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
         case .video: fields += [.text, .sub]
-        case .image, .morph, .map, .blank, .layered: fields += [.text]
+        case .image, .text, .morph, .map, .layered: fields += [.text]
+        case .blank: break
         }
         return fields
     }
@@ -47,6 +48,9 @@ struct CommittingField: View {
     let order: [CueField]
     let prompt: String
     var mono = false
+    /// Words that run to several lines: Return starts a new one rather than
+    /// finishing, and Escape or Tab leaves the box.
+    var multiline = false
     /// What the cue says now.
     let value: String
     let commit: (String) -> Void
@@ -57,10 +61,26 @@ struct CommittingField: View {
 
     private var editing: Bool { focus.wrappedValue == field }
 
+    @ViewBuilder
+    private var input: some View {
+        if multiline {
+            TextEditor(text: $draft)
+                .font(.system(size: 12.5, design: .monospaced))
+                .frame(minHeight: 72)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .background(.background, in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
+        } else {
+            TextField("", text: $draft, prompt: Text(prompt))
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.leading)
+                .font(mono ? .system(size: 12.5, design: .monospaced) : nil)
+        }
+    }
+
     var body: some View {
-        TextField("", text: $draft, prompt: Text(prompt))
-            .textFieldStyle(.roundedBorder)
-            .font(mono ? .system(size: 12.5, design: .monospaced) : nil)
+        input
             .focused(focus, equals: field)
             .onKeyPress(keys: [.tab]) { press in
                 moveFocus(from: field, by: press.modifiers.contains(.shift) ? -1 : 1, in: order, to: focus)
@@ -93,8 +113,6 @@ struct CueEditorView: View {
     /// The GO of the cue that stands by, if one does: its cue point is the
     /// one the Cue point field edits.
     let goPoint: ShowController.StandingByGoPoint?
-    /// The show's defaults, for setting a GO's cue point.
-    let defaults: ShowSettings
     let morphPictures: MorphPicturesState
     let layeredStrip: LayeredStripState
     let edit: (String, @escaping (inout Cue) -> Void) -> Void
@@ -106,7 +124,7 @@ struct CueEditorView: View {
     let onRemoveMedia: () -> Void
     let onDropMedia: (URL) -> Void
     let onEditRoute: () -> Void
-    let onSetting: (SettingKey, SettingValue?, Bool) -> Void
+    let onSetting: (SettingKey, SettingValue, Bool) -> Void
 
     @FocusState private var focus: CueField?
 
@@ -121,12 +139,12 @@ struct CueEditorView: View {
             if let cue {
                 if scope == .common {
                   Section {
-                    LabeledContent("Number") {
+                    FieldRow(label: "Number") {
                         CommittingField(field: .number, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.number,
                                         commit: { v in typing("Change Cue Number") { $0.number = v.trimmingCharacters(in: .whitespaces) } },
                                         onFinished: onFinished)
                     }
-                    LabeledContent(goPoint.map { "GO \($0.number)" } ?? "Cue point") {
+                    FieldRow(label: goPoint.map { "GO \($0.number)" } ?? "Cue point") {
                         CommittingField(field: .line, focus: $focus, order: fieldOrder, prompt: cuePointPrompt, value: cuePoint(cue),
                                         commit: commitCuePoint(cue), onFinished: onFinished)
                     }
@@ -134,7 +152,7 @@ struct CueEditorView: View {
                   }
                 } else {
                     content(cue)
-                    CueSettingsSections(transitions: false, cue: cue, defaults: defaults, onChange: onSetting)
+                    CueSettingsSections(transitions: false, cue: cue, onChange: onSetting)
                 }
             } else {
                 Section {
@@ -145,6 +163,11 @@ struct CueEditorView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        // A grouped form insets its cards by about 20pt and the panel pads again;
+        // pull the form out by half that.
+        .padding(.horizontal, -15)
+        .padding(.top, -12)
         .id(cue?.id)
     }
 
@@ -161,8 +184,7 @@ struct CueEditorView: View {
     private func commitCuePoint(_ cue: Cue) -> (String) -> Void {
         { value in
             if let step = goPoint?.number.advanced(by: -1) {
-                let defaults = self.defaults
-                typing("Change GO Cue Point") { $0.setCuePoint(value, ofGoPoint: step, defaults: defaults) }
+                typing("Change GO Cue Point") { $0.setCuePoint(value, ofGoPoint: step) }
             } else {
                 typing("Change Cue Point") { $0.line = value }
             }
@@ -171,7 +193,7 @@ struct CueEditorView: View {
 
     @ViewBuilder
     private func continueRow(_ cue: Cue) -> some View {
-        LabeledContent("Continue") {
+        FieldRow(label: "Continue") {
             Picker("", selection: Binding(get: { continueChoice(cue) }, set: { setContinue($0, on: cue) })) {
                 Text("When cued").tag(0)
                 Text("After a wait").tag(1)
@@ -179,10 +201,9 @@ struct CueEditorView: View {
             }
             .labelsHidden()
             .focusable(false)
-            .fixedSize()
         }
         if cue.continueMode.continues {
-            LabeledContent("Seconds") {
+            FieldRow(label: "Seconds") {
                 CommittingField(field: .seconds, focus: $focus, order: fieldOrder, prompt: "", mono: true,
                                 value: ContinueMode.seconds(waitMs(cue)),
                                 commit: { commitSeconds($0, on: cue) }, onFinished: onFinished)
@@ -242,7 +263,7 @@ struct CueEditorView: View {
             Section {
                 textRow("Text", cue, name: "Change Text")
                 subRow("Subtext", cue, name: "Change Subtext")
-                LabeledContent("Key") {
+                FieldRow(label: "Key") {
                     CommittingField(field: .key, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: c.key,
                                     commit: { v in typing("Change Key") { cue in
                                         if case .title(var t) = cue.content { t.key = v; cue.content = .title(t) }
@@ -259,6 +280,67 @@ struct CueEditorView: View {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Picture", path: c.src, kind: .image, empty: "No picture \u{2014} drop one here", cue: cue)
             }
+        case .text(let c):
+            Section {
+                textRow("Text", cue, name: "Change Text", multiline: true)
+                FieldRow(label: "Font") {
+                    Picker("", selection: Binding(get: { c.font }, set: { family in
+                        edit("Change Font") { cue in
+                            if case .text(var t) = cue.content { t.font = family; cue.content = .text(t) }
+                        }
+                    })) {
+                        Text(SettingKey.stageFont).tag("")
+                        Divider()
+                        ForEach(SettingRowView.families, id: \.self) { name in
+                            Text(name).font(.custom(name, size: 13)).tag(name)
+                        }
+                        if !c.font.isEmpty, !SettingRowView.families.contains(c.font) {
+                            Divider()
+                            Text("\(c.font) (not on this Mac)").tag(c.font)
+                        }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Colour") {
+                    ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
+                        if case .text(var t) = cue.content { t.colour = rgb; cue.content = .text(t) }
+                    })
+                        .labelsHidden()
+                        .focusable(false)
+                }
+                FieldRow(label: "Background") {
+                    ColorPicker("", selection: colourBinding(c.background, name: "Change Background") { rgb, cue in
+                        if case .text(var t) = cue.content { t.background = rgb; cue.content = .text(t) }
+                    })
+                        .labelsHidden()
+                        .focusable(false)
+                }
+                FieldRow(label: "Vertical") {
+                    Picker("", selection: Binding(get: { c.vertical }, set: { v in
+                        edit("Change Vertical Alignment") { cue in
+                            if case .text(var t) = cue.content { t.vertical = v; cue.content = .text(t) }
+                        }
+                    })) {
+                        ForEach(TextVertical.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Alignment") {
+                    Picker("", selection: Binding(get: { c.alignment }, set: { align in
+                        edit("Change Alignment") { cue in
+                            if case .text(var t) = cue.content { t.alignment = align; cue.content = .text(t) }
+                        }
+                    })) {
+                        ForEach(TextAlign.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .focusable(false)
+                }
+            }
         case .morph:
             Section {
                 textRow("Label", cue, name: "Change Label")
@@ -270,7 +352,7 @@ struct CueEditorView: View {
             Section {
                 textRow("Header", cue, name: "Change Label")
                 mediaRow("Map", path: c.src, kind: .map, empty: "No map \u{2014} drop one here", cue: cue)
-                LabeledContent("Route") {
+                FieldRow(label: "Route") {
                     HStack {
                         Text(routeSummary(c)).foregroundStyle(.secondary)
                         Spacer(minLength: 12)
@@ -283,7 +365,7 @@ struct CueEditorView: View {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Caption", cue, name: "Change Caption")
                 mediaRow("Clip", path: c.src, kind: .video, empty: "No clip \u{2014} drop one here", cue: cue)
-                LabeledContent("At the end") {
+                FieldRow(label: "At the end") {
                     Picker("", selection: Binding(
                         get: { c.atEnd },
                         set: { end in edit("Change At The End") { cue in
@@ -296,7 +378,6 @@ struct CueEditorView: View {
                     }
                     .labelsHidden()
                     .focusable(false)
-                    .fixedSize()
                 }
             }
         case .layered(let c):
@@ -312,9 +393,10 @@ struct CueEditorView: View {
             }
         case .blank(let c):
             Section {
-                textRow("Label", cue, name: "Change Label")
-                LabeledContent("Colour") {
-                    ColorPicker("", selection: colourBinding(c.colour))
+                FieldRow(label: "Colour") {
+                    ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
+                        if case .blank(var b) = cue.content { b.colour = rgb; cue.content = .blank(b) }
+                    })
                         .labelsHidden()
                         .focusable(false)
                 }
@@ -323,16 +405,16 @@ struct CueEditorView: View {
     }
 
     @ViewBuilder
-    private func textRow(_ label: String, _ cue: Cue, name: String) -> some View {
-        LabeledContent(label) {
-            CommittingField(field: .text, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.text,
+    private func textRow(_ label: String, _ cue: Cue, name: String, multiline: Bool = false) -> some View {
+        FieldRow(label: label) {
+            CommittingField(field: .text, focus: $focus, order: fieldOrder, prompt: "", mono: true, multiline: multiline, value: cue.text,
                             commit: { v in typing(name) { $0.text = v } }, onFinished: onFinished)
         }
     }
 
     @ViewBuilder
     private func subRow(_ label: String, _ cue: Cue, name: String) -> some View {
-        LabeledContent(label) {
+        FieldRow(label: label) {
             CommittingField(field: .sub, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.sub,
                             commit: { v in typing(name) { $0.sub = v } }, onFinished: onFinished)
         }
@@ -340,7 +422,7 @@ struct CueEditorView: View {
 
     @ViewBuilder
     private func mediaRow(_ label: String, path: String, kind: Cue.Kind, empty: String, cue: Cue) -> some View {
-        LabeledContent(label) {
+        FieldRow(label: label) {
             VStack(alignment: .leading, spacing: 8) {
                 MediaWellView(path: path, kind: kind, empty: empty, onDrop: onDropMedia)
                     .frame(height: 64)
@@ -353,23 +435,21 @@ struct CueEditorView: View {
     }
 
     /// A blank cue's colour, as the picker wants it and as the show keeps it.
-    private func colourBinding(_ colour: RGB) -> Binding<Color> {
-        Binding(get: { Self.swiftUI(colour) }, set: { setColour($0) })
+    private func colourBinding(_ colour: RGB, name: String, set: @escaping (RGB, inout Cue) -> Void) -> Binding<Color> {
+        Binding(get: { Self.swiftUI(colour) }, set: { setColour($0, name: name, set: set) })
     }
 
     private static func swiftUI(_ colour: RGB) -> Color {
         Color(red: Double(colour.r) / 255, green: Double(colour.g) / 255, blue: Double(colour.b) / 255)
     }
 
-    private func setColour(_ colour: Color) {
+    private func setColour(_ colour: Color, name: String, set: @escaping (RGB, inout Cue) -> Void) {
         guard let srgb = NSColor(colour).usingColorSpace(.sRGB) else { return }
         let r = Int((srgb.redComponent * 255).rounded())
         let g = Int((srgb.greenComponent * 255).rounded())
         let b = Int((srgb.blueComponent * 255).rounded())
         let rgb = RGB(UInt8(clamping: r), UInt8(clamping: g), UInt8(clamping: b))
-        edit("Change Colour") { cue in
-            if case .blank(var blank) = cue.content { blank.colour = rgb; cue.content = .blank(blank) }
-        }
+        edit(name) { cue in set(rgb, &cue) }
     }
 
     private func routeSummary(_ c: MapContent) -> String {

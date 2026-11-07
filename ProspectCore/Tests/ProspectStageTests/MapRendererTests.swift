@@ -40,13 +40,13 @@ struct MapRendererTests {
 
     /// Along the road, and then a jump below it. Zoom 1, so the map is the
     /// stage's width across: 960 x 480.
-    func cue(advance: AnagramAdvance = .byItself, src: String = "media/streets.png", zoom: Int = 1, camera: MapCamera? = nil) -> Cue {
+    func cue(advance: AnagramAdvance = .byItself, src: String = "media/streets.png", zoom: Int = 1, camera: MapCamera = .follow) -> Cue {
         Cue(number: "12", content: .map(MapContent(text: "OPERATION NIGHTJAR", src: src, route: [
             RoutePoint(at: p(0.1, 0.25), stop: MapStop(place: "SOHO")),
             RoutePoint(at: p(0.9, 0.25), stop: MapStop(travelMs: 4000, place: "BOW")),
             RoutePoint(at: p(0.5, 0.75), stop: MapStop(arrival: .jump, place: "DOCKS")),
         ], reference: MapReference(a: MapAnchor(at: p(0, 0), latitude: 52, longitude: -1), b: MapAnchor(at: p(1, 1), latitude: 51, longitude: 0)),
-           overrides: MapOverrides(clockMs: 100, holdTicks: 10, advance: advance, pauseTicks: 10, camera: camera, zoom: zoom))))
+           settings: MapSettings(clockMs: 100, holdTicks: 10, advance: advance, pauseTicks: 10, camera: camera, zoom: zoom))))
     }
 
     func prepare(_ cue: Cue) async {
@@ -55,7 +55,7 @@ struct MapRendererTests {
                 renderer.onReady = nil
                 done.resume()
             }
-            renderer.prepare(cue, defaults: ShowSettings())
+            renderer.prepare(cue, show: ShowSettings())
         }
     }
 
@@ -132,7 +132,7 @@ struct MapRendererTests {
         runner.attach(surface(width: 960, height: 540))
         let cue = cue(advance: .eachStep)
         await prepare(cue)
-        runner.load(cue, defaults: ShowSettings(), presentation: .run, at: 0)
+        runner.load(cue, show: ShowSettings(), presentation: .run, at: 0)
         _ = runner.tick(at: 2)
         #expect(!runner.isRunning && renderer.state?.dot == p(0.1, 0.25))
         runner.carryOn(at: 2)
@@ -144,7 +144,7 @@ struct MapRendererTests {
     func problems() async throws {
         var said: [String] = []
         renderer.onProblem = { said.append($0) }
-        renderer.prepare(cue(src: "media/gone.png"), defaults: ShowSettings())
+        renderer.prepare(cue(src: "media/gone.png"), show: ShowSettings())
         #expect(said == ["Cue 12\u{2019}s map, gone.png, is missing from the show, so its dot moves over black."])
         #expect(renderer.paint(at: 1000))
         said = []

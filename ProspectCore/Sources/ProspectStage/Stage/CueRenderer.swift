@@ -28,7 +28,7 @@ public protocol CueRenderer: AnyObject {
     func clear(_ surface: SurfaceLayer)
 
     /// Works out the shared plan for a cue, once.
-    func prepare(_ cue: Cue, defaults: ShowSettings)
+    func prepare(_ cue: Cue, show: ShowSettings)
 
     /// Paints frame `f` on every surface. True when the cue has settled.
     func frame(_ f: Int) -> Bool
@@ -38,15 +38,15 @@ public protocol CueRenderer: AnyObject {
 
     /// Gets ready for a cue that may fire next, such as decoding its image,
     /// so firing it doesn't wait. Optional.
-    func preload(_ cue: Cue, defaults: ShowSettings)
+    func preload(_ cue: Cue, show: ShowSettings)
 
-    /// The show's defaults changed while a cue may be on stage. Optional.
-    func settingsChanged(_ defaults: ShowSettings)
+    /// The show's settings changed while a cue may be on stage. Optional.
+    func settingsChanged(_ show: ShowSettings)
 }
 
 extension CueRenderer {
-    public func preload(_ cue: Cue, defaults: ShowSettings) {}
-    public func settingsChanged(_ defaults: ShowSettings) {}
+    public func preload(_ cue: Cue, show: ShowSettings) {}
+    public func settingsChanged(_ show: ShowSettings) {}
 }
 
 /// A renderer that moves smoothly between the clock's frames, as a morph

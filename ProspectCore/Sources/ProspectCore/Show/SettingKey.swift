@@ -17,8 +17,7 @@ public enum SettingValue: Equatable, Sendable {
     case push(LayeredCamera)
 }
 
-/// Every setting a show holds a default for, and that a cue may override.
-/// One definition serves the show-default panels, the cue editor's overrides
+/// Every setting a cue holds. One definition serves the cue editor's panels
 /// and the printed sheet: its range and step, how it reads, and where it
 /// lives in the model.
 public enum SettingKey: String, CaseIterable, Sendable {
@@ -26,29 +25,29 @@ public enum SettingKey: String, CaseIterable, Sendable {
     case layerTime, baseLevel, context, strength, length, entrance, push, move
     case transition, fade
 
-    /// What a title cue can override.
+    /// What a title cue has.
     public static let title: [SettingKey] = [.clock, .wave, .hold, .histogram, .sceneLine, .letters, .bars]
-    /// What an anagram cue can override.
+    /// What an anagram cue has.
     public static let anagram: [SettingKey] = [.clock, .wave, .hold, .advance, .pause, .font]
-    /// What a morph cue can override: it has no wave.
+    /// What a morph cue has: no wave.
     public static let morph: [SettingKey] = [.clock, .hold, .advance, .pause, .morphTime]
-    /// What a map cue can override: it has no wave.
+    /// What a map cue has: no wave.
     public static let map: [SettingKey] = [.clock, .hold, .advance, .pause, .camera, .zoom, .trail]
-    /// What a layered cue can override: it has no wave. Its zoom is the
+    /// What a layered cue has: no wave. Its zoom is the
     /// map's key, worded for both.
     public static let layered: [SettingKey] = [
         .clock, .hold, .advance, .pause, .layerTime, .baseLevel, .context, .strength, .length, .entrance, .push, .zoom, .move,
     ]
-    /// What an image cue can override.
+    /// What an image cue has.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
-    /// The transition into a cue, which every cue can override.
+    /// The transition into a cue, which every cue has.
     public static let transitions: [SettingKey] = [.transition, .fade]
-    /// The show-default panels, in their groups.
+    /// The cue panels, in their groups.
     public static let groups: [(name: String, keys: [SettingKey])] = [
         // Advance and Pause belong to every cue that runs in steps, anagrams
         // and morphs alike.
         ("Timing", [.clock, .wave, .hold, .advance, .pause]),
-        ("Decryption cues", [.textScale, .histogram, .sceneLine, .letters, .bars]),
+        ("Decryption cues", [.histogram, .sceneLine, .letters, .bars]),
         ("Image cues", [.grid, .flip, .order, .reveal]),
         ("Anagram cues", [.font]),
         ("Morph cues", [.morphTime]),
@@ -180,9 +179,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         }
     }
 
-    /// For a choice, what its menu offers on a kind of cue, or as the show's
-    /// default with no kind. A morph's Advance has two choices: Each stage
-    /// on GO stands for both of the default's GO choices.
+    /// For a choice, what its menu offers on a kind of cue. A morph's Advance
+    /// has two choices: Each stage on GO stands for both of an anagram's GO
+    /// choices.
     public func choices(for kind: Cue.Kind? = nil) -> [(label: String, value: SettingValue)] {
         if self == .advance, kind == .morph {
             return [("By itself", .advance(.byItself)), ("Each stage on GO", .advance(.eachStep))]
@@ -295,80 +294,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         return .number(range.clamp(stepped))
     }
 
-    // MARK: Show defaults
+    // MARK: Cue values
 
-    public func value(in s: ShowSettings) -> SettingValue {
-        switch self {
-        case .clock: .number(s.clockMs)
-        case .wave: .number(s.waveTicks)
-        case .hold: .number(s.holdTicks)
-        case .textScale: .number(s.textScale)
-        case .histogram: .flag(s.histogram)
-        case .sceneLine: .flag(s.sceneLine)
-        case .letters: .letters(s.letters)
-        case .bars: .bars(s.bars)
-        case .grid: .number(s.gridColumns)
-        case .flip: .number(s.flipMs)
-        case .order: .order(s.order)
-        case .reveal: .reveal(s.reveal)
-        case .advance: .advance(s.advance)
-        case .pause: .number(s.pauseTicks)
-        case .font: .font(s.anagramFont)
-        case .morphTime: .number(s.morphMs)
-        case .camera: .camera(s.mapCamera)
-        case .zoom: .number(s.mapZoom)
-        case .trail: .number(s.trailSeconds)
-        case .layerTime: .number(s.layerMs)
-        case .baseLevel: .number(s.baseLevel)
-        case .context: .context(s.layeredContext)
-        case .strength: .number(s.contextLevel)
-        case .length: .number(s.contextTicks)
-        case .entrance: .entrance(s.layeredEntrance)
-        case .push: .push(s.layeredCamera)
-        case .move: .number(s.cameraMs)
-        case .transition: .style(s.transition)
-        case .fade: .number(s.fadeMs)
-        }
-    }
-
-    public func set(_ value: SettingValue, in s: inout ShowSettings) {
-        switch (self, snapped(value)) {
-        case (.clock, .number(let n)): s.clockMs = n
-        case (.wave, .number(let n)): s.waveTicks = n
-        case (.hold, .number(let n)): s.holdTicks = n
-        case (.textScale, .number(let n)): s.textScale = n
-        case (.histogram, .flag(let on)): s.histogram = on
-        case (.sceneLine, .flag(let on)): s.sceneLine = on
-        case (.letters, .letters(let letters)): s.letters = letters
-        case (.bars, .bars(let bars)): s.bars = bars
-        case (.grid, .number(let n)): s.gridColumns = n
-        case (.flip, .number(let n)): s.flipMs = n
-        case (.order, .order(let order)): s.order = order
-        case (.reveal, .reveal(let reveal)): s.reveal = reveal
-        case (.advance, .advance(let advance)): s.advance = advance
-        case (.pause, .number(let n)): s.pauseTicks = n
-        case (.font, .font(let family)): s.anagramFont = family
-        case (.morphTime, .number(let n)): s.morphMs = n
-        case (.camera, .camera(let camera)): s.mapCamera = camera
-        case (.zoom, .number(let n)): s.mapZoom = n
-        case (.trail, .number(let n)): s.trailSeconds = n
-        case (.layerTime, .number(let n)): s.layerMs = n
-        case (.baseLevel, .number(let n)): s.baseLevel = n
-        case (.context, .context(let c)): s.layeredContext = c
-        case (.strength, .number(let n)): s.contextLevel = n
-        case (.length, .number(let n)): s.contextTicks = n
-        case (.entrance, .entrance(let e)): s.layeredEntrance = e
-        case (.push, .push(let c)): s.layeredCamera = c
-        case (.move, .number(let n)): s.cameraMs = n
-        case (.transition, .style(let style)): s.transition = style
-        case (.fade, .number(let n)): s.fadeMs = n
-        default: break
-        }
-    }
-
-    // MARK: Overrides
-
-    /// Whether a cue of this kind can override this setting.
+    /// Whether a cue of this kind has this setting.
     public func applies(to kind: Cue.Kind) -> Bool {
         if Self.transitions.contains(self) { return true }
         return switch kind {
@@ -378,210 +306,192 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .map: Self.map.contains(self)
         case .image: Self.image.contains(self)
         case .layered: Self.layered.contains(self)
-        case .video, .blank: false
+        case .video, .blank, .text: false
         }
     }
 
-    /// The cue's own value, or nil where it takes the show's default.
-    public func override(in cue: Cue) -> SettingValue? {
+    /// The cue's value for this setting, or nil where its kind doesn't have
+    /// it.
+    public func value(in cue: Cue) -> SettingValue? {
         // The transition in belongs to the cue, not to its kind's content.
         switch self {
-        case .transition: return cue.transition.style.map(SettingValue.style)
-        case .fade: return cue.transition.fadeMs.map(SettingValue.number)
+        case .transition: return .style(cue.transition.style)
+        case .fade: return .number(cue.transition.fadeMs)
         default: break
         }
         switch cue.content {
         case .title(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .wave: return o.waveTicks.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .histogram: return o.histogram.map(SettingValue.flag)
-            case .sceneLine: return o.sceneLine.map(SettingValue.flag)
-            case .letters: return o.letters.map(SettingValue.letters)
-            case .bars: return o.bars.map(SettingValue.bars)
+            case .clock: return .number(o.clockMs)
+            case .wave: return .number(o.waveTicks)
+            case .hold: return .number(o.holdTicks)
+            case .histogram: return .flag(o.histogram)
+            case .sceneLine: return .flag(o.sceneLine)
+            case .letters: return .letters(o.letters)
+            case .bars: return .bars(o.bars)
             default: return nil
             }
         case .anagram(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .wave: return o.waveTicks.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .advance: return o.advance.map(SettingValue.advance)
-            case .pause: return o.pauseTicks.map(SettingValue.number)
-            case .font: return o.font.map(SettingValue.font)
+            case .clock: return .number(o.clockMs)
+            case .wave: return .number(o.waveTicks)
+            case .hold: return .number(o.holdTicks)
+            case .advance: return .advance(o.advance)
+            case .pause: return .number(o.pauseTicks)
+            case .font: return .font(o.font)
             default: return nil
             }
         case .morph(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .advance: return o.advance.map(SettingValue.advance)
-            case .pause: return o.pauseTicks.map(SettingValue.number)
-            case .morphTime: return o.morphMs.map(SettingValue.number)
+            case .clock: return .number(o.clockMs)
+            case .hold: return .number(o.holdTicks)
+            case .advance: return .advance(o.advance)
+            case .pause: return .number(o.pauseTicks)
+            case .morphTime: return .number(o.morphMs)
             default: return nil
             }
         case .map(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .advance: return o.advance.map(SettingValue.advance)
-            case .pause: return o.pauseTicks.map(SettingValue.number)
-            case .camera: return o.camera.map(SettingValue.camera)
-            case .zoom: return o.zoom.map(SettingValue.number)
-            case .trail: return o.trailSeconds.map(SettingValue.number)
+            case .clock: return .number(o.clockMs)
+            case .hold: return .number(o.holdTicks)
+            case .advance: return .advance(o.advance)
+            case .pause: return .number(o.pauseTicks)
+            case .camera: return .camera(o.camera)
+            case .zoom: return .number(o.zoom)
+            case .trail: return .number(o.trailSeconds)
             default: return nil
             }
         case .image(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .wave: return o.waveTicks.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .grid: return o.gridColumns.map(SettingValue.number)
-            case .flip: return o.flipMs.map(SettingValue.number)
-            case .order: return o.order.map(SettingValue.order)
-            case .reveal: return o.reveal.map(SettingValue.reveal)
+            case .clock: return .number(o.clockMs)
+            case .wave: return .number(o.waveTicks)
+            case .hold: return .number(o.holdTicks)
+            case .grid: return .number(o.gridColumns)
+            case .flip: return .number(o.flipMs)
+            case .order: return .order(o.order)
+            case .reveal: return .reveal(o.reveal)
             default: return nil
             }
         case .layered(let c):
-            let o = c.overrides
+            let o = c.settings
             switch self {
-            case .clock: return o.clockMs.map(SettingValue.number)
-            case .hold: return o.holdTicks.map(SettingValue.number)
-            case .advance: return o.advance.map(SettingValue.advance)
-            case .pause: return o.pauseTicks.map(SettingValue.number)
-            case .layerTime: return o.layerMs.map(SettingValue.number)
-            case .baseLevel: return o.baseLevel.map(SettingValue.number)
-            case .context: return o.context.map(SettingValue.context)
-            case .strength: return o.contextLevel.map(SettingValue.number)
-            case .length: return o.contextTicks.map(SettingValue.number)
-            case .entrance: return o.entrance.map(SettingValue.entrance)
-            case .push: return o.camera.map(SettingValue.push)
-            case .zoom: return o.zoom.map(SettingValue.number)
-            case .move: return o.cameraMs.map(SettingValue.number)
+            case .clock: return .number(o.clockMs)
+            case .hold: return .number(o.holdTicks)
+            case .advance: return .advance(o.advance)
+            case .pause: return .number(o.pauseTicks)
+            case .layerTime: return .number(o.layerMs)
+            case .baseLevel: return .number(o.baseLevel)
+            case .context: return .context(o.context)
+            case .strength: return .number(o.contextLevel)
+            case .length: return .number(o.contextTicks)
+            case .entrance: return .entrance(o.entrance)
+            case .push: return .push(o.camera)
+            case .zoom: return .number(o.zoom)
+            case .move: return .number(o.cameraMs)
             default: return nil
             }
-        case .video, .blank:
+        case .video, .blank, .text:
             return nil
         }
     }
 
-    /// Sets the cue's own value, or with nil puts it back on the show's
-    /// default. Does nothing for settings the cue's kind doesn't have.
-    public func setOverride(_ value: SettingValue?, in cue: inout Cue) {
-        let value = value.map(snapped)
-        func number() -> Int? { if case .number(let n) = value { n } else { nil } }
-        func flag() -> Bool? { if case .flag(let on) = value { on } else { nil } }
-        func order() -> TileOrder? { if case .order(let o) = value { o } else { nil } }
-        func reveal() -> TileReveal? { if case .reveal(let r) = value { r } else { nil } }
-        func letters() -> TitleLetters? { if case .letters(let l) = value { l } else { nil } }
-        func font() -> String? { if case .font(let f) = value { f } else { nil } }
-        func bars() -> TitleBars? { if case .bars(let b) = value { b } else { nil } }
-        func style() -> TransitionStyle? { if case .style(let s) = value { s } else { nil } }
-        func advance() -> AnagramAdvance? { if case .advance(let a) = value { a } else { nil } }
-        func camera() -> MapCamera? { if case .camera(let c) = value { c } else { nil } }
-        func context() -> LayerContext? { if case .context(let c) = value { c } else { nil } }
-        func entrance() -> LayerEntrance? { if case .entrance(let e) = value { e } else { nil } }
-        func push() -> LayeredCamera? { if case .push(let p) = value { p } else { nil } }
-        switch self {
-        case .transition:
-            cue.transition.style = style()
+    /// Sets the cue's value, snapped to the setting's range and step. Does
+    /// nothing for settings the cue's kind doesn't have, or a value of the
+    /// wrong type.
+    public func set(_ value: SettingValue, in cue: inout Cue) {
+        let value = snapped(value)
+        switch (self, value) {
+        case (.transition, .style(let style)):
+            cue.transition.style = style
             return
-        case .fade:
-            cue.transition.fadeMs = number()
+        case (.fade, .number(let n)):
+            cue.transition.fadeMs = n
             return
         default: break
         }
         switch cue.content {
         case .title(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .wave: c.overrides.waveTicks = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .histogram: c.overrides.histogram = flag()
-            case .sceneLine: c.overrides.sceneLine = flag()
-            case .letters: c.overrides.letters = letters()
-            case .bars: c.overrides.bars = bars()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.wave, .number(let n)): c.settings.waveTicks = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.histogram, .flag(let on)): c.settings.histogram = on
+            case (.sceneLine, .flag(let on)): c.settings.sceneLine = on
+            case (.letters, .letters(let letters)): c.settings.letters = letters
+            case (.bars, .bars(let bars)): c.settings.bars = bars
             default: return
             }
             cue.content = .title(c)
         case .anagram(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .wave: c.overrides.waveTicks = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .advance: c.overrides.advance = advance()
-            case .pause: c.overrides.pauseTicks = number()
-            case .font: c.overrides.font = font()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.wave, .number(let n)): c.settings.waveTicks = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.advance, .advance(let advance)): c.settings.advance = advance
+            case (.pause, .number(let n)): c.settings.pauseTicks = n
+            case (.font, .font(let family)): c.settings.font = family
             default: return
             }
             cue.content = .anagram(c)
         case .morph(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .advance: c.overrides.advance = advance()
-            case .pause: c.overrides.pauseTicks = number()
-            case .morphTime: c.overrides.morphMs = number()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.advance, .advance(let advance)): c.settings.advance = advance
+            case (.pause, .number(let n)): c.settings.pauseTicks = n
+            case (.morphTime, .number(let n)): c.settings.morphMs = n
             default: return
             }
             cue.content = .morph(c)
         case .map(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .advance: c.overrides.advance = advance()
-            case .pause: c.overrides.pauseTicks = number()
-            case .camera: c.overrides.camera = camera()
-            case .zoom: c.overrides.zoom = number()
-            case .trail: c.overrides.trailSeconds = number()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.advance, .advance(let advance)): c.settings.advance = advance
+            case (.pause, .number(let n)): c.settings.pauseTicks = n
+            case (.camera, .camera(let camera)): c.settings.camera = camera
+            case (.zoom, .number(let n)): c.settings.zoom = n
+            case (.trail, .number(let n)): c.settings.trailSeconds = n
             default: return
             }
             cue.content = .map(c)
         case .image(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .wave: c.overrides.waveTicks = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .grid: c.overrides.gridColumns = number()
-            case .flip: c.overrides.flipMs = number()
-            case .order: c.overrides.order = order()
-            case .reveal: c.overrides.reveal = reveal()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.wave, .number(let n)): c.settings.waveTicks = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.grid, .number(let n)): c.settings.gridColumns = n
+            case (.flip, .number(let n)): c.settings.flipMs = n
+            case (.order, .order(let order)): c.settings.order = order
+            case (.reveal, .reveal(let reveal)): c.settings.reveal = reveal
             default: return
             }
             cue.content = .image(c)
         case .layered(var c):
-            switch self {
-            case .clock: c.overrides.clockMs = number()
-            case .hold: c.overrides.holdTicks = number()
-            case .advance: c.overrides.advance = advance()
-            case .pause: c.overrides.pauseTicks = number()
-            case .layerTime: c.overrides.layerMs = number()
-            case .baseLevel: c.overrides.baseLevel = number()
-            case .context: c.overrides.context = context()
-            case .strength: c.overrides.contextLevel = number()
-            case .length: c.overrides.contextTicks = number()
-            case .entrance: c.overrides.entrance = entrance()
-            case .push: c.overrides.camera = push()
-            case .zoom: c.overrides.zoom = number()
-            case .move: c.overrides.cameraMs = number()
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.advance, .advance(let advance)): c.settings.advance = advance
+            case (.pause, .number(let n)): c.settings.pauseTicks = n
+            case (.layerTime, .number(let n)): c.settings.layerMs = n
+            case (.baseLevel, .number(let n)): c.settings.baseLevel = n
+            case (.context, .context(let context)): c.settings.context = context
+            case (.strength, .number(let n)): c.settings.contextLevel = n
+            case (.length, .number(let n)): c.settings.contextTicks = n
+            case (.entrance, .entrance(let entrance)): c.settings.entrance = entrance
+            case (.push, .push(let camera)): c.settings.camera = camera
+            case (.zoom, .number(let n)): c.settings.zoom = n
+            case (.move, .number(let n)): c.settings.cameraMs = n
             default: return
             }
             cue.content = .layered(c)
-        case .video, .blank:
+        case .video, .blank, .text:
             return
         }
-    }
-
-    /// What the cue runs with: its own value if it has one, otherwise the
-    /// show's default.
-    public func effective(for cue: Cue, defaults: ShowSettings) -> (value: SettingValue, overridden: Bool) {
-        if let own = override(in: cue) { return (own, true) }
-        return (value(in: defaults), false)
     }
 }

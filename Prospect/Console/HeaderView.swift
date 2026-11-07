@@ -14,6 +14,8 @@ final class HeaderState: ObservableObject {
     @Published var live = false
     @Published var warn = false
     @Published var projectorOpen = false
+    /// The Inspector is showing the Show Settings.
+    @Published var showSettingsOn = false
     @Published var goEnabled = true
     @Published var goTip = ""
     /// The wordmark's glyphs, and how far home each one is.
@@ -22,8 +24,7 @@ final class HeaderState: ObservableObject {
     var onGo: () -> Void = {}
     var onMode: (Bool) -> Void = { _ in }
     var onAddCue: (Cue.Kind) -> Void = { _ in }
-    var onAddTransition: () -> Void = {}
-    var onShowSettings: () -> Void = {}
+    var onShowSettings: (Bool) -> Void = { _ in }
     var onOpenProjector: () -> Void = {}
 }
 
@@ -46,12 +47,13 @@ final class HeaderView: PanelHost<HeaderBar> {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(mode editing: Bool, lamp text: String, live: Bool, warn: Bool, projectorOpen: Bool, goEnabled: Bool, goTip: String) {
+    func update(mode editing: Bool, lamp text: String, live: Bool, warn: Bool, projectorOpen: Bool, showSettingsOn: Bool, goEnabled: Bool, goTip: String) {
         state.editing = editing
         state.lamp = text
         state.live = live
         state.warn = warn
         state.projectorOpen = projectorOpen
+        state.showSettingsOn = showSettingsOn
         state.goEnabled = goEnabled
         state.goTip = goTip
     }
@@ -140,10 +142,13 @@ struct HeaderBar: View {
                 .help("Adds a cue after the one standing by")
             }
 
-            Button("Show Settings\u{2026}") { state.onShowSettings() }
-                .fixedSize()
-                .focusable(false)
-                .help("Opens the show's defaults and its projection area")
+            if state.editing {
+                Toggle("Show Settings", isOn: Binding(get: { state.showSettingsOn }, set: { state.onShowSettings($0) }))
+                    .toggleStyle(.button)
+                    .fixedSize()
+                    .focusable(false)
+                    .help("Shows the show's title, text size and projection area in the Inspector")
+            }
 
             rule
 
@@ -185,9 +190,6 @@ struct HeaderBar: View {
             ForEach(Cue.Kind.common, id: \.self) { addCueRow($0) }
             Divider().padding(.vertical, 4)
             ForEach(Cue.Kind.others, id: \.self) { addCueRow($0) }
-            Divider().padding(.vertical, 4)
-            addCueButton(symbol: "arrow.down.to.line", title: "Transition",
-                         blurb: "A pause between cues, with its own fade.") { state.onAddTransition() }
         }
         .padding(8)
         .frame(width: 320)

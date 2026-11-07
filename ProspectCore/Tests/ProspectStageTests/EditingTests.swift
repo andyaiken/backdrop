@@ -68,29 +68,11 @@ struct EditingTests {
         change("Remove Layer") { $0.removeLayer(at: 1) }
         #expect(layers() == ["b", "a"] && log.edits.count == 6)
         change("Change Layer Life") { $0.layers[0].life = .untilNextGo }
-        #expect(c.show[id]?.goPoints(defaults: { var s = ShowSettings(); s.advance = .eachStep; return s }()).map(\.text) == ["b", "b goes", "a"])
+        var onGo = try! #require(c.show[id])
+        SettingKey.advance.set(.advance(.eachStep), in: &onGo)
+        #expect(onGo.goPoints().map(\.text) == ["b", "b goes", "a"])
         change("Move Layer") { $0.moveLayer(from: 0, to: 0) }
         #expect(log.edits.count == 7, "a move to the same place changes nothing, and is no edit")
-    }
-
-    @Test("Add Transition gives the standing-by cue its own, once, and one undo step")
-    func addTransition() throws {
-        #expect(controller().addTransition() == nil, "nothing stands by")
-        let c = controller([numbered("1"), numbered("2")])
-        c.standBy(c.show.cues[1].id)
-        #expect(c.addTransition() == c.show.cues[1].id)
-        #expect(c.show.cues[1].transition == TransitionOverrides(style: .crossfade) && c.show.cues[0].transition.isEmpty)
-        #expect(log.edits.last?.1 == "Add Transition" && log.edits.last?.0.cues[1].transition.isEmpty == true)
-        #expect(c.addTransition() == nil && log.edits.count == 1, "already has one")
-        var show = c.show
-        show.settings.transition = .crossfade
-        let other = controller(show.cues.map { var c = $0; c.transition = .init(); return c })
-        other.setDefault(.transition, to: .style(.crossfade))
-        other.standBy(other.show.cues[0].id)
-        other.addTransition()
-        #expect(other.show.cues[0].transition.style == .fade, "a different style from the show's, so the row says something")
-        let locked = controller([numbered("1")], mode: .show)
-        #expect(locked.addTransition() == nil)
     }
 
     @Test("A new cue starts with every field empty")
@@ -183,7 +165,7 @@ struct EditingTests {
     }
 }
 
-@Suite("Settings and overrides")
+@Suite("Settings")
 @MainActor
 struct SettingsEditingTests {
     final class Log {
@@ -203,52 +185,50 @@ struct SettingsEditingTests {
         return c
     }
 
-    @Test func defaultsAreUndoableEdits() {
+    @Test func textSizeIsAnUndoableEdit() {
         let c = controller()
-        c.setDefault(.clock, to: .number(30))
-        #expect(c.show.settings.clockMs == 30)
-        #expect(log.edits == ["Change Default Clock"])
+        c.setTextScale(80)
+        #expect(c.show.settings.textScale == 80)
+        #expect(log.edits == ["Change Text Size"])
         c.enterShowMode()
-        c.setDefault(.clock, to: .number(60))
-        #expect(c.show.settings.clockMs == 30, "locked in show mode")
+        c.setTextScale(60)
+        #expect(c.show.settings.textScale == 80, "locked in show mode")
     }
 
     @Test func aSliderDragIsOneUndoStep() {
-        let c = controller()
+        let title = titleCue("THE LOUVRE")
+        let c = controller([title])
         for (i, value) in [40, 50, 60, 70].enumerated() {
             log.time = Double(i) * 0.05
-            c.setDefault(.hold, to: .number(value), coalescing: true)
+            c.setSetting(.hold, to: .number(value), for: title.id, coalescing: true)
         }
         #expect(log.edits.count == 1 && log.merged == 3)
-        #expect(c.show.settings.holdTicks == 70)
+        #expect(c.show[title.id]!.timing.holdTicks == 70)
 
         log.time = 10
-        c.setDefault(.hold, to: .number(20), coalescing: true)
-        c.setDefault(.wave, to: .number(5), coalescing: true)
+        c.setSetting(.hold, to: .number(20), for: title.id, coalescing: true)
+        c.setSetting(.wave, to: .number(5), for: title.id, coalescing: true)
         #expect(log.edits.count == 3, "a pause, or a different setting, starts a new step")
         c.setGeometry(Geometry(width: 80), coalescing: true)
         c.setGeometry(Geometry(width: 70), coalescing: true)
         #expect(log.edits.last == "Change Projection Area" && log.edits.count == 4)
     }
 
-    @Test func overridesSetAndReset() throws {
+    @Test func aCuesSettingsAreSetOnTheCue() throws {
         let image = Cue(number: "2", content: .image(ImageContent(text: "GALLERY")))
         let c = controller([image])
-        c.setOverride(.grid, to: .number(20), for: image.id)
-        #expect(SettingKey.grid.effective(for: c.show[image.id]!, defaults: c.show.settings) == (.number(20), true))
+        c.setSetting(.grid, to: .number(20), for: image.id)
+        #expect(SettingKey.grid.value(in: c.show[image.id]!) == .number(20))
         #expect(log.edits.last == "Change Grid for Cue 2")
-        c.setOverride(.histogram, to: .flag(false), for: image.id)
-        #expect(log.edits.count == 1, "an image has no histogram to override")
-        c.setOverride(.grid, to: nil, for: image.id)
-        #expect(SettingKey.grid.override(in: c.show[image.id]!) == nil)
-        #expect(log.edits.last == "Use Show\u{2019}s Grid")
+        c.setSetting(.histogram, to: .flag(false), for: image.id)
+        #expect(log.edits.count == 1, "an image has no histogram to set")
     }
 
-    @Test func aCuesOverrideIsWhatItRunsWith() {
+    @Test func aCuesSettingIsWhatItRunsWith() {
         let title = titleCue("THE LOUVRE")
         let c = controller([title])
-        c.setOverride(.hold, to: .number(4), for: title.id)
-        #expect(c.show[title.id]!.timing(defaults: c.show.settings).holdTicks == 4)
+        c.setSetting(.hold, to: .number(4), for: title.id)
+        #expect(c.show[title.id]!.timing.holdTicks == 4)
     }
 
     @Test func textSizeRefitsATitleOnStage() throws {
@@ -257,7 +237,7 @@ struct SettingsEditingTests {
         c.runner.attach(stage)
         c.go()
         let before = CTFontGetSize(try #require(tree(titles, on: stage)?.layout).titleFont)
-        c.setDefault(.textScale, to: .number(50))
+        c.setTextScale(50)
         let after = CTFontGetSize(try #require(tree(titles, on: stage)?.layout).titleFont)
         #expect(abs(after - before / 2) < 0.01)
     }
@@ -317,10 +297,10 @@ struct LiveEditTests {
         let c = controller([titleCue("THE LOUVRE")])
         c.go()
         c.setGeometry(Geometry(width: 80, height: 80))
-        c.setDefault(.textScale, to: .number(80))
+        c.setTextScale(80)
         #expect(c.runner.isRunning, "still resolving, not redrawn finished")
-        c.setDefault(.sceneLine, to: .flag(false))
-        #expect(!c.runner.isRunning, "a default titles use does redraw")
+        c.setSetting(.sceneLine, to: .flag(false), for: c.show.cues[0].id)
+        #expect(!c.runner.isRunning, "a setting titles use does redraw")
     }
 
     @Test("Deleting the cue on stage takes it off")

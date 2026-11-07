@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import ProspectCore
 
-private func anagramCue(_ number: String, _ anagrams: [Anagram], advance: AnagramAdvance? = nil) -> Cue {
-    Cue(number: number, content: .anagram(AnagramContent(anagrams: anagrams, overrides: AnagramOverrides(advance: advance))))
+private func anagramCue(_ number: String, _ anagrams: [Anagram], advance: AnagramAdvance = .byItself) -> Cue {
+    Cue(number: number, content: .anagram(AnagramContent(anagrams: anagrams, settings: AnagramSettings(advance: advance))))
 }
 
 private func titleCue(_ number: String, continues: ContinueMode = .whenCued) -> Cue {
@@ -185,11 +185,11 @@ struct AnagramWorkingTests {
 
     @Test("The printed sheet lists each anagram, its working and its answer, and gives every GO a row of its own")
     func sheet() {
-        func rows(_ advance: AnagramAdvance?, _ layout: CueSheet.Layout = .dsm) -> [CueSheet.Row] {
+        func rows(_ advance: AnagramAdvance, _ layout: CueSheet.Layout = .dsm) -> [CueSheet.Row] {
             CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.louvre, Self.lisa], advance: advance)]), title: "T", layout: layout).rows
         }
         let lines = ["O, Draconian devil!", "\u{2026} Dracula? No.", "\u{2192} Leonardo da Vinci!", "Oh, lame saint!", "\u{2192} The Mona Lisa!"]
-        #expect(rows(nil).count == 1 && rows(nil)[0].content == lines)
+        #expect(rows(.byItself).count == 1 && rows(.byItself)[0].content == lines)
         let each = rows(.eachAnagram)
         #expect(each[0].content == lines, "the cue's own row as before")
         #expect(each.dropFirst().map(\.type) == ["GO 1", "GO 2"] && each.dropFirst().map(\.go) == [1, 2])
@@ -202,30 +202,29 @@ struct AnagramWorkingTests {
         #expect(skipped.rows.map(\.content) == [["Leonardo da Vinci! (solved)", "Oh, lame saint! (ignored)"]], "and no GO for either")
         let settings = CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.rats], advance: .eachStep)]), title: "T",
                                 layout: .operatorSettings).rows[0].settings
-        #expect(settings.first { $0.name == "Advance" } == CueSheet.Setting(name: "Advance", value: "each step on GO", overridden: true))
+        #expect(settings.first { $0.name == "Advance" } == CueSheet.Setting(name: "Advance", value: "each step on GO")) 
     }
 
     // MARK: Settings
 
-    @Test("Advance and Pause: show defaults any anagram cue can override")
+    @Test("Advance and Pause: set on any anagram cue")
     func settings() throws {
-        #expect(ShowSettings().advance == .byItself && ShowSettings().pauseTicks == 44)
+        #expect(AnagramSettings().advance == .byItself && AnagramSettings().pauseTicks == 44)
         var cue = anagramCue("1", [Self.rats])
-        SettingKey.advance.setOverride(.advance(.eachStep), in: &cue)
-        SettingKey.pause.setOverride(.number(999), in: &cue)
+        SettingKey.advance.set(.advance(.eachStep), in: &cue)
+        SettingKey.pause.set(.number(999), in: &cue)
         guard case .anagram(let c) = cue.content else { return }
-        let resolved = ShowSettings().resolved(c.overrides)
-        #expect(resolved.advance == .eachStep && resolved.pauseTicks == 160, "clamped to the slider")
-        #expect(cue.goPoints(defaults: ShowSettings()).count == 2)
+        #expect(c.settings.advance == .eachStep && c.settings.pauseTicks == 160, "clamped to the slider")
+        #expect(cue.goPoints().count == 2)
         #expect(SettingKey.pause.format(.number(0)) == "none" && SettingKey.advance.format(.advance(.eachAnagram)) == "each anagram on GO")
         #expect(SettingKey.advance.choiceIndex(of: .advance(.eachStep)) == 2)
         #expect(!SettingKey.pause.applies(to: .title) && !SettingKey.advance.applies(to: .image))
 
         let json = #"{"advance": "anagram", "pauseTicks": 999}"#
-        let decoded = try JSONDecoder().decode(ShowSettings.self, from: Data(json.utf8))
+        let decoded = try JSONDecoder().decode(AnagramSettings.self, from: Data(json.utf8))
         #expect(decoded.advance == .eachAnagram && decoded.pauseTicks == 160)
         let back = try JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(cue))
-        #expect(SettingKey.advance.override(in: back) == .advance(.eachStep))
+        #expect(SettingKey.advance.value(in: back) == .advance(.eachStep))
     }
 
     // MARK: The playhead
@@ -335,7 +334,7 @@ struct AnagramWorkingTests {
         p.standBy(sheet.cues[0].id, step: 1, in: sheet)
         var edited = sheet
         if case .anagram(var c) = edited.cues[0].content {
-            c.overrides.advance = .byItself
+            c.settings.advance = .byItself
             edited.cues[0].content = .anagram(c)
         }
         p.reconcile(from: sheet, to: edited)

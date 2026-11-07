@@ -110,12 +110,12 @@ struct TitleRendererTests {
         renderer.mount(on: live)
         renderer.mount(on: preview)
         let cue = titleCue("THE LOUVRE", sub: "PARIS", key: "VITRUVIAN")
-        renderer.prepare(cue, defaults: ShowSettings())
+        renderer.prepare(cue, show: ShowSettings())
 
         // The same seed, through the model alone.
         var random = SeededRandom(seed: 7)
         guard case .title(let content) = cue.content else { return }
-        let reveal = TitleReveal(cue: content, settings: ShowSettings().resolved(content.overrides), random: &random)
+        let reveal = TitleReveal(cue: content, settings: content.settings, random: &random)
 
         var f = -44
         while true {
@@ -145,7 +145,7 @@ struct TitleRendererTests {
         let renderer = TitleRenderer(random: SeededRandom(seed: 3), reduceMotion: { false })
         let s = surface()
         renderer.mount(on: s)
-        renderer.prepare(titleCue("SAINT-SULPICE", sub: "PARIS"), defaults: ShowSettings())
+        renderer.prepare(titleCue("SAINT-SULPICE", sub: "PARIS"), show: ShowSettings())
         _ = renderer.frame(-44)
         let bars = tree(renderer, on: s)!.bars
         #expect(bars.allSatisfy { $0.animation(forKey: "height") == nil })
@@ -158,7 +158,7 @@ struct TitleRendererTests {
         let renderer = TitleRenderer(random: SeededRandom(seed: 3), reduceMotion: { true })
         let s = surface()
         renderer.mount(on: s)
-        renderer.prepare(titleCue("SAINT-SULPICE", sub: "PARIS"), defaults: ShowSettings())
+        renderer.prepare(titleCue("SAINT-SULPICE", sub: "PARIS"), show: ShowSettings())
         for f in -44..<40 { _ = renderer.frame(f) }
         #expect(tree(renderer, on: s)!.bars.allSatisfy { $0.animation(forKey: "height") == nil })
     }
@@ -168,7 +168,7 @@ struct TitleRendererTests {
         let renderer = TitleRenderer(random: SeededRandom(seed: 1), reduceMotion: { true })
         let s = surface()
         renderer.mount(on: s)
-        renderer.prepare(titleCue("TEMPLE CHURCH", sub: "LONDON"), defaults: ShowSettings())
+        renderer.prepare(titleCue("TEMPLE CHURCH", sub: "LONDON"), show: ShowSettings())
         for f in 0..<30 { _ = renderer.frame(f) }
         renderer.clear(s)
         let t = tree(renderer, on: s)!
@@ -177,13 +177,13 @@ struct TitleRendererTests {
         #expect(renderer.frame(0), "nothing prepared counts as settled")
     }
 
-    @Test("Per-cue overrides switch the histogram and scene line off")
-    func overrides() {
+    @Test("Per-cue settings switch the histogram and scene line off")
+    func settings() {
         let renderer = TitleRenderer(random: SeededRandom(seed: 1), reduceMotion: { true })
         let s = surface()
         renderer.mount(on: s)
         renderer.prepare(titleCue("ROSSLYN CHAPEL", sub: "MIDLOTHIAN",
-                                  overrides: TitleOverrides(histogram: false, sceneLine: false)), defaults: ShowSettings())
+                                  settings: TitleSettings(histogram: false, sceneLine: false)), show: ShowSettings())
         _ = renderer.frame(0)
         let t = tree(renderer, on: s)!
         #expect(t.panel.isHidden)
@@ -196,8 +196,8 @@ struct TitleRendererTests {
         let s = surface()
         renderer.mount(on: s)
         renderer.setVisible(true, on: s)
-        renderer.prepare(titleCue("SOFIA", sub: "THE CRYPTEX", key: "APPLE", overrides: TitleOverrides(letters: .dials)),
-                         defaults: ShowSettings())
+        renderer.prepare(titleCue("SOFIA", sub: "THE CRYPTEX", key: "APPLE", settings: TitleSettings(letters: .dials)),
+                         show: ShowSettings())
         let t = try #require(tree(renderer, on: s))
         let layout = try #require(t.layout)
         #expect(abs(t.title.frame.height - layout.titleLine.height) < 1e-6 && t.title.mask != nil, "a window the height of the line")
@@ -219,7 +219,7 @@ struct TitleRendererTests {
         renderer.mount(on: s)
         renderer.setVisible(true, on: s)
         renderer.prepare(titleCue("The keystone is under the sign of the rose", sub: "SAINT-SULPICE", key: "ROSELINE",
-                                  overrides: TitleOverrides(bars: .digraphs)), defaults: ShowSettings())
+                                  settings: TitleSettings(bars: .digraphs)), show: ShowSettings())
         let t = try #require(tree(renderer, on: s))
         #expect(t.titleLines.count == 2)
         #expect(text(of: t.axis.runs).hasPrefix("thheiner"), "the commonest pairs, in order")
@@ -238,7 +238,7 @@ struct TitleRendererTests {
         let renderer = TitleRenderer(random: SeededRandom(seed: 2), reduceMotion: { true })
         let first = surface()
         renderer.mount(on: first)
-        renderer.prepare(titleCue("WESTMINSTER ABBEY", sub: "LONDON"), defaults: ShowSettings())
+        renderer.prepare(titleCue("WESTMINSTER ABBEY", sub: "LONDON"), show: ShowSettings())
         for f in -44..<200 { _ = renderer.frame(f) }
         let late = surface(width: 800, height: 450)
         renderer.mount(on: late)
@@ -252,7 +252,7 @@ struct TitleRendererTests {
         s.updateInset()
         renderer.mount(on: s)
         renderer.setVisible(true, on: s)
-        renderer.prepare(titleCue("CHATEAU VILLETTE", sub: "VERSAILLES"), defaults: ShowSettings())
+        renderer.prepare(titleCue("CHATEAU VILLETTE", sub: "VERSAILLES"), show: ShowSettings())
         _ = renderer.frame(-44)
         render(s).save("title-opening")
         for f in 0..<200 { _ = renderer.frame(f) }

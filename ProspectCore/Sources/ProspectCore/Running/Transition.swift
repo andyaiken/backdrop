@@ -9,48 +9,29 @@ public enum TransitionStyle: String, Codable, CaseIterable, Sendable {
     case crossfade
 }
 
-/// The transition into a cue, once its overrides are applied.
-public struct Transition: Equatable, Sendable {
+/// The transition into a cue.
+public struct Transition: Codable, Equatable, Sendable {
     public var style: TransitionStyle
     /// The length of each fade: out, then in; or of a whole crossfade. Unused by a snap.
     public var fadeMs: Int
 
-    public init(style: TransitionStyle, fadeMs: Int) {
+    public init(style: TransitionStyle = .fade, fadeMs: Int = 500) {
         self.style = style
         self.fadeMs = fadeMs
     }
 
-    /// What every cue changes with, unless the show or the cue says otherwise.
-    public static let standard = Transition(style: .fade, fadeMs: 500)
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Transition.standard
+        style = try c.value(.style, d.style)
+        fadeMs = try c.value(.fadeMs, d.fadeMs, in: SettingRange.fadeMs)
+    }
+
+    /// What a new cue changes with.
+    public static let standard = Transition()
 
     public var fadeSeconds: Double { Double(fadeMs) / 1000 }
 
     /// Whether the style has a length to set.
     public var hasLength: Bool { style != .snap }
-}
-
-/// A cue's own values for its transition in. Nil takes the show's default.
-public struct TransitionOverrides: Codable, Equatable, Sendable {
-    public var style: TransitionStyle?
-    public var fadeMs: Int?
-
-    public init(style: TransitionStyle? = nil, fadeMs: Int? = nil) {
-        self.style = style
-        self.fadeMs = fadeMs
-    }
-
-    public var isEmpty: Bool { self == TransitionOverrides() }
-
-    func clamped() -> TransitionOverrides {
-        var o = self
-        o.fadeMs = fadeMs.map { SettingRange.fadeMs.clamp($0) }
-        return o
-    }
-}
-
-extension Cue {
-    /// How the stage changes to this cue, however it got here.
-    public func transitionIn(defaults: ShowSettings) -> Transition {
-        Transition(style: transition.style ?? defaults.transition, fadeMs: transition.fadeMs ?? defaults.fadeMs)
-    }
 }

@@ -133,11 +133,11 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         tree.tiles = []
     }
 
-    public func prepare(_ cue: Cue, defaults: ShowSettings) {
+    public func prepare(_ cue: Cue, show: ShowSettings) {
         guard case .image(let content) = cue.content else { return }
         token += 1
         self.cue = cue
-        settings = defaults.resolved(content.overrides)
+        settings = content.settings
         plan = nil
         lastFrame = nil
         fresh = true
@@ -210,7 +210,7 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
         }
     }
 
-    public func preload(_ cue: Cue, defaults: ShowSettings) {
+    public func preload(_ cue: Cue, show: ShowSettings) {
         guard case .image(let content) = cue.content else { return }
         loader.load(source(for: cue, content).source, maxPixels: maxPixels) { _ in }
     }

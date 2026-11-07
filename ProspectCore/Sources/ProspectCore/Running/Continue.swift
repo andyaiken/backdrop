@@ -51,7 +51,7 @@ extension Cue {
         switch content {
         case .title, .anagram, .image, .morph, .map, .layered: true
         case .video(let v): v.atEnd != .loop
-        case .blank: false
+        case .blank, .text: false
         }
     }
 }

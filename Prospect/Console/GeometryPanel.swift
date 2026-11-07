@@ -42,15 +42,24 @@ struct ProjectionAreaView: View {
     let onGuides: (Bool) -> Void
 
     var body: some View {
-        Form {
+        Form { sections }
+            .formStyle(.grouped)
+    }
+
+    /// The sections themselves, for a form that holds more than this.
+    @ViewBuilder
+    var sections: some View {
             Section {
-                LabeledContent("Shape") {
-                    Picker("", selection: Binding(get: { shape }, set: { use($0) })) {
-                        ForEach(StageShape.allCases) { Text($0.rawValue).tag($0) }
+                FieldRow(label: "Shape") {
+                    HStack {
+                        Picker("", selection: Binding(get: { shape }, set: { use($0) })) {
+                            ForEach(StageShape.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        .labelsHidden()
+                        .focusable(false)
+                        .fixedSize()
+                        Spacer(minLength: 0)
                     }
-                    .labelsHidden()
-                    .focusable(false)
-                    .fixedSize()
                 }
                 row("Width", \.width, SettingRange.geometrySize)
                 row("Height", \.height, SettingRange.geometrySize)
@@ -64,13 +73,17 @@ struct ProjectionAreaView: View {
             }
 
             Section {
-                Toggle("Alignment guides", isOn: Binding(get: { guidesOn }, set: { onGuides($0) }))
-                    .focusable(false)
+                FieldRow(label: "Alignment guides") {
+                    HStack {
+                        Toggle("", isOn: Binding(get: { guidesOn }, set: { onGuides($0) }))
+                            .labelsHidden()
+                            .focusable(false)
+                        Spacer(minLength: 0)
+                    }
+                }
                 Button("Fill the Output") { onChange(Geometry()) }
                     .focusable(false)
             }
-        }
-        .formStyle(.grouped)
     }
 
     /// The shape the picture lands in, as the audience sees it: the stage's
@@ -104,22 +117,17 @@ struct ProjectionAreaView: View {
     private func row(_ name: String, _ key: WritableKeyPath<Geometry, Int>, _ range: ClosedRange<Int>,
                      signed: Bool = false) -> some View {
         let value = geometry[keyPath: key]
-        LabeledContent(name) {
-            HStack(spacing: 10) {
-                Slider(value: Binding(
-                    get: { Double(value) },
-                    set: { new in
-                        var changed = geometry
-                        changed[keyPath: key] = Int(new.rounded())
-                        onChange(changed)
-                    }
-                ), in: Double(range.lowerBound)...Double(range.upperBound), step: 1)
-                .focusable(false)
-                Text(signed ? value.signedPercentage : "\(value)%")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(width: 44, alignment: .trailing)
-            }
+        FieldRow(label: name, value: signed ? value.signedPercentage : "\(value)%") {
+            Slider(value: Binding(
+                get: { Double(value) },
+                set: { new in
+                    var changed = geometry
+                    changed[keyPath: key] = Int(new.rounded())
+                    onChange(changed)
+                }
+            ), in: Double(range.lowerBound)...Double(range.upperBound), step: 1)
+            .focusable(false)
+            .frame(maxWidth: .infinity)
         }
     }
 }

@@ -25,8 +25,6 @@ public struct CueSheet: Equatable, Sendable {
     public struct Setting: Equatable, Sendable {
         public var name: String
         public var value: String
-        /// Set on this cue rather than taken from the show's defaults.
-        public var overridden: Bool
     }
 
     public struct Row: Equatable, Sendable {
@@ -54,12 +52,6 @@ public struct CueSheet: Equatable, Sendable {
     public let layout: Layout
     public let rows: [Row]
 
-    /// Whether any value on the sheet is set for its cue, so the key to the
-    /// marking is worth printing.
-    public var hasOverrides: Bool {
-        rows.contains { $0.settings.contains(where: \.overridden) }
-    }
-
     public init(show: Show, title: String, layout: Layout) {
         self.title = title
         self.layout = layout
@@ -70,11 +62,11 @@ public struct CueSheet: Equatable, Sendable {
                 auto: i > 0 && show.cues[i - 1].continueMode.continues,
                 content: Self.content(of: cue),
                 cuePoint: layout == .dsm ? cue.line.trimmingCharacters(in: .whitespacesAndNewlines) : "",
-                settings: layout == .operatorSettings ? Self.settings(of: cue, defaults: show.settings) : []
+                settings: layout == .operatorSettings ? Self.settings(of: cue) : []
             )
             // Every GO the DSM calls gets a row, so none is missed in the book.
             guard layout == .dsm else { return [row] }
-            let goes = cue.goPoints(defaults: show.settings).enumerated().map { n, point in
+            let goes = cue.goPoints().enumerated().map { n, point in
                 Row(number: "", type: "GO \(n + 1)", auto: false, content: [point.text], cuePoint: point.cuePoint, settings: [], go: n + 1)
             }
             return [row] + goes
@@ -87,6 +79,7 @@ public struct CueSheet: Equatable, Sendable {
         case .title(let c): lines = [c.text, c.sub]
         case .anagram(let c): lines = anagramLines(c)
         case .image(let c): lines = [c.text]
+        case .text(let c): lines = [c.text]
         case .morph(let c): lines = [c.text, c.pictures.map { MorphContent.name(of: $0.src) }.joined(separator: " \u{2192} ")]
         case .map(let c):
             // The stops in turn, a jump marked as one.
@@ -100,7 +93,7 @@ public struct CueSheet: Equatable, Sendable {
             // The steps in order, a withdrawal marked.
             lines = [c.text, c.steps.map(\.sheetName).joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
-        case .blank(let c): lines = [c.text, c.colour.hex.uppercased()]
+        case .blank(let c): lines = [c.colour.hex.uppercased()]
         }
         return lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
@@ -117,32 +110,32 @@ public struct CueSheet: Equatable, Sendable {
         }
     }
 
-    private static func settings(of cue: Cue, defaults: ShowSettings) -> [Setting] {
+    private static func settings(of cue: Cue) -> [Setting] {
         func file(_ path: String, none: String) -> String { path.isEmpty ? none : (path as NSString).lastPathComponent }
         // Worded as the console words them, from the same definitions.
         func timing(_ keys: [SettingKey]) -> [Setting] {
-            keys.map { key in
-                let (value, overridden) = key.effective(for: cue, defaults: defaults)
+            keys.compactMap { key in
+                guard let value = key.value(in: cue) else { return nil }
                 var reading = key.format(value, for: cue.kind)
                 // A hold also in seconds, as the panels show it.
-                let t = cue.timing(defaults: defaults)
+                let t = cue.timing
                 if key == .hold, let length = SettingKey.holdLength(holdTicks: t.holdTicks, clockMs: t.clockMs) {
                     reading += " \u{00B7} " + length
                 }
                 if key == .pause, case .number(let ticks) = value, let length = SettingKey.holdLength(holdTicks: ticks, clockMs: t.clockMs) {
                     reading += " \u{00B7} " + length
                 }
-                return Setting(name: key.label, value: reading, overridden: overridden)
+                return Setting(name: key.label, value: reading)
             }
         }
 
         // Every cue's transition in, with its fade time only where it fades.
-        let fades = cue.transitionIn(defaults: defaults).hasLength
+        let fades = cue.transition.hasLength
         let transition = timing(fades ? SettingKey.transitions : [.transition])
 
         // When the show moves on from here by itself.
         let continues = cue.continueMode.continues
-            ? [Setting(name: "Continue", value: cue.continueMode.summary, overridden: false)] : []
+            ? [Setting(name: "Continue", value: cue.continueMode.summary)] : []
 
         return own(cue, file: file, timing: timing) + transition + continues
     }
@@ -154,24 +147,23 @@ public struct CueSheet: Equatable, Sendable {
         case .anagram:
             return timing(SettingKey.anagram)
         case .image(let c):
-            return timing(SettingKey.image) + [Setting(name: "Picture", value: file(c.src, "none"), overridden: false)]
+            return timing(SettingKey.image) + [Setting(name: "Picture", value: file(c.src, "none"))]
         case .morph(let c):
-            guard !c.pictures.isEmpty else { return timing(SettingKey.morph) + [Setting(name: "Pictures", value: "none", overridden: false)] }
+            guard !c.pictures.isEmpty else { return timing(SettingKey.morph) + [Setting(name: "Pictures", value: "none")] }
             // Each picture, and how the stage into it goes: its points, and
             // its own morph time if it has one.
             let pictures = c.pictures.enumerated().map { i, picture in
                 let points = i == 0 ? [] : [picture.pairs.isEmpty ? "a dissolve" : "\(picture.pairs.count) point\(picture.pairs.count == 1 ? "" : "s")"]
                 let time = picture.morphMs.map { [SettingKey.morphTime.format(.number($0))] } ?? []
-                return Setting(name: "Picture \(i + 1)", value: ([file(picture.src, "none")] + points + time).joined(separator: " \u{00B7} "),
-                               overridden: picture.morphMs != nil)
+                return Setting(name: "Picture \(i + 1)", value: ([file(picture.src, "none")] + points + time).joined(separator: " \u{00B7} "))
             }
             return timing(SettingKey.morph) + pictures
         case .map(let c):
             let stops = c.stops.count - 1, jumps = c.stops.dropFirst().filter { c.stop(at: $0).arrival == .jump }.count
             let route = stops < 1 ? "no stops" : "\(stops) stop\(stops == 1 ? "" : "s")" + (jumps > 0 ? ", \(jumps) by a jump" : "")
             return timing(SettingKey.map) + [
-                Setting(name: "Map", value: file(c.src, "none"), overridden: false),
-                Setting(name: "Route", value: route, overridden: false),
+                Setting(name: "Map", value: file(c.src, "none")),
+                Setting(name: "Route", value: route),
             ]
         case .layered(let c):
             // A line per layer, as a morph lists a line per picture.
@@ -186,10 +178,9 @@ public struct CueSheet: Equatable, Sendable {
                 case .untilNextGo: parts.append("goes on its own GO")
                 }
                 if let fade = layer.fadeMs { parts.append(SettingKey.layerTime.format(.number(fade))) }
-                return Setting(name: "Layer \(i + 1)", value: ([layer.displayName] + parts).joined(separator: " \u{00B7} "),
-                               overridden: layer.fadeMs != nil || layer.level != nil)
+                return Setting(name: "Layer \(i + 1)", value: ([layer.displayName] + parts).joined(separator: " \u{00B7} "))
             }
-            return timing(SettingKey.layered) + [Setting(name: "Base", value: file(c.base, "black"), overridden: false)] + layers
+            return timing(SettingKey.layered) + [Setting(name: "Base", value: file(c.base, "black"))] + layers
         case .video(let c):
             let end = switch c.atEnd {
             case .hold: "hold the last frame"
@@ -197,11 +188,16 @@ public struct CueSheet: Equatable, Sendable {
             case .loop: "loop"
             }
             return [
-                Setting(name: "At the end", value: end, overridden: false),
-                Setting(name: "Clip", value: file(c.src, "none"), overridden: false),
+                Setting(name: "At the end", value: end),
+                Setting(name: "Clip", value: file(c.src, "none")),
             ]
+        case .text(let c):
+            return [Setting(name: "Font", value: c.font.isEmpty ? SettingKey.stageFont : c.font),
+                    Setting(name: "Colour", value: c.colour.hex.uppercased()),
+                    Setting(name: "Background", value: c.background.hex.uppercased()),
+                    Setting(name: "Align", value: "\(c.vertical.name.lowercased()), \(c.alignment.name.lowercased())")]
         case .blank(let c):
-            return [Setting(name: "Colour", value: c.colour.hex.uppercased(), overridden: false)]
+            return [Setting(name: "Colour", value: c.colour.hex.uppercased())]
         }
     }
 }
