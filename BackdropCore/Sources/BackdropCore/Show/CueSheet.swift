@@ -93,6 +93,7 @@ public struct CueSheet: Equatable, Sendable {
             // The steps in order, a withdrawal marked.
             lines = [c.text, c.steps.map(\.sheetName).joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
+        case .feed(let c): lines = [c.text, c.sub]
         case .keypad(let c): lines = [c.text] + c.script.split(whereSeparator: \.isNewline).map(String.init)
         case .blank(let c): lines = [c.colour.hex.uppercased()]
         }
@@ -198,6 +199,16 @@ public struct CueSheet: Equatable, Sendable {
             return [
                 Setting(name: "At the end", value: end),
                 Setting(name: "Clip", value: file(c.src, "none")),
+            ]
+        case .feed(let c):
+            let s = c.settings
+            var turns: [String] = []
+            if s.mirror { turns.append("mirrored") }
+            if s.rotation != .none { turns.append("turned " + s.rotation.name.lowercased()) }
+            return [
+                Setting(name: "Camera", value: s.deviceName.isEmpty ? (s.device.isEmpty ? "none" : s.device) : s.deviceName),
+                Setting(name: "Picture", value: ([s.fit.name.lowercased()] + turns).joined(separator: ", ")),
+                Setting(name: "If the feed is lost", value: s.onLoss == .black ? "cut to black" : "hold the last frame"),
             ]
         case .text(let c):
             return [Setting(name: "Font", value: c.font.isEmpty ? SettingKey.stageFont : c.font),

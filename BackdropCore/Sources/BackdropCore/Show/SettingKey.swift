@@ -327,7 +327,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .image: Self.image.contains(self)
         case .layered: Self.layered.contains(self)
         case .keypad: Self.keypad.contains(self)
-        case .video, .blank, .text: false
+        case .video, .blank, .text, .feed: false
         }
     }
 
@@ -425,7 +425,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .pause: return .number(o.pauseTicks)
             default: return nil
             }
-        case .video, .blank, .text:
+        case .video, .blank, .text, .feed:
             return nil
         }
     }
@@ -531,7 +531,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
             default: return
             }
             cue.content = .keypad(c)
-        case .video, .blank, .text:
+        case .video, .blank, .text, .feed:
             return
         }
     }

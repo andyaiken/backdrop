@@ -92,7 +92,7 @@ extension Cue {
         case .layered(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
         case .keypad(let c): CueTiming(clockMs: c.settings.clockMs, holdTicks: c.settings.holdTicks, isInstant: false)
         // A video plays on its own clock from GO, and a blank or a text is instant.
-        case .video, .blank, .text: CueTiming(clockMs: CueTiming.standardClockMs, holdTicks: 0, isInstant: true)
+        case .video, .blank, .text, .feed: CueTiming(clockMs: CueTiming.standardClockMs, holdTicks: 0, isInstant: true)
         }
     }
 }

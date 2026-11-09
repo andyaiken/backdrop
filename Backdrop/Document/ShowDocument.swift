@@ -114,6 +114,7 @@ final class ShowDocument: NSDocument {
                 .layered: LayeredRenderer(media: media),
                 .keypad: KeypadRenderer(),
                 .video: VideoRenderer(media: media),
+                .feed: FeedRenderer(),
                 .text: TextRenderer(),
                 .blank: BlankRenderer(),
             ]

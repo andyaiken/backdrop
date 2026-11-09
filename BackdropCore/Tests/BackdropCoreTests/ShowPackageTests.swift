@@ -107,9 +107,9 @@ struct ShowPackageTests {
         }
         let newer = FileWrapper(directoryWithFileWrappers: [
             "show.json": FileWrapper(regularFileWithContents: try sample().jsonData()),
-            "version": FileWrapper(regularFileWithContents: Data("9\n".utf8)),
+            "version": FileWrapper(regularFileWithContents: Data("10\n".utf8)),
         ])
-        #expect(throws: ShowPackage.ReadError.newerVersion(9)) { try ShowPackage.read(newer) }
+        #expect(throws: ShowPackage.ReadError.newerVersion(10)) { try ShowPackage.read(newer) }
     }
 
     @Test("Names are de-duplicated without regard to case")

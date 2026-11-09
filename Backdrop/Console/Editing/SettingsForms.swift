@@ -335,6 +335,8 @@ struct CueSettingsSections: View {
         switch cue.kind {
         case .video:
             "A video plays on its own clock from GO, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its end behaviour is above."
+        case .feed:
+            "A live feed shows the camera as it arrives, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its camera, mirror, turn, fit and what happens if the feed is lost are above."
         case .blank:
             "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its colour is above."
         case .text:

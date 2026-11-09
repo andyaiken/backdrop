@@ -28,7 +28,7 @@ struct LayeredModelTests {
         let cue = layered([layer("table"), rich, layer("chalice", withPrevious: true)],
                           settings: LayeredSettings(advance: .eachStep, baseLevel: 30, context: .spotlight, camera: .push, zoom: 2))
         let show = Show(title: "T", cues: [cue])
-        #expect(show.version == 7 && Show.formatVersion == 7)
+        #expect(show.version == 7 && Show.formatVersion >= 7)
         let back = try JSONDecoder().decode(Show.self, from: try JSONEncoder().encode(show))
         #expect(back.cues == [cue])
         #expect(Show(title: "T", cues: [Cue(content: .blank(BlankContent()))]).version < 7)

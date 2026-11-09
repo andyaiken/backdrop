@@ -25,13 +25,14 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case morph(MorphContent)
         case map(MapContent)
         case video(VideoContent)
+        case feed(FeedContent)
         case blank(BlankContent)
         case layered(LayeredContent)
         case keypad(KeypadContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, text, morph, map, video, blank, layered, keypad
+        case title, anagram, image, text, morph, map, video, feed, blank, layered, keypad
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -39,6 +40,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch self {
             case .title: "decryption"
             case .layered: "layered image"
+            case .feed: "live feed"
             default: rawValue
             }
         }
@@ -58,6 +60,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .morph: "rectangle.2.swap"
             case .map: "map"
             case .video: "film"
+            case .feed: "video"
             case .blank: "rectangle.slash"
             case .layered: "square.3.layers.3d"
             case .keypad: "circle.grid.3x3"
@@ -74,6 +77,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .morph: "Dissolves one image or text into another."
             case .map: "Draws a route across a map."
             case .video: "Plays a video file."
+            case .feed: "Shows a live camera picture."
             case .blank: "Clears the screen to a solid colour."
             case .layered: "Stacks several images into one composed picture."
             case .keypad: "Keys numbers into boxes on a numpad, a stage on each GO, then flashes green or red."
@@ -83,7 +87,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .text, .video]
         /// The rest, after a separator, by the name they show.
-        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .map, .morph]
+        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .feed, .map, .morph]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
@@ -105,6 +109,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .morph: .morph
         case .map: .map
         case .video: .video
+        case .feed: .feed
         case .blank: .blank
         case .layered: .layered
         case .keypad: .keypad
@@ -123,6 +128,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .morph(let c): c.text
             case .map(let c): c.text
             case .video(let c): c.text
+            case .feed(let c): c.text
             case .blank: ""
             case .layered(let c): c.text
             case .keypad(let c): c.text
@@ -140,6 +146,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .morph(var c): c.text = newValue; content = .morph(c)
             case .map(var c): c.text = newValue; content = .map(c)
             case .video(var c): c.text = newValue; content = .video(c)
+            case .feed(var c): c.text = newValue; content = .feed(c)
             case .blank: break
             case .layered(var c): c.text = newValue; content = .layered(c)
             case .keypad(var c): c.text = newValue; content = .keypad(c)
@@ -157,6 +164,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .anagram(let c): c.anagrams.first?.answer ?? ""
             case .image, .text, .morph, .map, .layered, .keypad: ""
             case .video(let c): c.sub
+            case .feed(let c): c.sub
             case .blank: ""
             }
         }
@@ -169,6 +177,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 content = .anagram(c)
             case .image, .text, .morph, .map, .layered, .keypad: break
             case .video(var c): c.sub = newValue; content = .video(c)
+            case .feed(var c): c.sub = newValue; content = .feed(c)
             case .blank: break
             }
         }
@@ -266,6 +275,12 @@ extension Cue: Codable {
                 src: src,
                 atEnd: try c.decodeIfPresent(VideoEnd.self, forKey: .atEnd) ?? .hold
             ))
+        case .feed:
+            content = .feed(FeedContent(
+                text: text,
+                sub: sub,
+                settings: try c.value(.settings, FeedSettings())
+            ))
         case .layered:
             content = .layered(LayeredContent(
                 text: text,
@@ -342,6 +357,9 @@ extension Cue: Codable {
             try c.encode(v.sub, forKey: .sub)
             try c.encode(v.src, forKey: .src)
             try c.encode(v.atEnd, forKey: .atEnd)
+        case .feed(let f):
+            try c.encode(f.sub, forKey: .sub)
+            try c.encode(f.settings, forKey: .settings)
         case .layered(let l):
             try c.encode(l.base, forKey: .src)
             try c.encode(l.layers, forKey: .layers)

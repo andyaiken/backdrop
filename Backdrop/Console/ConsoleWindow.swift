@@ -407,7 +407,10 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private func layoutContent() {
         let b = root.bounds
-        let headerHeight: CGFloat = 54, keybarHeight: CGFloat = 40
+        let noCues = controller.show.cues.isEmpty
+        // The key reference has nothing to refer to until there are cues.
+        let headerHeight: CGFloat = 54, keybarHeight: CGFloat = noCues ? 0 : 40
+        keybar.isHidden = noCues
         let leftWidth = listWidth.clamped(to: Self.listRange)
         header.frame = NSRect(x: 0, y: 0, width: b.width, height: headerHeight)
         keybar.frame = NSRect(x: 0, y: b.height - keybarHeight, width: b.width, height: keybarHeight)
@@ -415,7 +418,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
         // Left: the cue list, Go to, and the status line, or with no cues,
         // just a note.
-        let noCues = controller.show.cues.isEmpty
         for view in [cuesHeading, cueList, gotoLabel, gotoField, status] as [NSView] { view.isHidden = noCues }
         cueListEmpty.isHidden = !noCues
         cueListEmpty.stringValue = controller.mode == .edit

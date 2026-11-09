@@ -22,7 +22,7 @@ enum CueField: String, Hashable, CaseIterable {
         switch kind {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
-        case .video: fields += [.text, .sub]
+        case .video, .feed: fields += [.text, .sub]
         case .image, .text, .morph, .map, .layered: fields += [.text]
         case .keypad: fields += [.text, .script]
         case .blank: break
@@ -43,6 +43,52 @@ func moveFocus(from field: CueField, by delta: Int, in order: [CueField], to foc
 /// A text field that edits a draft and commits once it is left, so a change
 /// is one undoable edit rather than one per keystroke. Return commits and
 /// hands the keyboard back; Escape puts the field as it was and does the same.
+/// The cameras there are now, to choose one from. A camera the cue names
+/// that isn't there is listed too, so the cue says what it was waiting for.
+struct FeedDevicePicker: View {
+    let settings: FeedSettings
+    let choose: (FeedDevice?) -> Void
+    @ObservedObject private var cameras = Cameras.shared
+
+    private var missing: FeedDevice? {
+        guard !settings.device.isEmpty, !cameras.devices.contains(where: { $0.id == settings.device }) else { return nil }
+        // The same camera under another ID, as on another Mac, is found by name.
+        guard !cameras.devices.contains(where: { $0.name == settings.deviceName }) else { return nil }
+        return FeedDevice(id: settings.device, name: settings.deviceName.isEmpty ? settings.device : settings.deviceName)
+    }
+
+    /// The listed camera the cue means: by ID, or failing that by name.
+    private var selection: String {
+        if cameras.devices.contains(where: { $0.id == settings.device }) { return settings.device }
+        return cameras.devices.first { !settings.deviceName.isEmpty && $0.name == settings.deviceName }?.id ?? settings.device
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("", selection: Binding(
+                get: { selection },
+                set: { id in
+                    cameras.requestAccess()
+                    choose(([missing].compactMap { $0 } + cameras.devices).first { $0.id == id })
+                }
+            )) {
+                Text("None").tag("")
+                ForEach(cameras.devices) { Text($0.name).tag($0.id) }
+                if let missing { Text("\(missing.name) \u{2014} not connected").tag(missing.id) }
+            }
+            .labelsHidden()
+            .focusable(false)
+            if cameras.devices.isEmpty {
+                Text("No camera found. A wireless camera must first be connected to this Mac: an iPhone through Continuity Camera, or another computer through an app that offers it as a camera.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        // After the view has been built: publishing during an update is not allowed.
+        .onAppear { DispatchQueue.main.async { cameras.refresh() } }
+    }
+}
+
 struct CommittingField: View {
     let field: CueField
     let focus: FocusState<CueField?>.Binding
@@ -376,6 +422,70 @@ struct CueEditorView: View {
                         ForEach(VideoEnd.allCases, id: \.self) { end in
                             Text(end.rawValue.capitalized).tag(end)
                         }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+            }
+        case .feed(let c):
+            Section {
+                textRow("Label", cue, name: "Change Label")
+                subRow("Caption", cue, name: "Change Caption")
+                FieldRow(label: "Camera") {
+                    FeedDevicePicker(settings: c.settings) { device in
+                        edit("Change Camera") { cue in
+                            guard case .feed(var f) = cue.content else { return }
+                            f.settings.device = device?.id ?? ""
+                            f.settings.deviceName = device?.name ?? ""
+                            cue.content = .feed(f)
+                        }
+                    }
+                }
+                FieldRow(label: "Mirror") {
+                    Toggle("", isOn: Binding(
+                        get: { c.settings.mirror },
+                        set: { on in edit("Change Mirror") { cue in
+                            if case .feed(var f) = cue.content { f.settings.mirror = on; cue.content = .feed(f) }
+                        } }
+                    ))
+                    .labelsHidden()
+                    .focusable(false)
+                    .help("Flip the picture left to right, as a mirror does: for a camera that faces the person it films")
+                }
+                FieldRow(label: "Turn") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.rotation },
+                        set: { turn in edit("Change Turn") { cue in
+                            if case .feed(var f) = cue.content { f.settings.rotation = turn; cue.content = .feed(f) }
+                        } }
+                    )) {
+                        ForEach(FeedRotation.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Picture") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.fit },
+                        set: { fit in edit("Change Fit") { cue in
+                            if case .feed(var f) = cue.content { f.settings.fit = fit; cue.content = .feed(f) }
+                        } }
+                    )) {
+                        Text("Fit \u{2014} all of it").tag(FeedFit.fit)
+                        Text("Fill \u{2014} crop the edges").tag(FeedFit.fill)
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "If the feed is lost") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.onLoss },
+                        set: { loss in edit("Change If Lost") { cue in
+                            if case .feed(var f) = cue.content { f.settings.onLoss = loss; cue.content = .feed(f) }
+                        } }
+                    )) {
+                        Text("Cut to black").tag(FeedLoss.black)
+                        Text("Hold the last picture").tag(FeedLoss.hold)
                     }
                     .labelsHidden()
                     .focusable(false)

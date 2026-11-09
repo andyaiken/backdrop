@@ -60,7 +60,7 @@ public final class ShowController {
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(),
-            .text: TextRenderer(), .video: VideoRenderer(), .blank: BlankRenderer(),
+            .text: TextRenderer(), .video: VideoRenderer(), .feed: FeedRenderer(), .blank: BlankRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
     ) {
@@ -69,10 +69,12 @@ public final class ShowController {
         playhead = Playhead(show: show)
         runner = StageRunner(renderers: renderers)
         // Fresh renderers of its own, as a renderer paints one cue at a time.
-        // No video: a second copy would play it twice, so it shows black.
+        // No video: a second copy would play it twice, so it shows black. A
+        // feed has a renderer here, and shares the camera with the stage's.
         nextRunner = StageRunner(renderers: [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
             .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+            .feed: FeedRenderer(),
         ])
         self.now = now
         message = Self.openingMessage(show, warnings: warnings)
@@ -248,10 +250,10 @@ public final class ShowController {
         playhead.standby.flatMap { show[$0] }
     }
 
-    /// What the standby panel says about a video cue standing by: armed and
+    /// What the standby panel says about a video or live feed cue standing by: armed and
     /// ready, still loading, or not going to play. Nil for other cues.
     public var standbyArmState: ArmState? {
-        guard let id = playhead.standby, let cue = show[id], cue.kind == .video else { return nil }
+        guard let id = playhead.standby, let cue = show[id], cue.kind == .video || cue.kind == .feed else { return nil }
         return runner.armState(for: cue) ?? .arming
     }
 
@@ -400,6 +402,7 @@ public final class ShowController {
         case .layered: cue = Cue(content: .layered(LayeredContent()))
         case .keypad: cue = Cue(content: .keypad(KeypadContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
+        case .feed: cue = Cue(content: .feed(FeedContent()))
         case .blank: cue = Cue(content: .blank(BlankContent()))
         }
         let after = playhead.standby.flatMap { show.index(of: $0) }

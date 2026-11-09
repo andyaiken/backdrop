@@ -149,11 +149,13 @@ struct StandbyPanelView: View {
         return standby == nil ? "Nothing to stand by for" : "No cue point set"
     }
 
+    private var isFeed: Bool { standby?.kind == .feed }
+
     private var armed: (text: String, colour: Color)? {
         switch arm {
-        case .armed: ("Video armed", .green)
-        case .arming: ("Video loading \u{2014} not armed yet", .orange)
-        case .failed: ("No clip \u{2014} this cue goes to black", .orange)
+        case .armed: (isFeed ? "Camera ready" : "Video armed", .green)
+        case .arming: (isFeed ? "Camera connecting \u{2014} not armed yet" : "Video loading \u{2014} not armed yet", .orange)
+        case .failed(let message): (isFeed ? "No signal \u{2014} \(message)" : "No clip \u{2014} this cue goes to black", .orange)
         case nil: nil
         }
     }

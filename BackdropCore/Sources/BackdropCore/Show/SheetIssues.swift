@@ -10,6 +10,8 @@ public enum SheetIssue: Equatable, Sendable {
     /// A looping clip set to continue when finished, which it never is.
     case neverFinishes(cue: UUID)
     case videoWithoutClip(cue: UUID)
+    /// A live feed with no camera chosen, so it goes to black.
+    case feedWithoutDevice(cue: UUID)
     /// A decryption with nothing to decrypt puts nothing on stage.
     case decryptionWithoutPlace(cue: UUID)
     /// Without a key, the text scrambles but was never encrypted.
@@ -36,7 +38,7 @@ public enum SheetIssue: Equatable, Sendable {
     public var cues: [UUID] {
         switch self {
         case .duplicateNumber(_, let cues): cues
-        case .missingNumber(let cue), .continuesPastEnd(let cue), .neverFinishes(let cue), .videoWithoutClip(let cue),
+        case .missingNumber(let cue), .continuesPastEnd(let cue), .neverFinishes(let cue), .videoWithoutClip(let cue), .feedWithoutDevice(let cue),
              .decryptionWithoutPlace(let cue), .decryptionWithoutKey(let cue), .anagramWithoutPhrase(let cue, _),
              .anagramLettersDiffer(let cue, _, _, _), .morphWithoutPictures(let cue), .mapWithoutMap(let cue), .mapWithoutStops(let cue),
              .layeredWithoutLayers(let cue), .layerWithoutPicture(let cue, _): [cue]
@@ -55,8 +57,11 @@ extension Show {
             }
             if cue.continueMode.continues, i == cues.count - 1 {
                 issues.append(.continuesPastEnd(cue: cue.id))
-            } else if case .whenFinished = cue.continueMode, case .video(let v) = cue.content, v.atEnd == .loop {
+            } else if case .whenFinished = cue.continueMode, cue.neverFinishes {
                 issues.append(.neverFinishes(cue: cue.id))
+            }
+            if case .feed(let f) = cue.content, f.settings.device.isEmpty {
+                issues.append(.feedWithoutDevice(cue: cue.id))
             }
             if case .video(let v) = cue.content, v.src.isEmpty {
                 issues.append(.videoWithoutClip(cue: cue.id))
@@ -123,6 +128,8 @@ extension Show {
             return "\(name(id)) loops and never finishes, so the show won\u{2019}t continue from it by itself."
         case .videoWithoutClip(let id):
             return "\(name(id)) has no clip, and will go to black."
+        case .feedWithoutDevice(let id):
+            return "\(name(id)) has no camera chosen, and will go to black."
         case .decryptionWithoutPlace(let id):
             return "\(name(id)) has no text, so nothing will appear."
         case .decryptionWithoutKey(let id):

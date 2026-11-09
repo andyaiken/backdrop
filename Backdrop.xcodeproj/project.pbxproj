@@ -194,10 +194,12 @@
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/Backdrop-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Backdrop shows the picture from a camera on stage when a live feed cue is fired.";
 				INFOPLIST_KEY_NSPrincipalClass = "$(PRODUCT_MODULE_NAME).BackdropApplication";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -222,10 +224,12 @@
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/Backdrop-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Backdrop shows the picture from a camera on stage when a live feed cue is fired.";
 				INFOPLIST_KEY_NSPrincipalClass = "$(PRODUCT_MODULE_NAME).BackdropApplication";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

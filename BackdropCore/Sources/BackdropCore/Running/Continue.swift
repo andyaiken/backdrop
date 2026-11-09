@@ -45,13 +45,23 @@ public enum ContinueMode: Equatable, Sendable {
 }
 
 extension Cue {
+    /// A looping clip or a live feed: it runs until the next cue replaces it,
+    /// so a continue set for when it finishes would never come.
+    public var neverFinishes: Bool {
+        switch content {
+        case .video(let v): v.atEnd == .loop
+        case .feed: true
+        default: false
+        }
+    }
+
     /// Whether the cue takes time, so that "when finished" means something.
     /// A blank is instant, and a looping clip never ends.
     public var finishes: Bool {
         switch content {
         case .title, .anagram, .image, .morph, .map, .layered, .keypad: true
         case .video(let v): v.atEnd != .loop
-        case .blank, .text: false
+        case .blank, .text, .feed: false
         }
     }
 }

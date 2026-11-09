@@ -90,6 +90,8 @@ final class CueRowView: NSView {
             c.src.isEmpty ? "no map"
                 : c.stops.count < 2 ? "no stops" : "\(c.stops.count - 1) stop\(c.stops.count == 2 ? "" : "s")"
         case .video(let c): [c.sub, c.atEnd == .hold ? "" : c.atEnd.rawValue].filter { !$0.isEmpty }.joined(separator: "   ")
+        case .feed(let c):
+            [c.sub, c.settings.device.isEmpty ? "no camera" : c.settings.deviceName].filter { !$0.isEmpty }.joined(separator: "   ")
         case .blank(let c): c.colour.hex
         case .keypad(let c): c.script.isEmpty ? "no keys" : "\(c.boxCount) boxes"
         case .text: ""

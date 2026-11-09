@@ -131,7 +131,7 @@ extension Cue {
         case .map(let c): [c.src].filter { !$0.isEmpty }
         case .video(let c): [c.src].filter { !$0.isEmpty }
         case .layered(let c): c.mediaPaths
-        case .title, .anagram, .blank, .text, .keypad: []
+        case .title, .anagram, .blank, .text, .keypad, .feed: []
         }
     }
 

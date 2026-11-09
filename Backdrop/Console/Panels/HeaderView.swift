@@ -62,7 +62,12 @@ struct HeaderBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Picker("Mode", selection: Binding(get: { state.editing }, set: { state.onMode($0) })) {
+            // The switch can write its choice while SwiftUI is still updating the
+            // header, and changing the mode republishes every header value, which
+            // isn't allowed mid-update. So the change is made just after.
+            Picker("Mode", selection: Binding(get: { state.editing }, set: { editing in
+                DispatchQueue.main.async { state.onMode(editing) }
+            })) {
                 Text("Show").tag(false)
                 Text("Edit").tag(true)
             }
