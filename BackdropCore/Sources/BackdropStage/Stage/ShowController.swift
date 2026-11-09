@@ -414,6 +414,19 @@ public final class ShowController {
         return cue.id
     }
 
+    /// Copies a cue to stand just after it, numbered between it and its
+    /// neighbour, and stands the copy by.
+    @discardableResult
+    public func duplicateCue(_ id: UUID) -> UUID? {
+        guard let source = show[id], let index = show.index(of: id) else { return nil }
+        var copy = source
+        copy.id = UUID()
+        guard edit("Duplicate Cue", { $0.insert(copy, after: index) }) else { return nil }
+        playhead.standBy(copy.id)
+        changed()
+        return copy.id
+    }
+
     /// - Parameter coalescing: For a value changed as it is typed: a run of
     ///   keystrokes becomes one undo step rather than one each.
     public func updateCue(_ id: UUID, _ actionName: String, coalescing: Bool = false, _ change: (inout Cue) -> Void) {

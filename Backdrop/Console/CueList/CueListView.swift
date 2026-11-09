@@ -22,6 +22,7 @@ final class CueListView: NSScrollView {
     var onStepClick: (UUID, Int) -> Void = { _, _ in }
     var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
+    var onDuplicate: (UUID) -> Void = { _ in }
     /// A transition row clicked: the cue it leads into.
     var onTransitionClick: (UUID) -> Void = { _ in }
     /// A transition row's menu: put the cue's transition back to the standard.
@@ -135,6 +136,11 @@ final class CueListView: NSScrollView {
     /// A cue's: renumber every cue in the sheet.
     private func menu(forCue id: UUID) -> NSMenu? {
         let menu = NSMenu()
+        let copy = NSMenuItem(title: "Duplicate Cue", action: #selector(duplicatePicked(_:)), keyEquivalent: "")
+        copy.target = self
+        copy.representedObject = id
+        menu.addItem(copy)
+        menu.addItem(.separator())
         let all = NSMenuItem(title: "Renumber All Cues\u{2026}", action: #selector(renumberPicked(_:)), keyEquivalent: "")
         all.target = self
         menu.addItem(all)
@@ -145,6 +151,10 @@ final class CueListView: NSScrollView {
     /// The right-click menu's items, for the document check.
     func menuTitles(forCue id: UUID) -> [String] { menu(forCue: id)?.items.map(\.title) ?? [] }
     #endif
+
+    @objc private func duplicatePicked(_ item: NSMenuItem) {
+        if let id = item.representedObject as? UUID { onDuplicate(id) }
+    }
 
     @objc private func renumberPicked(_ item: NSMenuItem) {
         onRenumberAll()

@@ -170,19 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     // MARK: Edit
 
-    @objc func addTitleCue(_ sender: Any?) { current?.controller?.addCue(.title) }
-    @objc func addAnagramCue(_ sender: Any?) { current?.controller?.addCue(.anagram) }
-    @objc func addImageCue(_ sender: Any?) { current?.controller?.addCue(.image) }
-    @objc func addTextCue(_ sender: Any?) { current?.controller?.addCue(.text) }
-    @objc func addMorphCue(_ sender: Any?) { current?.controller?.addCue(.morph) }
-    @objc func addMapCue(_ sender: Any?) { current?.controller?.addCue(.map) }
-    @objc func addVideoCue(_ sender: Any?) { current?.controller?.addCue(.video) }
-    @objc func addFeedCue(_ sender: Any?) { current?.controller?.addCue(.feed) }
-    @objc func addLayeredCue(_ sender: Any?) { current?.controller?.addCue(.layered) }
-    @objc func addKeypadCue(_ sender: Any?) { current?.controller?.addCue(.keypad) }
-    @objc func addConversationCue(_ sender: Any?) { current?.controller?.addCue(.conversation) }
-    @objc func addSMSCue(_ sender: Any?) { current?.controller?.addCue(.sms) }
-    @objc func addBlankCue(_ sender: Any?) { current?.controller?.addCue(.blank) }
+    @objc func addCue(_ sender: Any?) { current?.console?.showAddCue() }
+    @objc func duplicateCue(_ sender: Any?) { current?.console?.duplicateStandbyCue() }
     @objc func renumberAllCues(_ sender: Any?) { current?.console?.confirmRenumber() }
     @objc func showShowSettings(_ sender: Any?) { current?.console?.showShowSettings() }
 
@@ -216,8 +205,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let controller = current?.controller
         let editing = controller?.mode == .edit
         switch item.action {
-        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addTextCue(_:)), #selector(addMorphCue(_:)), #selector(addMapCue(_:)), #selector(addVideoCue(_:)), #selector(addFeedCue(_:)), #selector(addBlankCue(_:)), #selector(addLayeredCue(_:)), #selector(addKeypadCue(_:)), #selector(addSMSCue(_:)), #selector(addConversationCue(_:)):
+        case #selector(addCue(_:)):
             return editing
+        case #selector(duplicateCue(_:)):
+            return editing && controller?.playhead.standby != nil
         case #selector(showShowSettings(_:)):
             return editing
         case #selector(renumberAllCues(_:)):

@@ -205,6 +205,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
+        cueList.onDuplicate = { [weak self] id in self?.duplicateCue(id) }
         cueList.onClearTransition = { [weak controller] id in
             controller?.edit("Clear Transition") { show in
                 if let i = show.cues.firstIndex(where: { $0.id == id }) { show.cues[i].transition = .standard }
@@ -619,6 +620,24 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// in the Inspector, where the header's toggle shows them.
     func showShowSettings() {
         setShowSettings(true)
+    }
+
+    /// Copies a cue and stands the copy by, as adding one does.
+    func duplicateCue(_ id: UUID) {
+        guard controller.mode == .edit, controller.duplicateCue(id) != nil else { return }
+        showInspectorTab(0)
+        window?.makeFirstResponder(root)
+    }
+
+    /// Edit › Duplicate Cue: the cue standing by.
+    func duplicateStandbyCue() {
+        if let id = controller.playhead.standby { duplicateCue(id) }
+    }
+
+    /// Edit › Add Cue: the same sheet the header's button opens.
+    func showAddCue() {
+        guard controller.mode == .edit else { return }
+        header.state.showingAddCue = true
     }
 
     /// For the snapshot tool: shows one of the Inspector's tabs.

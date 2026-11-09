@@ -108,8 +108,8 @@ enum DocumentCheck {
         if let console = document.console {
             console.refresh()
             let cueMenu = console.cueList.menuTitles(forCue: titleID)
-            check(cueMenu == ["Renumber All Cues\u{2026}"],
-                  "a cue's right-click menu renumbers every cue: \(cueMenu.joined(separator: " | "))")
+            check(cueMenu == ["Duplicate Cue", "", "Renumber All Cues\u{2026}"],
+                  "a cue's right-click menu duplicates it or renumbers every cue: \(cueMenu.joined(separator: " | "))")
         }
 
         // Tab runs down what the cue shows, then where it comes in the book,

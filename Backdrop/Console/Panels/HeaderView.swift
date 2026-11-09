@@ -16,6 +16,8 @@ final class HeaderState: ObservableObject {
     @Published var showSettingsOn = false
     @Published var goEnabled = true
     @Published var goTip = ""
+    /// The Add Cue sheet is open.
+    @Published var showingAddCue = false
 
     var onGo: () -> Void = {}
     var onMode: (Bool) -> Void = { _ in }
@@ -57,7 +59,6 @@ final class HeaderView: PanelHost<HeaderBar> {
 }
 
 struct HeaderBar: View {
-    @State private var showingAddCue = false
     @ObservedObject var state: HeaderState
 
     var body: some View {
@@ -80,8 +81,13 @@ struct HeaderBar: View {
             rule
 
             if state.editing {
-                Button("Add Cue") { showingAddCue.toggle() }
-                    .popover(isPresented: $showingAddCue, arrowEdge: .bottom) { addCueList }
+                Button("Add Cue") { state.showingAddCue.toggle() }
+                    .sheet(isPresented: $state.showingAddCue) {
+                        AddCueSheet { kind in
+                            state.showingAddCue = false
+                            if let kind { state.onAddCue(kind) }
+                        }
+                    }
                 .fixedSize()
                 .focusable(false)
                 .help("Adds a cue after the one standing by")
@@ -132,33 +138,71 @@ struct HeaderBar: View {
         Divider().frame(height: 26)
     }
 
-    /// The Add Cue popover: each kind with its icon, name and a line on what it does.
-    private var addCueList: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(Cue.Kind.common, id: \.self) { addCueRow($0) }
-            Divider().padding(.vertical, 4)
-            ForEach(Cue.Kind.others, id: \.self) { addCueRow($0) }
+    private var lampColour: Color {
+        state.live ? .green : (state.warn ? .orange : .secondary)
+    }
+}
+
+/// The Add Cue sheet: every kind with its icon, name and a line on what it
+/// does, narrowed as the user types. Return picks the first match.
+private struct AddCueSheet: View {
+    let done: (Cue.Kind?) -> Void
+    @State private var query = ""
+    @FocusState private var searching: Bool
+
+    private var matches: [Cue.Kind] {
+        let words = query.lowercased().split(separator: " ").map(String.init)
+        let all = Cue.Kind.common + Cue.Kind.others
+        guard !words.isEmpty else { return all }
+        return all.filter { kind in
+            let text = (kind.heading + " " + kind.blurb).lowercased()
+            return words.allSatisfy { text.contains($0) }
         }
-        .padding(8)
-        .frame(width: 320)
     }
 
-    private func addCueRow(_ kind: Cue.Kind) -> some View {
-        addCueButton(symbol: kind.symbol, title: kind.heading, blurb: kind.blurb) { state.onAddCue(kind) }
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search cue types", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .focused($searching)
+                .onSubmit { if let first = matches.first { done(first) } }
+                .padding(12)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(matches, id: \.self) { kind in
+                        if query.isEmpty, kind == Cue.Kind.others.first { Divider().padding(.vertical, 4) }
+                        row(kind)
+                    }
+                    if matches.isEmpty {
+                        Text("No cue types match \u{201C}\(query)\u{201D}.")
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    }
+                }
+                .padding(8)
+            }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+        }
+        .frame(width: 420, height: 480)
+        .onAppear { searching = true }
     }
 
-    private func addCueButton(symbol: String, title: String, blurb: String, action: @escaping () -> Void) -> some View {
-        Button {
-            showingAddCue = false
-            action()
-        } label: {
+    private func row(_ kind: Cue.Kind) -> some View {
+        Button { done(kind) } label: {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: symbol)
+                Image(systemName: kind.symbol)
                     .frame(width: 22)
                     .padding(.top, 1)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).fontWeight(.semibold)
-                    Text(blurb).font(.callout).foregroundStyle(.secondary)
+                    Text(kind.heading).fontWeight(.semibold)
+                    Text(kind.blurb).font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
@@ -168,10 +212,6 @@ struct HeaderBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(AddCueRowStyle())
-    }
-
-    private var lampColour: Color {
-        state.live ? .green : (state.warn ? .orange : .secondary)
     }
 }
 
