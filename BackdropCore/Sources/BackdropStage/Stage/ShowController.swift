@@ -59,7 +59,7 @@ public final class ShowController {
         warnings: [String] = [],
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
-            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(),
+            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(),
             .text: TextRenderer(), .video: VideoRenderer(), .feed: FeedRenderer(), .blank: BlankRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
@@ -73,7 +73,7 @@ public final class ShowController {
         // feed has a renderer here, and shares the camera with the stage's.
         nextRunner = StageRunner(renderers: [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
-            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
             .feed: FeedRenderer(),
         ])
         self.now = now
@@ -401,6 +401,8 @@ public final class ShowController {
         case .map: cue = Cue(content: .map(MapContent()))
         case .layered: cue = Cue(content: .layered(LayeredContent()))
         case .keypad: cue = Cue(content: .keypad(KeypadContent()))
+        case .sms: cue = Cue(content: .sms(SMSContent()))
+        case .conversation: cue = Cue(content: .conversation(ConversationContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
         case .feed: cue = Cue(content: .feed(FeedContent()))
         case .blank: cue = Cue(content: .blank(BlankContent()))

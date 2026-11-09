@@ -22,9 +22,10 @@ enum CueField: String, Hashable, CaseIterable {
         switch kind {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
-        case .video, .feed: fields += [.text, .sub]
+        case .video, .feed, .sms: fields += [.text, .sub]
         case .image, .text, .morph, .map, .layered: fields += [.text]
         case .keypad: fields += [.text, .script]
+        case .conversation: fields += [.text, .sub, .script]
         case .blank: break
         }
         return fields
@@ -514,6 +515,162 @@ struct CueEditorView: View {
                 Text("Typed a stage at a time, a GO for each after the first: digits, * and # press that key, \u{003C} deletes, and each new line starts the next stage. A stage with GOOD or BAD presses OK after its keys, then flashes the boxes green or red. The boxes are as many as the script ever holds at once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        case .conversation(let c):
+            Section {
+                textRow("Label", cue, name: "Change Label")
+                subRow("Contact", cue, name: "Change Contact")
+                FieldRow(label: "Script") {
+                    CommittingField(field: .script, focus: $focus, order: fieldOrder, prompt: "< Are you coming tonight?   > Yes, leaving now   GO", mono: true, multiline: true, value: c.script,
+                                    commit: { v in edit("Change Script") { cue in
+                                        if case .conversation(var k) = cue.content { k.script = v; cue.content = .conversation(k) }
+                                    } }, onFinished: onFinished)
+                }
+                Text("A line to each message: \u{003C} starts one received, on the left, and \u{003E} one sent, on the right. A line of GO makes the cue wait for GO before the messages after it, and anything written after GO is the line it waits for. Other lines are ignored. Everything before the first GO plays when the cue fires.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                FieldRow(label: "Style") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.style },
+                        set: { style in edit("Change Style") { cue in
+                            if case .conversation(var m) = cue.content { m.settings.style = style; cue.content = .conversation(m) }
+                        } }
+                    )) {
+                        ForEach(SMSStyle.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Screen") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.dark },
+                        set: { dark in edit("Change Screen") { cue in
+                            if case .conversation(var m) = cue.content { m.settings.dark = dark; cue.content = .conversation(m) }
+                        } }
+                    )) {
+                        Text("Dark").tag(true)
+                        Text("Light").tag(false)
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Typing") {
+                    Toggle("", isOn: Binding(
+                        get: { c.settings.showTyping },
+                        set: { on in edit("Change Typing") { cue in
+                            if case .conversation(var m) = cue.content { m.settings.showTyping = on; cue.content = .conversation(m) }
+                        } }
+                    ))
+                    .labelsHidden()
+                    .focusable(false)
+                    .help("Show the dots while a message is on its way, and the compose bar while one is typed. Off, each bubble just arrives.")
+                }
+                FieldRow(label: "Between messages", value: ContinueMode.seconds(c.settings.pauseTicks * CueTiming.standardClockMs) + " s") {
+                    Slider(value: Binding(
+                        get: { Double(c.settings.pauseTicks) },
+                        set: { ticks in edit("Change Pause") { cue in
+                            if case .conversation(var m) = cue.content { m.settings.pauseTicks = min(max(Int(ticks), SettingRange.pauseTicks.lowerBound), SettingRange.pauseTicks.upperBound); cue.content = .conversation(m) }
+                        } }
+                    ), in: Double(SettingRange.pauseTicks.lowerBound)...Double(SettingRange.pauseTicks.upperBound), step: 1)
+                        .focusable(false)
+                }
+            }
+        case .sms(let c):
+            Section {
+                FieldRow(label: "Message") {
+                    CommittingField(field: .text, focus: $focus, order: fieldOrder, prompt: "", mono: true, multiline: true, value: cue.text,
+                                    commit: { v in typing("Change Message") { $0.text = v } }, onFinished: onFinished)
+                }
+                subRow("From", cue, name: "Change From")
+                FieldRow(label: "Style") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.style },
+                        set: { style in edit("Change Style") { cue in
+                            if case .sms(var m) = cue.content { m.settings.style = style; cue.content = .sms(m) }
+                        } }
+                    )) {
+                        ForEach(SMSStyle.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Screen") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.dark },
+                        set: { dark in edit("Change Screen") { cue in
+                            if case .sms(var m) = cue.content { m.settings.dark = dark; cue.content = .sms(m) }
+                        } }
+                    )) {
+                        Text("Dark").tag(true)
+                        Text("Light").tag(false)
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                FieldRow(label: "Bubble") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.sent },
+                        set: { sent in edit("Change Bubble") { cue in
+                            if case .sms(var m) = cue.content { m.settings.sent = sent; cue.content = .sms(m) }
+                        } }
+                    )) {
+                        Text("Received \u{2014} left").tag(false)
+                        Text("Sent \u{2014} right").tag(true)
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                if c.settings.sent {
+                    FieldRow(label: "Status") {
+                        Picker("", selection: Binding(
+                            get: { c.settings.status },
+                            set: { status in edit("Change Status") { cue in
+                                if case .sms(var m) = cue.content { m.settings.status = status; cue.content = .sms(m) }
+                            } }
+                        )) {
+                            ForEach(SMSStatus.allCases, id: \.self) { Text($0.name).tag($0) }
+                        }
+                        .labelsHidden()
+                        .focusable(false)
+                        .help("How far the sent message has got: written beneath the bubble, or as ticks inside it in the WhatsApp style")
+                    }
+                    if c.settings.status != .none, c.settings.status != .read {
+                        FieldRow(label: "Moves on with GO") {
+                            Toggle("", isOn: Binding(
+                                get: { c.settings.advances },
+                                set: { on in edit("Change Status On GO") { cue in
+                                    if case .sms(var m) = cue.content { m.settings.advances = on; cue.content = .sms(m) }
+                                } }
+                            ))
+                            .labelsHidden()
+                            .focusable(false)
+                            .help("Each GO moves the status on a step, towards read")
+                        }
+                    }
+                }
+                FieldRow(label: "Arrives") {
+                    Picker("", selection: Binding(
+                        get: { c.settings.entrance },
+                        set: { entrance in edit("Change Arrival") { cue in
+                            if case .sms(var m) = cue.content { m.settings.entrance = entrance; cue.content = .sms(m) }
+                        } }
+                    )) {
+                        ForEach(SMSEntrance.allCases, id: \.self) { Text($0.name).tag($0) }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                }
+                if c.settings.entrance != .cut {
+                    FieldRow(label: "Arrival time", value: ContinueMode.seconds(c.settings.entranceMs) + " s") {
+                        Slider(value: Binding(
+                            get: { Double(c.settings.entranceMs) },
+                            set: { ms in edit("Change Arrival Time") { cue in
+                                if case .sms(var m) = cue.content { m.settings.entranceMs = min(max(Int(ms), SettingRange.smsEntranceMs.lowerBound), SettingRange.smsEntranceMs.upperBound); cue.content = .sms(m) }
+                            } }
+                        ), in: Double(SettingRange.smsEntranceMs.lowerBound)...Double(SettingRange.smsEntranceMs.upperBound), step: 50)
+                            .focusable(false)
+                    }
+                }
             }
         case .blank(let c):
             Section {

@@ -13,7 +13,7 @@ struct FeedTests {
         let cue = feed(FeedSettings(device: "cam-1", deviceName: "Stage camera", mirror: true,
                                     rotation: .quarter, fit: .fill, onLoss: .hold))
         let show = Show(title: "T", cues: [cue])
-        #expect(show.version == 9 && Show.formatVersion == 9)
+        #expect(show.version == 9 && Show.formatVersion >= 9)
         let back = try JSONDecoder().decode(Show.self, from: try JSONEncoder().encode(show))
         #expect(back.cues == [cue])
         #expect(Show(title: "T", cues: [Cue(content: .keypad(KeypadContent()))]).version == 8)

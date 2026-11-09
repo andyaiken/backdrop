@@ -9,9 +9,9 @@ public struct Show: Equatable, Sendable {
     /// reader would take for an empty cue; 3 put group headings in the
     /// running list, a feature since removed; 4 lists a morph cue's
     /// pictures, for a morph of more than two; 5 has map cues; 6 gives the
-    /// GOs a cue waits for cue points of their own; 7 has layered image cues; 8 has keypad cues; 9 has live feed cues.
+    /// GOs a cue waits for cue points of their own; 7 has layered image cues; 8 has keypad cues; 9 has live feed cues; 10 has text message cues; 11 has text conversation cues.
     /// Older files read as they are.
-    public static let formatVersion = 9
+    public static let formatVersion = 11
 
     /// For the window and the printed cue sheet header.
     public var title: String
@@ -29,6 +29,8 @@ public struct Show: Equatable, Sendable {
     /// a show with no morph of more than two pictures stays readable by a
     /// version 2 Backdrop.
     public var version: Int {
+        if cues.contains(where: { $0.kind == .conversation }) { return 11 }
+        if cues.contains(where: { $0.kind == .sms }) { return 10 }
         if cues.contains(where: { $0.kind == .feed }) { return 9 }
         if cues.contains(where: { $0.kind == .keypad }) { return 8 }
         if cues.contains(where: { $0.kind == .layered }) { return 7 }

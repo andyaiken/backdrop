@@ -94,6 +94,9 @@ public struct CueSheet: Equatable, Sendable {
             lines = [c.text, c.steps.map(\.sheetName).joined(separator: " \u{2192} ")]
         case .video(let c): lines = [c.text, c.sub]
         case .feed(let c): lines = [c.text, c.sub]
+        case .sms(let c): lines = [c.sub, c.text]
+        case .conversation(let c):
+            lines = [c.text, c.sub] + c.messages.map { ($0.side == .sent ? "\u{2192} " : "\u{2190} ") + $0.text }
         case .keypad(let c): lines = [c.text] + c.script.split(whereSeparator: \.isNewline).map(String.init)
         case .blank(let c): lines = [c.colour.hex.uppercased()]
         }
@@ -209,6 +212,22 @@ public struct CueSheet: Equatable, Sendable {
                 Setting(name: "Camera", value: s.deviceName.isEmpty ? (s.device.isEmpty ? "none" : s.device) : s.deviceName),
                 Setting(name: "Picture", value: ([s.fit.name.lowercased()] + turns).joined(separator: ", ")),
                 Setting(name: "If the feed is lost", value: s.onLoss == .black ? "cut to black" : "hold the last frame"),
+            ]
+        case .conversation(let c):
+            let s = c.settings
+            let count = c.messages.count
+            return [
+                Setting(name: "Style", value: s.style.name + (s.dark ? ", dark" : ", light")),
+                Setting(name: "Messages", value: "\(count) in \(c.stages.count) stage\(c.stages.count == 1 ? "" : "s")"),
+                Setting(name: "Typing", value: s.showTyping ? "dots and compose bar" : "off"),
+            ]
+        case .sms(let c):
+            let s = c.settings
+            return [
+                Setting(name: "Style", value: s.style.name + (s.dark ? ", dark" : ", light") + (s.sent ? ", sent" : ", received")),
+                Setting(name: "Status", value: s.shownStatus == .none ? "none"
+                            : ([s.shownStatus] + s.goStatuses).map { $0.name.lowercased() }.joined(separator: " \u{2192} ") + (s.goStatuses.isEmpty ? "" : ", each on GO")),
+                Setting(name: "Arrives", value: s.entrance == .cut ? s.entrance.name.lowercased() : "\(s.entrance.name.lowercased()), \(ContinueMode.seconds(s.entranceMs)) s"),
             ]
         case .text(let c):
             return [Setting(name: "Font", value: c.font.isEmpty ? SettingKey.stageFont : c.font),

@@ -70,6 +70,8 @@ enum MainMenu {
         edit.addItem(withTitle: "Add Layered Image Cue", action: #selector(AppDelegate.addLayeredCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Map Cue", action: #selector(AppDelegate.addMapCue(_:)), keyEquivalent: "")
         edit.addItem(withTitle: "Add Morph Cue", action: #selector(AppDelegate.addMorphCue(_:)), keyEquivalent: "")
+        edit.addItem(withTitle: "Add Text Conversation Cue", action: #selector(AppDelegate.addConversationCue(_:)), keyEquivalent: "")
+        edit.addItem(withTitle: "Add Text Message Cue", action: #selector(AppDelegate.addSMSCue(_:)), keyEquivalent: "")
         edit.addItem(.separator())
         edit.addItem(withTitle: "Renumber All Cues\u{2026}", action: #selector(AppDelegate.renumberAllCues(_:)), keyEquivalent: "")
 

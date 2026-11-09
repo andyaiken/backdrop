@@ -180,6 +180,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func addFeedCue(_ sender: Any?) { current?.controller?.addCue(.feed) }
     @objc func addLayeredCue(_ sender: Any?) { current?.controller?.addCue(.layered) }
     @objc func addKeypadCue(_ sender: Any?) { current?.controller?.addCue(.keypad) }
+    @objc func addConversationCue(_ sender: Any?) { current?.controller?.addCue(.conversation) }
+    @objc func addSMSCue(_ sender: Any?) { current?.controller?.addCue(.sms) }
     @objc func addBlankCue(_ sender: Any?) { current?.controller?.addCue(.blank) }
     @objc func renumberAllCues(_ sender: Any?) { current?.console?.confirmRenumber() }
     @objc func showShowSettings(_ sender: Any?) { current?.console?.showShowSettings() }
@@ -214,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let controller = current?.controller
         let editing = controller?.mode == .edit
         switch item.action {
-        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addTextCue(_:)), #selector(addMorphCue(_:)), #selector(addMapCue(_:)), #selector(addVideoCue(_:)), #selector(addFeedCue(_:)), #selector(addBlankCue(_:)), #selector(addLayeredCue(_:)), #selector(addKeypadCue(_:)):
+        case #selector(addTitleCue(_:)), #selector(addAnagramCue(_:)), #selector(addImageCue(_:)), #selector(addTextCue(_:)), #selector(addMorphCue(_:)), #selector(addMapCue(_:)), #selector(addVideoCue(_:)), #selector(addFeedCue(_:)), #selector(addBlankCue(_:)), #selector(addLayeredCue(_:)), #selector(addKeypadCue(_:)), #selector(addSMSCue(_:)), #selector(addConversationCue(_:)):
             return editing
         case #selector(showShowSettings(_:)):
             return editing

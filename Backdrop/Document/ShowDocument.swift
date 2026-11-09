@@ -113,6 +113,8 @@ final class ShowDocument: NSDocument {
                 .map: MapRenderer(media: media),
                 .layered: LayeredRenderer(media: media),
                 .keypad: KeypadRenderer(),
+                .sms: SMSRenderer(),
+                .conversation: ConversationRenderer(),
                 .video: VideoRenderer(media: media),
                 .feed: FeedRenderer(),
                 .text: TextRenderer(),

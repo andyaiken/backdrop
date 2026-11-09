@@ -341,6 +341,10 @@ struct CueSettingsSections: View {
             "A blank is instant, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its colour is above."
         case .text:
             "A text cue is instant, so it has no settings of its own beyond how the stage changes to it, in the transition row above it in the cue list. Its words, font, colour and alignment are above."
+        case .conversation:
+            "A text conversation runs on the standard clock, so it has no clock or hold; its script, look and typing are above. How the stage changes to it is in the transition row above it in the cue list."
+        case .sms:
+            "A text message is instant to set up, so it has no clock or hold; how it looks and arrives is above. How the stage changes to it is in the transition row above it in the cue list."
         case .title, .anagram, .image, .morph, .map, .layered, .keypad:
             nil
         }

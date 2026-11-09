@@ -34,6 +34,8 @@ extension Cue {
         case .map(let c): c.goPoints(eachStopOnGO: c.settings.eachStopOnGO)
         case .layered(let c): c.goPoints(eachStepOnGO: c.settings.eachStepOnGO)
         case .keypad(let c): c.goPoints()
+        case .conversation(let c): c.goPoints()
+        case .sms(let c): c.settings.goStatuses.map { GoPoint(unit: .step, text: $0.line) }
         default: []
         }
     }

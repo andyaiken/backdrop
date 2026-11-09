@@ -29,10 +29,12 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case blank(BlankContent)
         case layered(LayeredContent)
         case keypad(KeypadContent)
+        case sms(SMSContent)
+        case conversation(ConversationContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, text, morph, map, video, feed, blank, layered, keypad
+        case title, anagram, image, text, morph, map, video, feed, blank, layered, keypad, sms, conversation
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -41,6 +43,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .title: "decryption"
             case .layered: "layered image"
             case .feed: "live feed"
+            case .sms: "text message"
+            case .conversation: "text conversation"
             default: rawValue
             }
         }
@@ -64,6 +68,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .blank: "rectangle.slash"
             case .layered: "square.3.layers.3d"
             case .keypad: "circle.grid.3x3"
+            case .sms: "message"
+            case .conversation: "bubble.left.and.bubble.right"
             }
         }
 
@@ -81,13 +87,15 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .blank: "Clears the screen to a solid colour."
             case .layered: "Stacks several images into one composed picture."
             case .keypad: "Keys numbers into boxes on a numpad, a stage on each GO, then flashes green or red."
+            case .sms: "Pops a text message bubble onto the screen, with a from line."
+            case .conversation: "A whole text exchange, with typing dots, each message released on GO."
             }
         }
 
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .text, .video]
         /// The rest, after a separator, by the name they show.
-        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .feed, .map, .morph]
+        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .feed, .map, .morph, .conversation, .sms]
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
@@ -113,6 +121,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .blank: .blank
         case .layered: .layered
         case .keypad: .keypad
+        case .sms: .sms
+        case .conversation: .conversation
         }
     }
 
@@ -132,6 +142,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .blank: ""
             case .layered(let c): c.text
             case .keypad(let c): c.text
+            case .sms(let c): c.text
+            case .conversation(let c): c.text
             }
         }
         set {
@@ -150,6 +162,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .blank: break
             case .layered(var c): c.text = newValue; content = .layered(c)
             case .keypad(var c): c.text = newValue; content = .keypad(c)
+            case .sms(var c): c.text = newValue; content = .sms(c)
+            case .conversation(var c): c.text = newValue; content = .conversation(c)
             }
         }
     }
@@ -165,6 +179,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .image, .text, .morph, .map, .layered, .keypad: ""
             case .video(let c): c.sub
             case .feed(let c): c.sub
+            case .sms(let c): c.sub
+            case .conversation(let c): c.sub
             case .blank: ""
             }
         }
@@ -178,6 +194,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .image, .text, .morph, .map, .layered, .keypad: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .feed(var c): c.sub = newValue; content = .feed(c)
+            case .sms(var c): c.sub = newValue; content = .sms(c)
+            case .conversation(var c): c.sub = newValue; content = .conversation(c)
             case .blank: break
             }
         }
@@ -294,6 +312,19 @@ extension Cue: Codable {
                 script: try c.decodeIfPresent(String.self, forKey: .script) ?? "",
                 settings: try c.value(.settings, KeypadSettings())
             ))
+        case .sms:
+            content = .sms(SMSContent(
+                text: text,
+                sub: sub,
+                settings: try c.value(.settings, SMSSettings())
+            ))
+        case .conversation:
+            content = .conversation(ConversationContent(
+                text: text,
+                sub: sub,
+                script: try c.decodeIfPresent(String.self, forKey: .script) ?? "",
+                settings: try c.value(.settings, ConversationSettings())
+            ))
         case .blank:
             content = .blank(BlankContent(
                 colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? .black
@@ -367,6 +398,13 @@ extension Cue: Codable {
         case .keypad(let k):
             try c.encode(k.script, forKey: .script)
             try c.encode(k.settings, forKey: .settings)
+        case .sms(let m):
+            try c.encode(m.sub, forKey: .sub)
+            try c.encode(m.settings, forKey: .settings)
+        case .conversation(let m):
+            try c.encode(m.sub, forKey: .sub)
+            try c.encode(m.script, forKey: .script)
+            try c.encode(m.settings, forKey: .settings)
         case .blank(let b):
             try c.encode(b.colour, forKey: .colour)
         }
