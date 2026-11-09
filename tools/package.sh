@@ -1,10 +1,10 @@
 #!/bin/bash
-# Builds a Release Prospect.app from clean and packages it for another Mac.
+# Builds a Release Backdrop.app from clean and packages it for another Mac.
 #
 #   tools/package.sh              signed ad hoc
 #   tools/package.sh --notarise   signed with the Developer ID and notarised
 #
-# Writes dist/Prospect-<version>.zip and dist/Prospect-<version>.dmg. Either
+# Writes dist/Backdrop-<version>.zip and dist/Backdrop-<version>.dmg. Either
 # one carries the app intact on a thumb drive formatted for Windows, which a
 # bare .app doesn't always survive.
 #
@@ -15,9 +15,9 @@
 #
 #   - the team's Developer ID Application certificate in the keychain
 #   - the notarisation password saved as a keychain profile, with
-#     xcrun notarytool store-credentials prospect-notary --apple-id <Apple ID> --team-id 3G846V4G68
+#     xcrun notarytool store-credentials backdrop-notary --apple-id <Apple ID> --team-id 3G846V4G68
 #
-# PROSPECT_SIGN_IDENTITY and PROSPECT_NOTARY_PROFILE override the certificate
+# BACKDROP_SIGN_IDENTITY and BACKDROP_NOTARY_PROFILE override the certificate
 # and the profile.
 
 set -euo pipefail
@@ -32,9 +32,9 @@ profile=""
 case "${1:-}" in
     "") ;;
     --notarise | --notarize)
-        identity="${PROSPECT_SIGN_IDENTITY:-$(security find-identity -v -p codesigning |
+        identity="${BACKDROP_SIGN_IDENTITY:-$(security find-identity -v -p codesigning |
             sed -n "s/.*\"\(Developer ID Application: .* ($team)\)\"/\1/p" | head -1)}"
-        profile="${PROSPECT_NOTARY_PROFILE:-prospect-notary}"
+        profile="${BACKDROP_NOTARY_PROFILE:-backdrop-notary}"
         if [[ -z "$identity" ]]; then
             echo "No Developer ID Application certificate for team $team is in the keychain." >&2
             echo "Create one in Xcode: Settings › Accounts › Manage Certificates… › + › Developer ID Application." >&2
@@ -57,15 +57,15 @@ esac
 step() { printf '\n== %s\n' "$1"; }
 
 step "Building Release"
-xcodebuild -project "$root/Prospect.xcodeproj" -scheme Prospect -configuration Release \
+xcodebuild -project "$root/Backdrop.xcodeproj" -scheme Backdrop -configuration Release \
     -destination "generic/platform=macOS" -derivedDataPath "$derived" -quiet clean build
-built="$derived/Build/Products/Release/Prospect.app"
+built="$derived/Build/Products/Release/Backdrop.app"
 version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$built/Contents/Info.plist")"
-name="Prospect-$version"
+name="Backdrop-$version"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-app="$work/Prospect.app"
+app="$work/Backdrop.app"
 ditto "$built" "$app"
 
 # Submits a file to Apple and waits for the verdict, printing Apple's log if
@@ -84,7 +84,7 @@ notarise() {
 
 if [[ -n "$identity" ]]; then
     step "Signing with $identity"
-    # Re-signing without --entitlements leaves none, which is what Prospect
+    # Re-signing without --entitlements leaves none, which is what Backdrop
     # needs: it isn't sandboxed and asks for no permissions.
     codesign --force --options runtime --timestamp --sign "$identity" "$app"
 
@@ -96,7 +96,7 @@ fi
 
 step "Checking the app"
 codesign --verify --deep --strict "$app"
-echo "Signature verifies. Runs on: $(lipo -archs "$app/Contents/MacOS/Prospect")."
+echo "Signature verifies. Runs on: $(lipo -archs "$app/Contents/MacOS/Backdrop")."
 
 mkdir -p "$dist"
 rm -f "$dist/$name.zip" "$dist/$name.dmg"
@@ -107,9 +107,9 @@ ditto -c -k --keepParent "$app" "$dist/$name.zip"
 step "Making $name.dmg"
 # The disk image opens to the app beside a link to Applications, to drag onto.
 mkdir "$work/image"
-ditto "$app" "$work/image/Prospect.app"
+ditto "$app" "$work/image/Backdrop.app"
 ln -s /Applications "$work/image/Applications"
-hdiutil create -quiet -volname "Prospect $version" -srcfolder "$work/image" -fs HFS+ -format UDZO "$dist/$name.dmg"
+hdiutil create -quiet -volname "Backdrop $version" -srcfolder "$work/image" -fs HFS+ -format UDZO "$dist/$name.dmg"
 
 if [[ -n "$identity" ]]; then
     codesign --force --timestamp --sign "$identity" "$dist/$name.dmg"

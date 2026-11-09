@@ -1,6 +1,6 @@
-# Prospect
+# Backdrop
 
-Prospect is a native macOS app for running projections in live theatre. Text decrypts out of ciphertext, anagrams rearrange themselves letter by letter, scene images turn into place tile by tile, one picture morphs into another and on through more, a red dot is tracked across a police map, and video clips play. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
+Backdrop is a native macOS app for running projections in live theatre. Text decrypts out of ciphertext, anagrams rearrange themselves letter by letter, scene images turn into place tile by tile, one picture morphs into another and on through more, a red dot is tracked across a police map, and video clips play. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
 
 ## Requirements
 
@@ -9,17 +9,17 @@ Prospect is a native macOS app for running projections in live theatre. Text dec
 
 ## Building and running
 
-Open `Prospect.xcodeproj` and run the Prospect scheme (⌘R). From the command line:
+Open `Backdrop.xcodeproj` and run the Backdrop scheme (⌘R). From the command line:
 
 ```bash
-xcodebuild -project Prospect.xcodeproj -scheme Prospect -derivedDataPath DerivedData build
+xcodebuild -project Backdrop.xcodeproj -scheme Backdrop -derivedDataPath DerivedData build
 ```
 
 ```bash
-open DerivedData/Build/Products/Debug/Prospect.app
+open DerivedData/Build/Products/Debug/Backdrop.app
 ```
 
-On first launch Prospect opens a new, empty show. To try it:
+On first launch Backdrop opens a new, empty show. To try it:
 
 1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview has two tabs: Cue, for what every cue has, and one named for the kind of cue standing by, for what it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
 2. Choose Show › Enter Show Mode, then Show › Open Projector.
@@ -44,9 +44,9 @@ Nothing takes the keyboard in show mode except the Go-to field, so these keys al
 ## Repository layout
 
 ```
-Prospect.xcodeproj           the app project and its shared scheme
-Config/Prospect-Info.plist   document type and the .prospect UTI
-Prospect/                    the app: AppKit windows, menus, documents
+Backdrop.xcodeproj           the app project and its shared scheme
+Config/Backdrop-Info.plist   document type and the .backdrop UTI
+Backdrop/                    the app: AppKit windows, menus, documents
   App/                       launch, menus, keys, preferences, the crash record
   Document/                  the show document and its display clock
   Console/                   the console window and its panels
@@ -56,14 +56,14 @@ Prospect/                    the app: AppKit windows, menus, documents
   Map/                       the map route window
   Debug/                     the snapshot and document-check launch tools
   AppIcon.icon               the app icon, an Icon Composer document
-ProspectCore/                a Swift package with two libraries
-  Sources/ProspectCore       the show model; no AppKit
+BackdropCore/                a Swift package with two libraries
+  Sources/BackdropCore       the show model; no AppKit
     Show/                    shows, cues, settings, the package and the cue sheet
     Running/                 the playhead, the clock, continues, transitions
     Decryption/ Anagrams/    one folder per kind of cue that has a model
     Images/ Morphs/ Maps/
     Support/                 colour, random numbers, rounding, small helpers
-  Sources/ProspectStage      the renderers and the show controller; no windows
+  Sources/BackdropStage      the renderers and the show controller; no windows
     Stage/                   the controller, the runner, surfaces and type
     Decryption/ Anagrams/    one folder per kind of cue: its renderer, and
     Images/ Morphs/ Maps/    its layout and drawing where they need their own
@@ -75,8 +75,8 @@ tools/package.sh             builds the zip and disk image for another Mac
 
 The code is in three layers:
 
-- **ProspectCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.prospect` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
-- **ProspectStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
+- **BackdropCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.backdrop` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
+- **BackdropStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
   - `SurfaceLayer`: a surface to paint into.
   - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `MorphRenderer`, `MapRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `MorphRenderer` and `MapRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a morph cue of several pictures before each stage, and a map cue's dot at each stop.
   - `StageRunner`: drives the renderers on every tick.
@@ -85,14 +85,14 @@ The code is in three layers:
   - `CueSheetView`: prints the cue sheet.
 
   None of it needs a window, so its tests render offscreen.
-- **Prospect**, the app. Its interface is SwiftUI in the Mac's own controls, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
-  - [ShowDocument.swift](Prospect/Document/ShowDocument.swift) and [DocumentController.swift](Prospect/App/DocumentController.swift): the document, with one show open at a time.
-  - [ConsoleWindow.swift](Prospect/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
-  - [Projector.swift](Prospect/Projector/Projector.swift): the projector window and display handling.
-  - [CueEditor.swift](Prospect/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Prospect/Console/Editing/SettingsPanels.swift): the Inspector's two tabs, and [ShowSettingsWindow.swift](Prospect/Console/ShowSettingsWindow.swift) the show's own settings. Each is a SwiftUI form behind a small AppKit host.
-  - [ProspectApp.swift](Prospect/App/ProspectApp.swift) and [MainMenu.swift](Prospect/App/MainMenu.swift): launch and the menus.
+- **Backdrop**, the app. Its interface is SwiftUI in the Mac's own controls, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
+  - [ShowDocument.swift](Backdrop/Document/ShowDocument.swift) and [DocumentController.swift](Backdrop/App/DocumentController.swift): the document, with one show open at a time.
+  - [ConsoleWindow.swift](Backdrop/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
+  - [Projector.swift](Backdrop/Projector/Projector.swift): the projector window and display handling.
+  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): the Inspector's two tabs, and [ShowSettingsWindow.swift](Backdrop/Console/ShowSettingsWindow.swift) the show's own settings. Each is a SwiftUI form behind a small AppKit host.
+  - [BackdropApp.swift](Backdrop/App/BackdropApp.swift) and [MainMenu.swift](Backdrop/App/MainMenu.swift): launch and the menus.
 
-Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `ProspectCore/Sources/ProspectCore/Anagrams` and `ProspectCore/Sources/ProspectStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.
+Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `BackdropCore/Sources/BackdropCore/Anagrams` and `BackdropCore/Sources/BackdropStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.
 
 ### How a cue gets on screen
 
@@ -109,61 +109,61 @@ In edit mode, every change goes through `ShowController.edit`. That makes it one
 The two package test targets hold all the tests. To run them, use either:
 
 ```bash
-cd ProspectCore && swift test
+cd BackdropCore && swift test
 ```
 
 ```bash
-xcodebuild -project Prospect.xcodeproj -scheme Prospect test
+xcodebuild -project Backdrop.xcodeproj -scheme Backdrop test
 ```
 
-Set `PROSPECT_SNAPSHOTS` to a folder and the stage tests write PNGs of what they rendered:
+Set `BACKDROP_SNAPSHOTS` to a folder and the stage tests write PNGs of what they rendered:
 
 ```bash
-cd ProspectCore && PROSPECT_SNAPSHOTS=/tmp/stage swift test
+cd BackdropCore && BACKDROP_SNAPSHOTS=/tmp/stage swift test
 ```
 
 ### Recorded outputs
 
-The JSON files in `ProspectCore/Tests/ProspectCoreTests/Fixtures/` are known-good outputs: cipher text, reveal timing, tile schedules and numbering, each from a seeded run. The tests replay the same seeds with `SeededRandom` and compare exactly, so anything that would change what the audience sees fails a test. If a change to one of them is deliberate, update the recorded values with it.
+The JSON files in `BackdropCore/Tests/BackdropCoreTests/Fixtures/` are known-good outputs: cipher text, reveal timing, tile schedules and numbering, each from a seeded run. The tests replay the same seeds with `SeededRandom` and compare exactly, so anything that would change what the audience sees fails a test. If a change to one of them is deliberate, update the recorded values with it.
 
 ## Debug tools
 
 Debug builds accept two launch arguments. Both are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits.
 
 ```bash
-DerivedData/Build/Products/Debug/Prospect.app/Contents/MacOS/Prospect -ProspectSnapshot /tmp/console
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
 This renders the console offscreen in several states (show mode, an image turning, edit mode, the settings tabs, the Settings window) and writes the PNGs to the folder.
 
 ```bash
-DerivedData/Build/Products/Debug/Prospect.app/Contents/MacOS/Prospect -ProspectDocumentCheck /tmp/documents
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents
 ```
 
 This takes a show through importing media, Save As, Save and reopening, with a check at each step, and writes PASS or FAIL lines to `result.txt` in the folder.
 
 ## The app icon
 
-`Prospect/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows a projection screen of tiles caught in an image cue's diagonal sweep, upstage of a perspective floor: the tiles that have turned are bone, the diagonal that is turning is brass, and the rest are still slate. These are the console's own colours.
+`Backdrop/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows a projection screen of tiles caught in an image cue's diagonal sweep, upstage of a perspective floor: the tiles that have turned are bone, the diagonal that is turning is brass, and the rest are still slate. These are the console's own colours.
 
 Each layer is an SVG in `Assets/`. Open the document in Icon Composer, which comes with Xcode, to change it. To render it from the command line:
 
 ```bash
-"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" Prospect/AppIcon.icon --export-image --output-file /tmp/icon.png --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
+"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" Backdrop/AppIcon.icon --export-image --output-file /tmp/icon.png --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
 ```
 
 ## The show document
 
-A show is a `.prospect` package that behaves as one file in Finder:
+A show is a `.backdrop` package that behaves as one file in Finder:
 
 ```
-DaVinciCode.prospect/
+DaVinciCode.backdrop/
   show.json    the cue sheet (each cue with its own settings), text size, geometry and projector display
   media/       every image and clip, copied in on import
   version      the format version
 ```
 
-`show.json` is readable JSON, so a show can be diffed in a repository and repaired by hand if it ever has to be. Prospect autosaves in place and keeps versions with macOS's version history. If a show won't open, the file is left untouched and Prospect offers to restore an earlier version. A show saved by a newer version of Prospect is refused rather than rewritten. See [ShowPackage.swift](ProspectCore/Sources/ProspectCore/Show/ShowPackage.swift).
+`show.json` is readable JSON, so a show can be diffed in a repository and repaired by hand if it ever has to be. Backdrop autosaves in place and keeps versions with macOS's version history. If a show won't open, the file is left untouched and Backdrop offers to restore an earlier version. A show saved by a newer version of Backdrop is refused rather than rewritten. See [ShowPackage.swift](BackdropCore/Sources/BackdropCore/Show/ShowPackage.swift).
 
 ## Copying to another Mac
 
@@ -173,10 +173,10 @@ tools/package.sh
 
 This builds a Release copy from clean and writes two packages to `dist/`. Either one carries the app intact on a thumb drive:
 
-- `Prospect-<version>.zip`
-- `Prospect-<version>.dmg`, a disk image that opens to the app beside a link to Applications
+- `Backdrop-<version>.zip`
+- `Backdrop-<version>.dmg`, a disk image that opens to the app beside a link to Applications
 
-The app runs on Intel and Apple silicon Macs with macOS 26 or later. On the other Mac, drag Prospect into Applications and open it. Keep shows on that Mac's internal disk, not on the stick.
+The app runs on Intel and Apple silicon Macs with macOS 26 or later. On the other Mac, drag Backdrop into Applications and open it. Keep shows on that Mac's internal disk, not on the stick.
 
 ### Gatekeeper
 
@@ -205,13 +205,13 @@ If Apple refuses either one, the script prints Apple's log and stops.
 Each Mac that notarises needs two things, set up once. Andy's Mac has both.
 
 1. **The Developer ID Application certificate in its keychain.** To add it, sign in to the team in Xcode, go to Settings › Accounts, then Manage Certificates… › + › Developer ID Application. Only the account holder can create one.
-2. **The notarisation password, saved as the `prospect-notary` profile.** Make an app-specific password at [account.apple.com](https://account.apple.com), under Sign-In and Security › App-Specific Passwords. Then run this command, which asks for the password and keeps it in the keychain:
+2. **The notarisation password, saved as the `backdrop-notary` profile.** Make an app-specific password at [account.apple.com](https://account.apple.com), under Sign-In and Security › App-Specific Passwords. Then run this command, which asks for the password and keeps it in the keychain:
 
    ```bash
-   xcrun notarytool store-credentials prospect-notary --apple-id <your Apple ID> --team-id 3G846V4G68
+   xcrun notarytool store-credentials backdrop-notary --apple-id <your Apple ID> --team-id 3G846V4G68
    ```
 
-The script checks both before it builds anything, and says which one is missing. `PROSPECT_SIGN_IDENTITY` and `PROSPECT_NOTARY_PROFILE` override the certificate and the profile it uses.
+The script checks both before it builds anything, and says which one is missing. `BACKDROP_SIGN_IDENTITY` and `BACKDROP_NOTARY_PROFILE` override the certificate and the profile it uses.
 
 ## Before the first real show
 
