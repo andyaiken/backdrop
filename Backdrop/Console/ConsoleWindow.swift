@@ -4,8 +4,8 @@ import BackdropStage
 
 /// The operator's window: the cue list, the standby panel, GO, a live
 /// preview of the projector drawn by the same renderers into a second
-/// surface, and the keyboard reference. In edit mode it adds the projection
-/// area controls.
+/// surface, and the keyboard reference. In edit mode it adds the Inspector,
+/// which edits the cue standing by, its transition, or the Show Settings.
 ///
 /// Nothing in it takes keyboard focus except the Go-to field, so the show
 /// keys always reach the show: a focused button would be pressed by Space,
@@ -50,7 +50,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// The Inspector shows the Show Settings rather than a cue. Choosing a cue
     /// or a transition in the list switches it off.
     private var showingShowSettings = false
-    /// Edit mode's panels, one at a time beneath the preview.
     /// The Inspector's tabs: everything a cue has in common, then what this
     /// kind of cue runs with, named for the kind.
     private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
@@ -669,7 +668,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
         controller.mode == .edit ? document?.undoManager : nil
     }
-
 
     /// Moving the projector waits for the next turn of the run loop: AppKit
     /// can say the screen changed while it is still rearranging displays.

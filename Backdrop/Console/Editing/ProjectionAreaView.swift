@@ -1,39 +1,9 @@
-import AppKit
 import BackdropCore
 import SwiftUI
 
-/// Edit mode's projection area controls: width, height and offsets as
-/// percentages of the projector output, alignment guides, and a reset.
-///
-/// AppKit on the outside so the console's layout places it like any other
-/// panel; SwiftUI within, in the Mac's own controls.
-@MainActor
-final class GeometryPanel: PanelHost<ProjectionAreaView> {
-    var onChange: (Geometry) -> Void = { _ in }
-    var onGuides: (Bool) -> Void = { _ in }
-
-    init() {
-        super.init(rootView: ProjectionAreaView(geometry: Geometry(), guidesOn: false, outputAspect: 16.0 / 9,
-                                                onChange: { _ in }, onGuides: { _ in }))
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    /// - Parameter outputAspect: The projector output's width over its
-    ///   height, so a shape can be worked back into percentages of it.
-    func update(geometry: Geometry, guidesOn: Bool, outputAspect: Double) {
-        rootView = ProjectionAreaView(
-            geometry: geometry,
-            guidesOn: guidesOn,
-            outputAspect: outputAspect,
-            onChange: { [weak self] in self?.onChange($0) },
-            onGuides: { [weak self] in self?.onGuides($0) }
-        )
-    }
-}
-
+/// The projection area's controls, in the Inspector's Show Settings: width,
+/// height and offsets as percentages of the projector output, a shape to
+/// fit them to, alignment guides, and a reset.
 struct ProjectionAreaView: View {
     let geometry: Geometry
     let guidesOn: Bool
@@ -49,41 +19,41 @@ struct ProjectionAreaView: View {
     /// The sections themselves, for a form that holds more than this.
     @ViewBuilder
     var sections: some View {
-            Section {
-                FieldRow(label: "Shape") {
-                    HStack {
-                        Picker("", selection: Binding(get: { shape }, set: { use($0) })) {
-                            ForEach(StageShape.allCases) { Text($0.rawValue).tag($0) }
-                        }
+        Section {
+            FieldRow(label: "Shape") {
+                HStack {
+                    Picker("", selection: Binding(get: { shape }, set: { use($0) })) {
+                        ForEach(StageShape.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .labelsHidden()
+                    .focusable(false)
+                    .fixedSize()
+                    Spacer(minLength: 0)
+                }
+            }
+            row("Width", \.width, SettingRange.geometrySize)
+            row("Height", \.height, SettingRange.geometrySize)
+            row("Across", \.across, SettingRange.geometryOffset, signed: true)
+            row("Down", \.down, SettingRange.geometryOffset, signed: true)
+        } header: {
+            Text("Projection area")
+        } footer: {
+            Text("Percentages of the projector output, so they hold if the resolution changes. "
+                 + "Guides switch themselves off in show mode.")
+        }
+
+        Section {
+            FieldRow(label: "Alignment guides") {
+                HStack {
+                    Toggle("", isOn: Binding(get: { guidesOn }, set: { onGuides($0) }))
                         .labelsHidden()
                         .focusable(false)
-                        .fixedSize()
-                        Spacer(minLength: 0)
-                    }
+                    Spacer(minLength: 0)
                 }
-                row("Width", \.width, SettingRange.geometrySize)
-                row("Height", \.height, SettingRange.geometrySize)
-                row("Across", \.across, SettingRange.geometryOffset, signed: true)
-                row("Down", \.down, SettingRange.geometryOffset, signed: true)
-            } header: {
-                Text("Projection area")
-            } footer: {
-                Text("Percentages of the projector output, so they hold if the resolution changes. "
-                     + "Guides switch themselves off in show mode.")
             }
-
-            Section {
-                FieldRow(label: "Alignment guides") {
-                    HStack {
-                        Toggle("", isOn: Binding(get: { guidesOn }, set: { onGuides($0) }))
-                            .labelsHidden()
-                            .focusable(false)
-                        Spacer(minLength: 0)
-                    }
-                }
-                Button("Fill the Output") { onChange(Geometry()) }
-                    .focusable(false)
-            }
+            Button("Fill the Output") { onChange(Geometry()) }
+                .focusable(false)
+        }
     }
 
     /// The shape the picture lands in, as the audience sees it: the stage's

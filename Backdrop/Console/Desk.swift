@@ -18,6 +18,10 @@ enum Desk {
     /// What the operator's eye goes to: standby, and anything live.
     static let brass = NSColor.controlAccentColor
     static let live = NSColor.systemGreen
+    /// A cue list row under the pointer, and a selected one: the system's
+    /// own tints, so they follow the accent colour and light or dark mode.
+    static let hover = NSColor.quaternaryLabelColor
+    static let selected = NSColor.controlAccentColor.withAlphaComponent(0.14)
 
     static func rgb(_ r: Int, _ g: Int, _ b: Int) -> NSColor {
         NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)

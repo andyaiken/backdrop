@@ -1,6 +1,6 @@
 # Backdrop
 
-Backdrop is a native macOS app for running projections in live theatre. Text decrypts out of ciphertext, anagrams rearrange themselves letter by letter, scene images turn into place tile by tile, one picture morphs into another and on through more, a red dot is tracked across a police map, and video clips play. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
+Backdrop is a native macOS app for running projections in live theatre. An operator fires cues from a console on the Mac's own display while the projector window runs full-screen on a second display.
 
 ## Requirements
 
@@ -49,11 +49,12 @@ Config/Backdrop-Info.plist   document type and the .backdrop UTI
 Backdrop/                    the app: AppKit windows, menus, documents
   App/                       launch, menus, keys, preferences, the crash record
   Document/                  the show document and its display clock
-  Console/                   the console window and its panels
-    Editing/                 edit mode's cue editor and settings panels
+  Console/                   the console window, its palette and PanelHost
+    CueList/                 the cue list and its rows: cues, transitions, GOs
+    Panels/                  the header, standby panel, key bar, wordmark, warning
+    Editing/                 edit mode's Inspector: cue editor and settings forms
+  Editors/                   edit mode's own windows: morph points, map route
   Projector/                 the projector window and display handling
-  Morph/                     the morph points window
-  Map/                       the map route window
   Debug/                     the snapshot and document-check launch tools
   AppIcon.icon               the app icon, an Icon Composer document
 BackdropCore/                a Swift package with two libraries
@@ -62,12 +63,14 @@ BackdropCore/                a Swift package with two libraries
     Running/                 the playhead, the clock, continues, transitions
     Decryption/ Anagrams/    one folder per kind of cue that has a model
     Images/ Morphs/ Maps/
+    Keypad/
     Support/                 colour, random numbers, rounding, small helpers
   Sources/BackdropStage      the renderers and the show controller; no windows
     Stage/                   the controller, the runner, surfaces and type
     Decryption/ Anagrams/    one folder per kind of cue: its renderer, and
     Images/ Morphs/ Maps/    its layout and drawing where they need their own
-    Video/ Blank/
+    Keypad/ Text/ Video/
+    Blank/
     Printing/                the printed cue sheet
   Tests/                     tests for both, including recorded outputs
 tools/package.sh             builds the zip and disk image for another Mac
@@ -78,10 +81,10 @@ The code is in three layers:
 - **BackdropCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.backdrop` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
 - **BackdropStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
   - `SurfaceLayer`: a surface to paint into.
-  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `MorphRenderer`, `MapRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `MorphRenderer` and `MapRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a morph cue of several pictures before each stage, and a map cue's dot at each stop.
+  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer`, `KeypadRenderer`, `TextRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer` and `KeypadRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a layered image cue brings on each layer at a GO, a morph cue of several pictures waits before each stage, a map cue's dot at each stop, and a keypad cue before each stage of keying.
   - `StageRunner`: drives the renderers on every tick.
   - `ShowController`: the keys, the playhead, modes and editing.
-  - `ProjectorState`: where the projector window goes.
+  - `ProjectorState`, in [ProjectorPlacement.swift](BackdropCore/Sources/BackdropStage/Stage/ProjectorPlacement.swift): where the projector window goes.
   - `CueSheetView`: prints the cue sheet.
 
   None of it needs a window, so its tests render offscreen.
@@ -89,7 +92,9 @@ The code is in three layers:
   - [ShowDocument.swift](Backdrop/Document/ShowDocument.swift) and [DocumentController.swift](Backdrop/App/DocumentController.swift): the document, with one show open at a time.
   - [ConsoleWindow.swift](Backdrop/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
   - [Projector.swift](Backdrop/Projector/Projector.swift): the projector window and display handling.
-  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift) and [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): the Inspector's two tabs, and [ShowSettingsWindow.swift](Backdrop/Console/ShowSettingsWindow.swift) the show's own settings. Each is a SwiftUI form behind a small AppKit host.
+  - [CueListView.swift](Backdrop/Console/CueList/CueListView.swift): the cue list, which lays out and drags the rows beside it in `CueList/`.
+  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift): the Inspector's two tabs, Cue and the one named for the cue's kind. [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): what takes their place for a selected transition or the Show Settings. Each is a SwiftUI form, in `Editing/`, behind a small AppKit `PanelHost`.
+  - [MorphPointsWindow.swift](Backdrop/Editors/MorphPointsWindow.swift) and [MapRouteWindow.swift](Backdrop/Editors/MapRouteWindow.swift): the windows a morph's points and a map's route are laid in, opened from the Inspector.
   - [BackdropApp.swift](Backdrop/App/BackdropApp.swift) and [MainMenu.swift](Backdrop/App/MainMenu.swift): launch and the menus.
 
 Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `BackdropCore/Sources/BackdropCore/Anagrams` and `BackdropCore/Sources/BackdropStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.
@@ -134,7 +139,7 @@ Debug builds accept two launch arguments. Both are for checking the app without 
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
-This renders the console offscreen in several states (show mode, an image turning, edit mode, the settings tabs, the Settings window) and writes the PNGs to the folder.
+This renders the console offscreen in several states (show mode, an image turning, edit mode for several kinds of cue, the Inspector's tabs), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents
