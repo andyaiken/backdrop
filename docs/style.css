@@ -1,0 +1,6 @@
+:root{color-scheme:light dark}
+body{font:17px/1.6 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;max-width:42rem;margin:3rem auto;padding:0 1.25rem}
+h1{font-size:2rem;margin-bottom:.25rem}h2{margin-top:2rem}
+nav a{margin-right:1rem}
+.sub{opacity:.7;margin-top:0}
+code{font-family:ui-monospace,Menlo,monospace}
