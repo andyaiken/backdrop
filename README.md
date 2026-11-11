@@ -27,7 +27,7 @@ On first launch Backdrop opens a new, empty show. To try it:
 
 | Key | In show mode |
 | --- | --- |
-| Space | Fire the standby cue, or go to the step of a cue that stands by. Nothing else fires a cue |
+| Space | Fire the standby cue, or go to the step of a cue that stands by. No other key fires a cue; only show control, below, can fire one from another machine |
 | → ↓ PageDown, ← ↑ PageUp | Stand by the next or previous row: a cue, or one of the GOs a cue waits for |
 | 0–9 and `.`, then Return | Stand by a cue by number |
 | R | Run the live cue again |
@@ -41,13 +41,46 @@ The console is in the Mac's own controls and follows its light or dark appearanc
 
 Nothing takes the keyboard in show mode except the Go-to field, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
 
+### Show control
+
+Another machine in the booth can fire Backdrop's cues, so one GO in QLab, or on a lighting desk, runs sound and projection together. Both kinds are off until turned on in Backdrop's Settings, which belong to the Mac rather than the show. In show mode the status line says what each command did and where it came from. In edit mode commands are ignored, and the status line says that too.
+
+- **MIDI Show Control (MSC).** Backdrop listens on every MIDI source: interfaces, USB, other apps such as QLab, and Network MIDI sessions, which are turned on in Audio MIDI Setup › MIDI Network Setup.
+  - It answers to its own device ID (1 unless set otherwise) and to All Devices.
+  - It only answers the video command formats and All Types, so a lighting desk's MSC for its own cue 12 doesn't fire projection cue 12.
+  - GO fires the cue standing by, or the cue it names. LOAD stands a cue by. ALL OFF blacks out, and RESTORE brings the picture back.
+  - MSC cue numbers can only contain digits and a decimal point, so a cue numbered P12 can't be reached this way.
+- **OSC, over UDP.** Backdrop listens on port 53100 unless set otherwise, which is clear of QLab's own 53000 and 53001. Settings shows the address to send to. If another app already has the port, the console warns.
+
+  | Address | Does |
+  | --- | --- |
+  | `/backdrop/go` | Fires the cue standing by |
+  | `/backdrop/go/12` | Fires cue 12 |
+  | `/backdrop/standby/12` | Stands cue 12 by |
+  | `/backdrop/blackout/on` | Blacks out |
+  | `/backdrop/blackout/off` | Brings the picture back |
+
+  The cue number can also be sent as the message's argument, as in `/backdrop/go 12`.
+
+A GO for a number that isn't in the sheet fires nothing. It doesn't fire whatever happens to be standing by.
+
+In QLab, either:
+
+- add a MIDI cue, set its type to MIDI Show Control, its command format to one of the Video formats, its device ID to Backdrop's, and its command to GO with the cue number; or
+- add a Network cue that sends OSC to the Backdrop Mac's address and port, with a message such as `/backdrop/go/12`.
+
+Then group it with the sound cue, or have the sound cue auto-continue into it.
+
+The first time OSC is turned on, macOS may ask whether Backdrop may accept incoming network connections. Allow it, or nothing from another machine arrives.
+
 ## Repository layout
 
 ```
 Backdrop.xcodeproj           the app project and its shared scheme
 Config/Backdrop-Info.plist   document type and the .backdrop UTI
 Backdrop/                    the app: AppKit windows, menus, documents
-  App/                       launch, menus, keys, preferences, the crash record
+  App/                       launch, menus, keys, preferences, the crash record,
+                             the booth watch
   Document/                  the show document and its display clock
   Console/                   the console window, its palette and PanelHost
     CueList/                 the cue list and its rows: cues, transitions, GOs
@@ -55,7 +88,9 @@ Backdrop/                    the app: AppKit windows, menus, documents
     Editing/                 edit mode's Inspector: cue editor and settings forms
   Editors/                   edit mode's own windows: morph points, map route
   Projector/                 the projector window and display handling
-  Debug/                     the snapshot and document-check launch tools
+  ShowControl/               MIDI Show Control and OSC from other machines
+  Debug/                     the snapshot, document-check and show-control-check
+                             launch tools
   AppIcon.icon               the app icon, an Icon Composer document
 BackdropCore/                a Swift package with two libraries
   Sources/BackdropCore       the show model; no AppKit
@@ -64,6 +99,7 @@ BackdropCore/                a Swift package with two libraries
     Decryption/ Anagrams/    one folder per kind of cue that has a model
     Images/ Morphs/ Maps/
     Keypad/
+    ShowControl/             OSC and MSC messages, and what they ask of the show
     Support/                 colour, random numbers, rounding, small helpers
   Sources/BackdropStage      the renderers and the show controller; no windows
     Stage/                   the controller, the runner, surfaces and type
@@ -85,6 +121,7 @@ The code is in three layers:
   - `StageRunner`: drives the renderers on every tick.
   - `ShowController`: the keys, the playhead, modes and editing.
   - `ProjectorState`, in [ProjectorPlacement.swift](BackdropCore/Sources/BackdropStage/Stage/ProjectorPlacement.swift): where the projector window goes.
+  - `BoothConditions`, in [BoothCheck.swift](BackdropCore/Sources/BackdropStage/Stage/BoothCheck.swift): what the console warns of about the Mac itself. [BoothWatch.swift](Backdrop/App/BoothWatch.swift) reads it from macOS.
   - `CueSheetView`: prints the cue sheet.
 
   None of it needs a window, so its tests render offscreen.
@@ -133,19 +170,25 @@ The JSON files in `BackdropCore/Tests/BackdropCoreTests/Fixtures/` are known-goo
 
 ## Debug tools
 
-Debug builds accept two launch arguments. Both are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits.
+Debug builds accept three launch arguments. All are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
-This renders the console offscreen in several states (show mode, an image turning, edit mode for several kinds of cue, the Inspector's tabs), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
+This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue, the Inspector's tabs), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents
 ```
 
-This takes a show through importing media, Save As, Save and reopening, with a check at each step, and writes PASS or FAIL lines to `result.txt` in the folder.
+This takes a show through importing media, Save As, Save and reopening, with a check at each step, and writes PASS or FAIL lines to `result.txt` in the folder. It also clears Backdrop's Open Recent list, so the scratch show isn't the one reopened next launch.
+
+```bash
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropShowControlCheck /tmp/showcontrol
+```
+
+This turns show control on for a show held in memory. It sends Backdrop real OSC over the network and real MSC from a virtual MIDI source, checks that each command does what it should, and writes PASS or FAIL lines to `result.txt` in the folder. It leaves the settings, the disk and Open Recent alone.
 
 ## The app icon
 
@@ -221,4 +264,19 @@ The script checks both before it builds anything, and says which one is missing.
 ## Before the first real show
 
 - Package the copy for the booth Mac with `tools/package.sh --notarise`.
-- Run the booth checklist: the console is the main display, a Focus mode is on, the projector's wallpaper is black, automatic updates are off and the show runs from the internal disk.
+- Run the booth checklist: a Focus mode is on, the projector's wallpaper is black and automatic updates are off. macOS doesn't let Backdrop check these itself.
+
+Backdrop checks the rest of the booth itself, and says so above the preview for as long as anything is wrong. Two warnings come up in either mode, because they decide where the picture goes:
+
+- The console's display is mirrored, so the projector has no display of its own.
+- The projector's display is the main display, so notification banners would appear on it.
+
+The rest only matter on the night, so they come up in show mode only:
+
+- Another app is in front, so Space won't fire GO.
+- The Mac is on battery.
+- The Mac is hot enough that macOS is slowing it down.
+- Low Power Mode is on.
+- The show is on an external drive or a server rather than the internal disk.
+
+While a show is open, Backdrop also keeps the Mac and its displays awake, and asks macOS not to nap it or hold back its timers.

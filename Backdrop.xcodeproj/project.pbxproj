@@ -200,6 +200,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Backdrop shows the picture from a camera on stage when a live feed cue is fired.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Backdrop listens for cues from QLab, a lighting desk or a remote app on the local network, when OSC is turned on in its Settings.";
 				INFOPLIST_KEY_NSPrincipalClass = "$(PRODUCT_MODULE_NAME).BackdropApplication";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -230,6 +231,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Backdrop shows the picture from a camera on stage when a live feed cue is fired.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Backdrop listens for cues from QLab, a lighting desk or a remote app on the local network, when OSC is turned on in its Settings.";
 				INFOPLIST_KEY_NSPrincipalClass = "$(PRODUCT_MODULE_NAME).BackdropApplication";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

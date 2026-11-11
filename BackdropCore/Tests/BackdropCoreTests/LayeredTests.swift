@@ -360,7 +360,7 @@ struct LayeredRecordedTests {
             ImageLayer(src: "media/john.png", name: "John", life: .untilNextLayer),
             ImageLayer(src: "media/m.png", name: "the M", fadeMs: 1500),
         ]
-        var show = Show(title: "Da Vinci", cues: [Cue(number: "9", line: "Sophie looks up", content: .layered(
+        let show = Show(title: "Da Vinci", cues: [Cue(number: "9", line: "Sophie looks up", content: .layered(
             LayeredContent(text: "Last Supper", base: "media/base.png", layers: layers,
                            settings: LayeredSettings(advance: .eachStep, baseLevel: 30))))])
         for (layout, want) in [(CueSheet.Layout.dsm, recorded.dsm), (.operatorSettings, recorded.operator)] {

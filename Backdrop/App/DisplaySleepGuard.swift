@@ -1,24 +1,21 @@
 import Foundation
-import IOKit.pwr_mgt
 
-/// Keeps the displays awake.
+/// Keeps the displays awake while a show is open, and tells macOS that
+/// Backdrop's timing matters: no App Nap, and no timers held back to save
+/// energy.
 final class DisplaySleepGuard {
-    private var assertion = IOPMAssertionID(0)
-    private var held = false
+    private var activity: NSObjectProtocol?
 
     func hold(reason: String) {
-        guard !held else { return }
-        held = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypeNoDisplaySleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            reason as CFString,
-            &assertion
-        ) == kIOReturnSuccess
+        guard activity == nil else { return }
+        // User-initiated also keeps the Mac itself from idle sleep.
+        activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleDisplaySleepDisabled, .latencyCritical], reason: reason)
     }
 
     func release() {
-        guard held else { return }
-        IOPMAssertionRelease(assertion)
-        held = false
+        guard let activity else { return }
+        ProcessInfo.processInfo.endActivity(activity)
+        self.activity = nil
     }
 }

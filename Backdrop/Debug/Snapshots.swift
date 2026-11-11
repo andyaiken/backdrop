@@ -34,6 +34,9 @@ enum Snapshots {
         NSDocumentController.shared.addDocument(document)
         document.makeWindowControllers()
         guard let controller = document.controller, let console = document.console else { exit(1) }
+        // A Mac in good order, whatever this one is doing: launched from the
+        // command line, Backdrop isn't even the app in front.
+        console.booth = { BoothConditions() }
         console.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 860), display: false)
         controller.enterShowMode()
         let start = CACurrentMediaTime()
@@ -64,6 +67,13 @@ enum Snapshots {
         save(console, "console-image-turning", to: directory)
         controller.tick(at: fired + 30)
         save(console, "console-image", to: directory)
+
+        // A booth with several things wrong at once.
+        console.booth = {
+            BoothConditions(inBackground: true, power: .battery(percent: 64), heat: .throttled, showDisk: .external("SHOW DRIVE"))
+        }
+        save(console, "console-booth", to: directory)
+        console.booth = { BoothConditions() }
 
         // Edit mode: guides, a pulled-in projection area, and the editor on a
         // title cue, then on an image cue.

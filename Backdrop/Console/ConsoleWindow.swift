@@ -121,6 +121,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// The console moved to another display, which can change where the
     /// projector may go.
     var screenChanged: () -> Void = {}
+    /// What the Mac is doing that the console should warn of.
+    var booth: () -> BoothConditions = { BoothConditions() }
 
     init(controller: ShowController) {
         self.controller = controller
@@ -395,7 +397,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
 
         status.stringValue = controller.message ?? ""
-        warning.message = projector.warning ?? ""
+        warning.messages = booth().warnings(mode: controller.mode, projector: projector)
         showSettingsPanel.update(title: show.title, fallback: document?.displayName ?? "Untitled",
                                  settings: show.settings, guidesOn: controller.showsGuides, outputAspect: previewAspect)
         root.needsLayout = true
@@ -489,7 +491,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         // The warning belongs to the previews' column; the Inspector runs full height beside it.
         var y = regionTop
-        warning.isHidden = warning.message.isEmpty
+        warning.isHidden = warning.messages.isEmpty
         if !warning.isHidden {
             let h = warning.height(width: previewWidth)
             warning.frame = NSRect(x: x, y: y, width: previewWidth, height: h)

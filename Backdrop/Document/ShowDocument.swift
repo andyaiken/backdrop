@@ -34,6 +34,7 @@ final class ShowDocument: NSDocument {
     private(set) var console: ConsoleWindowController?
     private(set) var projector: ProjectorManager?
     private var clock: ClockSource?
+    private var booth: BoothWatch?
 
     override class var autosavesInPlace: Bool { true }
 
@@ -139,8 +140,20 @@ final class ShowDocument: NSDocument {
         self.projector = projector
         let clock = ClockSource(projector: projector.view, preview: console.nextPreview)
         self.clock = clock
+        let booth = BoothWatch()
+        booth.console = console.window
+        booth.showURL = fileURL
+        booth.onChange = { [weak console] in console?.setNeedsRefresh() }
+        console.booth = { [weak booth] in booth?.conditions ?? BoothConditions() }
+        self.booth = booth
 
-        controller.changed = { [weak console] in console?.setNeedsRefresh() }
+        controller.changed = { [weak self, weak console] in
+            // Saving, moving or renaming the show can put it on another disk,
+            // and entering show mode is a change too, so the disk is right
+            // by the time its warning would speak up.
+            self?.booth?.showURL = self?.fileURL
+            console?.setNeedsRefresh()
+        }
         controller.needsTicks = { [weak clock] on in clock?.ticking = on }
         projector.onChange = { [weak clock, weak projector] in clock?.projectorVisible = projector?.isVisible ?? false }
         console.openProjector = { [weak projector] in projector?.open() }
@@ -148,7 +161,10 @@ final class ShowDocument: NSDocument {
         console.setMode = { [weak self] editing in
             if editing { self?.enterEditMode() } else { self?.enterShowMode() }
         }
-        console.screenChanged = { [weak projector] in projector?.displaysChanged() }
+        console.screenChanged = { [weak projector, weak booth] in
+            projector?.displaysChanged()
+            booth?.readDisplays()
+        }
         controller.onEdit = { [weak self] before, name in self?.registerUndo(back: before, name: name) }
         controller.onFire = { [weak self] cue in
             // Untitled shows have nowhere to be reopened from.

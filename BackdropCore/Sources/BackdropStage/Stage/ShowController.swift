@@ -227,6 +227,48 @@ public final class ShowController {
         say(playhead.blackout ? "Blacked out. Press B to bring the picture back." : nil)
     }
 
+    // MARK: Other machines
+
+    /// A command from another machine in the booth: QLab, a lighting desk.
+    /// Only in show mode, so nothing can fire a cue while the show is being
+    /// edited. The status line says what came in and from where, so the
+    /// operator is never left wondering why the stage changed.
+    ///
+    /// GO for a cue by number fires that cue and nothing else: a number not
+    /// in the sheet fires nothing, rather than whatever stands by.
+    public func perform(_ command: RemoteCommand, from source: String) {
+        guard mode == .show else {
+            say("Ignored \(command.name), which arrived by \(source): Backdrop only acts on cues from other machines in show mode.")
+            return
+        }
+        switch command {
+        case .go(let number):
+            if let number, !playhead.standBy(number: number, in: show) {
+                say("GO for cue \(number) arrived by \(source), but no cue is numbered \(number).")
+                return
+            }
+            guard let fire = playhead.go(in: show) else {
+                say("GO arrived by \(source), but this is the end of the cue sheet.")
+                return
+            }
+            perform(fire)
+            // A problem the cue reported as it loaded matters more.
+            if message == nil, let cue = show[fire.cue] {
+                say(fire.presentation == .carryOn ? "Cue \(cue.number) carried on by \(source)." : "Cue \(cue.number) fired by \(source).")
+            }
+        case .standBy(let number):
+            say(playhead.standBy(number: number, in: show)
+                ? "Standby for cue \(number) arrived by \(source)."
+                : "Standby for cue \(number) arrived by \(source), but no cue is numbered \(number).")
+        case .blackout(let on):
+            if playhead.blackout != on {
+                playhead.blackout = on
+                runner.blackout = on
+            }
+            say(on ? "Blacked out by \(source). Press B to bring the picture back." : "Picture brought back by \(source).")
+        }
+    }
+
     /// A step of a cue, when that is what stands by: GO carries the live cue
     /// on or back to it, or fires another cue straight at it.
     public struct StandingByGoPoint: Equatable, Sendable {

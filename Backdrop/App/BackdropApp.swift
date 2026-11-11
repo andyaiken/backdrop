@@ -47,6 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         UserDefaults.standard.register(defaults: [
             Preferences.reopenLastShow: true,
             Preferences.missingDisplay: MissingDisplay.window.rawValue,
+            Preferences.takeMSC: false,
+            Preferences.mscDeviceID: 1,
+            Preferences.takeOSC: false,
+            Preferences.oscPort: 53100,
         ])
         NSApp.mainMenu = MainMenu.build(displayMenuDelegate: self)
 
@@ -59,7 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             DocumentCheck.run(in: directory)
             return
         }
+        if let directory = UserDefaults.standard.string(forKey: "BackdropShowControlCheck") {
+            ShowControlCheck.run(in: directory)
+            return
+        }
         #endif
+
+        // Cues from other machines go to the show open, which only acts on
+        // them in show mode.
+        ShowControl.shared.onCommand = { [weak self] command, source in
+            self?.current?.controller?.perform(command, from: source)
+        }
+        ShowControl.shared.start()
 
         // A quiet scene can run twenty minutes between cues, well inside any
         // sleep timer, so the display is kept awake whenever a show is open.
@@ -239,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let displays = Displays.current()
         for display in displays {
             let isConsole = console.map { display.identity.bestMatch(in: [$0]) != nil } ?? false
-            let item = NSMenuItem(title: display.identity.name + (isConsole ? " \u{2014} the console\u{2019}s display" : ""),
+            let item = NSMenuItem(title: display.identity.name + (isConsole ? " \u{2014} this Mac\u{2019}s own display" : ""),
                                   action: #selector(chooseProjectorDisplay(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = isConsole ? nil : display.identity

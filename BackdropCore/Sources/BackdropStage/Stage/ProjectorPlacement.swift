@@ -126,7 +126,7 @@ public enum ProjectorState: Equatable, Sendable {
             return nil
         case .fullScreen(let d):
             return d.isMain
-                ? "The projector\u{2019}s display, \(d.identity.name), is the main display, so notification banners would appear on it. Make the console\u{2019}s display the main one in System Settings \u{203A} Displays."
+                ? "The projector\u{2019}s display, \(d.identity.name), is the main display, so notification banners would appear on it. Make the display this window is on the main one in System Settings \u{203A} Displays."
                 : nil
         case .standIn(let d, let missing):
             return "The show\u{2019}s projector display, \(missing.name), isn\u{2019}t connected, so the projector is on \(d.identity.name) instead. It moves to \(missing.name) as soon as that is connected."
