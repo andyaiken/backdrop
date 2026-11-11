@@ -61,6 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             Snapshots.run(to: directory)
             return
         }
+        if let directory = UserDefaults.standard.string(forKey: "BackdropStoreAssets") {
+            StoreAssets.run(to: directory)
+            return
+        }
         if let directory = UserDefaults.standard.string(forKey: "BackdropDocumentCheck") {
             DocumentCheck.run(in: directory)
             return

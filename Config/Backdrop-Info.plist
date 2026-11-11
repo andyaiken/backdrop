@@ -21,6 +21,8 @@
 			<string>$(PRODUCT_MODULE_NAME).ShowDocument</string>
 		</dict>
 	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
