@@ -53,6 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             Preferences.oscPort: 53100,
         ])
         NSApp.mainMenu = MainMenu.build(displayMenuDelegate: self)
+        // Pictures are what the console takes from an iPhone or iPad.
+        NSApp.registerServicesMenuSendTypes([], returnTypes: MediaDrop.pictureTypes.map { .init($0.identifier) })
 
         #if DEBUG
         if let directory = UserDefaults.standard.string(forKey: "BackdropSnapshot") {
@@ -65,6 +67,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
         if let directory = UserDefaults.standard.string(forKey: "BackdropShowControlCheck") {
             ShowControlCheck.run(in: directory)
+            return
+        }
+        if let directory = UserDefaults.standard.string(forKey: "BackdropMediaCheck") {
+            MediaCheck.run(in: directory)
+            return
+        }
+        if let directory = UserDefaults.standard.string(forKey: "BackdropIntentsCheck") {
+            IntentsCheck.run(in: directory)
             return
         }
         #endif
@@ -91,9 +101,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// The operator's first action on the night should be GO, not finding a
     /// file: after a crash, the show that was running, offering to resume;
     /// otherwise the most recent show; otherwise a new one.
+    ///
+    /// Sandboxed, Backdrop can only open a show again through the bookmark
+    /// it kept while the show was open (see `ShowBookmarks`). A show it has
+    /// none for, such as one last open before Backdrop kept them, is opened
+    /// once by hand.
     private func openFirstShow() {
-        if let record = CrashRecords.read(), FileManager.default.fileExists(atPath: record.show.path) {
-            documents.openDocument(withContentsOf: record.show, display: true) { [weak self] document, _, _ in
+        if let record = CrashRecords.read(), let url = ShowBookmarks.access(record.show) {
+            documents.openDocument(withContentsOf: url, display: true) { [weak self] document, _, _ in
                 MainActor.assumeIsolated {
                     guard let document = document as? ShowDocument else {
                         self?.documents.newDocument(nil)
@@ -106,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
         guard documents.documents.isEmpty else { return }
         if UserDefaults.standard.bool(forKey: Preferences.reopenLastShow),
-           let url = documents.recentDocumentURLs.first, FileManager.default.fileExists(atPath: url.path) {
+           let url = ShowBookmarks.known().first.flatMap(ShowBookmarks.access) {
             documents.openDocument(withContentsOf: url, display: true) { [weak self] document, _, _ in
                 if document == nil { MainActor.assumeIsolated { self?.documents.newDocument(nil) } }
             }

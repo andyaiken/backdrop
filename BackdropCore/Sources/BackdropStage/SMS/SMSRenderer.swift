@@ -204,8 +204,8 @@ public final class SMSRenderer: PaintsBetweenFrames, WaitsForGO {
                           options: [.usesLineFragmentOrigin, .usesFontLeading])
         let textHeight = ceil(wrapped.height)
         let shown = s.shownStatus
-        // WhatsApp keeps its status inside the bubble, at the bottom right.
-        let ticked = shown != .none && s.style == .whatsapp
+        // Green rectangles keep their status inside, at the bottom right.
+        let ticked = shown != .none && s.style == .greenRectangles
         let tickW = fontSize * 0.5
         let tickSpace = ticked ? tickW * 1.9 : 0
         let bubbleW = textWidth + 2 * padX + tickSpace
@@ -245,7 +245,7 @@ public final class SMSRenderer: PaintsBetweenFrames, WaitsForGO {
         configure(tree.from, text: content.sub, font: fromFont, size: fontSize * 0.6, colour: palette.quiet, scale: contents)
         tree.from.alignmentMode = s.sent ? .right : .left
         tree.from.isHidden = !hasFrom
-        let fromInset = s.style == .imessage ? fontSize * 0.6 : 0
+        let fromInset = s.style.isRound ? fontSize * 0.6 : 0
         tree.from.frame = CGRect(x: s.sent ? 0 : fromInset, y: lift + bubbleH + fromGap, width: groupW - fromInset, height: fromH)
 
         configure(tree.status, text: shown.line, font: fromFont, size: fontSize * 0.6, colour: palette.quiet, scale: contents)
@@ -265,7 +265,7 @@ public final class SMSRenderer: PaintsBetweenFrames, WaitsForGO {
         _ = paint(at: lastPosition)
     }
 
-    /// WhatsApp's status marks, drawn in a box of `width` by `height` (one
+    /// The green rectangles' status marks, ticks, drawn in a box of `width` by `height` (one
     /// tick wide): a clock while sending, a tick when sent, and two once
     /// delivered or read.
     static func statusPath(_ status: SMSStatus, width w: CGFloat, height h: CGFloat) -> CGPath {

@@ -50,6 +50,35 @@ class PanelHost<Content: View>: NSView {
     /// As tall as a panel is allowed to push the layout.
     static var mostUseful: CGFloat { 320 }
 
+    /// Set by a panel whose views take pictures and clips with `mediaDrop`.
+    private var mediaDrops: MediaDropRouter?
+
+    /// Take pictures and clips dropped on the places in the panel marked
+    /// with `mediaDrop`.
+    func takeMediaDrops() {
+        mediaDrops = mediaDrops ?? MediaDropRouter(host: self)
+    }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        mediaDrops?.entered(sender) ?? []
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        mediaDrops?.updated(sender) ?? []
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        mediaDrops?.ended()
+    }
+
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        mediaDrops?.ended()
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        mediaDrops?.perform(sender) ?? false
+    }
+
     /// The height the panel needs at a width, for the views the console
     /// places by hand rather than giving a column to.
     func height(width: CGFloat) -> CGFloat {

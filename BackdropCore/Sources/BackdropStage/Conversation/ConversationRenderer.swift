@@ -316,7 +316,7 @@ public final class ConversationRenderer: PaintsBetweenFrames, WaitsForGO {
             let x = sent ? thread.width - m.margin - w : m.margin
             let frame = CGRect(x: x, y: cursor, width: w, height: h)
             bubble.shape.frame = frame
-            bubble.shape.path = MessageLook.bubblePath(CGRect(origin: .zero, size: frame.size), style: s.style, sent: sent, fontSize: f, tail: s.style == .whatsapp ? !item.joinsPrevious : item.hasTail)
+            bubble.shape.path = MessageLook.bubblePath(CGRect(origin: .zero, size: frame.size), style: s.style, sent: sent, fontSize: f, tail: s.style == .greenRectangles ? !item.joinsPrevious : item.hasTail)
             bubble.shape.fillColor = palette.bubble.cgColor
             bubble.shape.opacity = alpha
             bubble.shape.isHidden = false

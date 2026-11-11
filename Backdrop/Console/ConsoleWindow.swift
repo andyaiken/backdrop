@@ -424,11 +424,13 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let top = headerHeight + 1, bottom = b.height - keybarHeight
 
         // Left: the cue list, Go to, and the status line, or with no cues,
-        // just a note.
-        for view in [cuesHeading, cueList, gotoLabel, gotoField, status] as [NSView] { view.isHidden = noCues }
+        // just a note. In edit mode the empty list stays, under the note, so
+        // pictures and clips can be dropped in to start the sheet.
+        for view in [cuesHeading, gotoLabel, gotoField, status] as [NSView] { view.isHidden = noCues }
+        cueList.isHidden = noCues && controller.mode != .edit
         cueListEmpty.isHidden = !noCues
         cueListEmpty.stringValue = controller.mode == .edit
-            ? "No cues yet. Add one with Add Cue at the top."
+            ? "No cues yet. Add one with Add Cue at the top, or drop pictures and clips here."
             : "No cues yet. Switch to Edit mode to add some."
         centre(cueListEmpty, in: NSRect(x: 16, y: top, width: leftWidth - 32, height: max(0, bottom - top)))
         cuesHeading.frame = NSRect(x: 16, y: top + 15, width: leftWidth - 32, height: 18)
@@ -714,6 +716,42 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         DispatchQueue.main.async { [weak self] in
             self?.screenChanged()
             self?.setNeedsRefresh()
+        }
+    }
+}
+
+// MARK: Continuity Camera
+
+/// Edit › Import from iPhone or iPad: a photo taken with an iPhone or iPad
+/// nearby. AppKit fills the menu with the devices, and asks the responder
+/// chain who takes the pictures they send. In edit mode, the console does.
+/// AppKit asks on the main thread, so the conformance is the main actor's.
+extension ConsoleWindowController: @MainActor NSServicesMenuRequestor {
+    override func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?,
+                                 returnType: NSPasteboard.PasteboardType?) -> Any? {
+        if sendType == nil, let returnType, controller.mode == .edit,
+           MediaDrop.pictureTypes.contains(where: { $0.identifier == returnType.rawValue }) {
+            return self
+        }
+        return super.validRequestor(forSendType: sendType, returnType: returnType)
+    }
+
+    func readSelection(from pasteboard: NSPasteboard) -> Bool {
+        guard controller.mode == .edit, let photo = MediaDrop(pasteboard, unnamed: "Photo") else { return false }
+        photo.receive { [weak self] urls in self?.importPhotos(urls) }
+        return true
+    }
+
+    /// Into the cue standing by if it is an image cue still waiting for its
+    /// picture, as when a cue was added for a photo not yet taken. Otherwise
+    /// a new image cue after it.
+    func importPhotos(_ urls: [URL]) {
+        guard let url = urls.first else { return }
+        if let cue = controller.standingByCue, case .image(let content) = cue.content, content.src.isEmpty {
+            importMedia(url, cue.id, nil)
+        } else {
+            let after = controller.standingByCue.flatMap { controller.show.index(of: $0.id) }
+            filesDropped(urls, at: after.map { $0 + 1 } ?? controller.show.cues.count)
         }
     }
 }

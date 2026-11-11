@@ -19,24 +19,34 @@ public struct SMSContent: Equatable, Sendable {
     }
 }
 
-/// How a message looks.
+/// How a message looks. Named for what they look like rather than for any
+/// messaging app, as an app may not borrow another's name. The raw values
+/// are what show.json has always held, so older shows read back the same.
 public enum SMSStyle: String, Codable, Sendable, CaseIterable {
-    /// Blue-grey bubbles on iMessage lines: a tail, and the sender small
-    /// above in grey.
-    case imessage
+    /// Blue sent bubbles and grey received ones, round, with a tail at the
+    /// corner nearest the sender, and the sender small above in grey.
+    case blueBubbles = "imessage"
+    /// The same bubbles with the sent ones green, as a phone shows a text
+    /// to or from a phone of another make.
+    case greenBubbles = "greenbubbles"
+    /// Green sent messages on a chat wallpaper's colour, in rectangles with
+    /// small corners, a tail at the top where a run of messages starts, and
+    /// the status as ticks inside.
+    case greenRectangles = "whatsapp"
     /// Plain rounded bubble, no platform's look to it.
     case generic
-    /// Green sent bubbles on a chat wallpaper's colour, small corners and a
-    /// tail at the top, where the run of messages starts.
-    case whatsapp
 
     public var name: String {
         switch self {
-        case .imessage: "iMessage"
+        case .blueBubbles: "Blue bubbles"
+        case .greenBubbles: "Green bubbles"
+        case .greenRectangles: "Green rectangles"
         case .generic: "Generic"
-        case .whatsapp: "WhatsApp"
         }
     }
+
+    /// Round bubbles with a tail, blue or green, alike but for the colour.
+    public var isRound: Bool { self == .blueBubbles || self == .greenBubbles }
 }
 
 /// How a message arrives.
@@ -104,7 +114,7 @@ public struct SMSSettings: Codable, Equatable, Sendable {
         return Array(SMSStatus.flow[(at + 1)...])
     }
 
-    public init(style: SMSStyle = .imessage, entrance: SMSEntrance = .pop, dark: Bool = true,
+    public init(style: SMSStyle = .blueBubbles, entrance: SMSEntrance = .pop, dark: Bool = true,
                 entranceMs: Int = 900, sent: Bool = false, status: SMSStatus = .none, advances: Bool = false) {
         self.style = style
         self.entrance = entrance

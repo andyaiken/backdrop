@@ -632,7 +632,7 @@ struct CueEditorView: View {
                         }
                         .labelsHidden()
                         .focusable(false)
-                        .help("How far the sent message has got: written beneath the bubble, or as ticks inside it in the WhatsApp style")
+                        .help("How far the sent message has got: written beneath the bubble, or as ticks inside it in the Green rectangles style")
                     }
                     if c.settings.status != .none, c.settings.status != .read {
                         FieldRow(label: "Moves on with GO") {

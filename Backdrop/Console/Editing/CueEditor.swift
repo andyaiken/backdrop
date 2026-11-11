@@ -45,6 +45,8 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
                                            onSetting: { _, _, _ in }))
         wireMorphPictures()
         wireLayeredStrip()
+        // The media wells and the morph and layer strips.
+        takeMediaDrops()
     }
 
     required init?(coder: NSCoder) {

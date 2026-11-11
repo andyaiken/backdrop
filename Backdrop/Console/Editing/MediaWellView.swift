@@ -29,12 +29,9 @@ struct MediaWellView: View {
                     .padding(.horizontal, 10)
             }
             .contentShape(Rectangle())
-            .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
-                // The first file this kind of cue can use; others are ignored.
-                MorphPicturesView.urls(from: providers) { urls in
-                    if let url = urls.first(where: { ShowDocument.accepts($0, for: kind) }) { onDrop(url) }
-                }
-                return true
+            // The first file this kind of cue can use; others are ignored.
+            .mediaDrop(isTargeted: $targeted, accepting: { [kind] in ShowDocument.accepts($0, for: kind) }) { urls in
+                onDrop(urls[0])
             }
     }
 }

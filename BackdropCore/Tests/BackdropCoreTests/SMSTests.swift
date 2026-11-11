@@ -24,7 +24,7 @@ struct SMSTests {
         let cue = try JSONDecoder().decode(Cue.self, from: Data(json.utf8))
         guard case .sms(let m) = cue.content else { Issue.record("not a message"); return }
         #expect(m.text == "Hi" && m.sub == "Dad")
-        #expect(m.settings.style == .imessage && m.settings.sent)
+        #expect(m.settings.style == .blueBubbles && m.settings.sent)
         #expect(m.settings.entranceMs == SettingRange.smsEntranceMs.lowerBound, "clamped")
         let bare = try JSONDecoder().decode(Cue.self, from: Data(#"{"kind":"sms"}"#.utf8))
         #expect(bare.content == .sms(SMSContent()))
@@ -70,11 +70,27 @@ struct SMSTests {
         #expect(back == cue)
     }
 
-    @Test("WhatsApp is a style by name, and reads back from show.json")
-    func whatsapp() throws {
-        #expect(SMSStyle.whatsapp.name == "WhatsApp" && SMSStyle.allCases.contains(.whatsapp))
-        let cue = message(SMSSettings(style: .whatsapp))
+    @Test("Green rectangles is a style by name, and reads back from show.json")
+    func greenRectangles() throws {
+        #expect(SMSStyle.greenRectangles.name == "Green rectangles" && SMSStyle.allCases.contains(.greenRectangles))
+        let cue = message(SMSSettings(style: .greenRectangles))
         let back = try JSONDecoder().decode(Cue.self, from: try JSONEncoder().encode(cue))
         #expect(back == cue)
+    }
+
+    @Test("The styles are named for their looks, and show.json holds what it always has")
+    func styleNames() throws {
+        #expect(SMSStyle.allCases.map(\.name) == ["Blue bubbles", "Green bubbles", "Green rectangles", "Generic"])
+        // Shows saved before the styles were renamed read back as they were.
+        for (saved, style) in [("imessage", SMSStyle.blueBubbles), ("greenbubbles", .greenBubbles), ("whatsapp", .greenRectangles), ("generic", .generic)] {
+            let json = #"{"kind":"sms","settings":{"style":"\#(saved)"}}"#
+            guard case .sms(let m) = try JSONDecoder().decode(Cue.self, from: Data(json.utf8)).content else {
+                Issue.record("not a message")
+                return
+            }
+            #expect(m.settings.style == style, "\(saved)")
+            let written = String(decoding: try JSONEncoder().encode(Cue(content: .sms(m))), as: UTF8.self)
+            #expect(written.contains(#""style":"\#(saved)""#), "\(written)")
+        }
     }
 }

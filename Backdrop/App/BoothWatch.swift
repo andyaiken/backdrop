@@ -120,12 +120,15 @@ final class BoothWatch {
         return displays.prefix(Int(count)).allSatisfy { source($0) == console }
     }
 
-    /// Mains, or a battery or UPS with the share of it left.
+    /// Mains, or a battery or UPS with the share of it left. Mains when the
+    /// Mac won't say, so a refusal never raises a false alarm.
     static func power() -> BoothConditions.Power {
-        let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
+        guard let snapshot = IOPSCopyPowerSourcesInfo() else { return .mains }
+        let info = snapshot.takeRetainedValue()
         guard let providing = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String?,
               providing != kIOPSACPowerValue else { return .mains }
-        let sources = IOPSCopyPowerSourcesList(info).takeRetainedValue() as [CFTypeRef]
+        guard let list = IOPSCopyPowerSourcesList(info) else { return .battery(percent: nil) }
+        let sources = list.takeRetainedValue() as [CFTypeRef]
         for source in sources {
             guard let description = IOPSGetPowerSourceDescription(info, source)?.takeUnretainedValue() as? [String: Any],
                   description[kIOPSPowerSourceStateKey] as? String == providing,

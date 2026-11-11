@@ -95,7 +95,7 @@ struct ConversationTests {
         #expect(back.cues == [cue])
         let bare = try JSONDecoder().decode(Cue.self, from: Data(#"{"kind":"conversation","settings":{"style":"x","pauseTicks":9999}}"#.utf8))
         guard case .conversation(let c) = bare.content else { Issue.record("not a conversation"); return }
-        #expect(c.settings.style == .imessage && c.settings.pauseTicks == SettingRange.pauseTicks.upperBound)
+        #expect(c.settings.style == .blueBubbles && c.settings.pauseTicks == SettingRange.pauseTicks.upperBound)
     }
 
     @Test("Its label and contact are the cue's text and sub, it has GO points, and it is in the Add Cue menus")

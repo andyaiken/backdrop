@@ -84,7 +84,7 @@ public struct ConversationSettings: Codable, Equatable, Sendable {
     /// starting.
     public var pauseTicks: Int
 
-    public init(style: SMSStyle = .imessage, dark: Bool = true, showTyping: Bool = true, pauseTicks: Int = 16) {
+    public init(style: SMSStyle = .blueBubbles, dark: Bool = true, showTyping: Bool = true, pauseTicks: Int = 16) {
         self.style = style
         self.dark = dark
         self.showTyping = showTyping

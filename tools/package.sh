@@ -84,9 +84,16 @@ notarise() {
 
 if [[ -n "$identity" ]]; then
     step "Signing with $identity"
-    # Re-signing without --entitlements leaves none, which is what Backdrop
-    # needs: it isn't sandboxed and asks for no permissions.
-    codesign --force --options runtime --timestamp --sign "$identity" "$app"
+    # The Quick Look extensions inside it first, as signing goes from the
+    # inside out. Each keeps its entitlements: macOS only loads a sandboxed
+    # extension.
+    for extension in "$app"/Contents/PlugIns/*.appex; do
+        codesign --force --options runtime --timestamp --preserve-metadata=entitlements --sign "$identity" "$extension"
+    done
+    # Then the app, keeping its entitlements: the sandbox, and what Backdrop
+    # does inside it. Without them it couldn't open a show, and the hardened
+    # runtime would refuse the camera to a live feed cue.
+    codesign --force --options runtime --timestamp --preserve-metadata=entitlements --sign "$identity" "$app"
 
     step "Notarising the app"
     ditto -c -k --keepParent "$app" "$work/submit.zip"

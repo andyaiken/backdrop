@@ -51,27 +51,7 @@ struct MorphPicturesView: View {
             .padding(.vertical, 2)
         }
         .scrollIndicators(.automatic)
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            Self.urls(from: providers) { state.onAdd($0) }
-            return true
-        }
-    }
-
-    /// The files dropped, in the order they came, once all have been read.
-    static func urls(from providers: [NSItemProvider], then: @escaping @MainActor ([URL]) -> Void) {
-        let files = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
-        guard !files.isEmpty else { return }
-        Task { @MainActor in
-            var urls: [URL] = []
-            for provider in files {
-                if let url = await withCheckedContinuation({ (done: CheckedContinuation<URL?, Never>) in
-                    _ = provider.loadObject(ofClass: URL.self) { url, _ in done.resume(returning: url) }
-                }) {
-                    urls.append(url)
-                }
-            }
-            then(urls)
-        }
+        .mediaDrop(accepting: { ShowDocument.accepts($0, for: .morph) }) { [state] urls in state.onAdd(urls) }
     }
 }
 

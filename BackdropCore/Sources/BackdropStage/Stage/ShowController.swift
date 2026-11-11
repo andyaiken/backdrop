@@ -53,6 +53,12 @@ public final class ShowController {
 
     /// - Parameters:
     ///   - renderers: The cue types this build can draw.
+    ///   - nextRenderers: Fresh renderers for the console's preview of the
+    ///     cue standing by, as a renderer paints one cue at a time. Those
+    ///     that draw pictures need the same way to find the show's media as
+    ///     the stage's, or every picture in the preview counts as missing.
+    ///     No video: a second copy would play it twice, so it shows black. A
+    ///     feed has a renderer here, and shares the camera with the stage's.
     ///   - now: The display link's timebase, `CACurrentMediaTime` on stage.
     public init(
         show: Show,
@@ -62,20 +68,18 @@ public final class ShowController {
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(),
             .text: TextRenderer(), .video: VideoRenderer(), .feed: FeedRenderer(), .blank: BlankRenderer(),
         ],
+        nextRenderers: [Cue.Kind: any CueRenderer] = [
+            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
+            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+            .feed: FeedRenderer(),
+        ],
         now: @escaping () -> Double = CACurrentMediaTime
     ) {
         self.show = show
         self.mode = mode
         playhead = Playhead(show: show)
         runner = StageRunner(renderers: renderers)
-        // Fresh renderers of its own, as a renderer paints one cue at a time.
-        // No video: a second copy would play it twice, so it shows black. A
-        // feed has a renderer here, and shares the camera with the stage's.
-        nextRunner = StageRunner(renderers: [
-            .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
-            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
-            .feed: FeedRenderer(),
-        ])
+        nextRunner = StageRunner(renderers: nextRenderers)
         self.now = now
         message = Self.openingMessage(show, warnings: warnings)
         runner.geometry = show.settings.geometry

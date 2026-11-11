@@ -79,7 +79,12 @@ final class ShowDocument: NSDocument {
             return
         }
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
-            if error == nil, saveOperation != .saveToOperation { self?.refreshPackage(from: url) }
+            if error == nil, saveOperation != .saveToOperation {
+                self?.refreshPackage(from: url)
+                // Saved, moved or renamed: where it is now, for reopening,
+                // and what its cues say now, for Spotlight.
+                self?.noteWhereItIs()
+            }
             completionHandler(error)
         }
     }
@@ -117,6 +122,21 @@ final class ShowDocument: NSDocument {
                 .sms: SMSRenderer(),
                 .conversation: ConversationRenderer(),
                 .video: VideoRenderer(media: media),
+                .feed: FeedRenderer(),
+                .text: TextRenderer(),
+                .blank: BlankRenderer(),
+            ],
+            // The console's preview finds pictures where the stage does.
+            nextRenderers: [
+                .title: TitleRenderer(),
+                .anagram: AnagramRenderer(),
+                .image: ImageRenderer(media: media),
+                .morph: MorphRenderer(media: media),
+                .map: MapRenderer(media: media),
+                .layered: LayeredRenderer(media: media),
+                .keypad: KeypadRenderer(),
+                .sms: SMSRenderer(),
+                .conversation: ConversationRenderer(),
                 .feed: FeedRenderer(),
                 .text: TextRenderer(),
                 .blank: BlankRenderer(),
@@ -171,6 +191,15 @@ final class ShowDocument: NSDocument {
             guard let url = self?.fileURL else { return }
             CrashRecords.write(CrashRecord(show: url, cue: cue.id, cueNumber: cue.number, firedAt: Date()))
         }
+        noteWhereItIs()
+    }
+
+    /// A show on disk is remembered, so Backdrop can open it again by itself,
+    /// and goes into Spotlight, or is brought up to date there.
+    private func noteWhereItIs() {
+        guard let url = fileURL else { return }
+        ShowBookmarks.remember(url)
+        ShowSpotlight.index(self)
     }
 
     /// Closing a show is a clean stop, so there is nothing to resume.
@@ -333,19 +362,28 @@ final class ShowDocument: NSDocument {
     }
 
     static func accepts(_ url: URL, for kind: Cue.Kind) -> Bool {
-        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        UTType(filenameExtension: url.pathExtension).map { accepts($0, for: kind) } ?? false
+    }
+
+    /// By type, for what is being dragged before its files exist: Photos
+    /// and Safari say what they will write, and write it only on the drop.
+    static func accepts(_ type: UTType, for kind: Cue.Kind) -> Bool {
         switch kind {
-        case .image, .morph, .map, .layered: return type.conforms(to: .image)
-        case .video: return type.conforms(to: .movie)
-        default: return false
+        case .image, .morph, .map, .layered: type.conforms(to: .image)
+        case .video: type.conforms(to: .movie)
+        default: false
         }
     }
 
     /// The kind of cue a file dropped between cues makes: an image cue for
     /// a picture, a video cue for a clip, and none for anything else.
     static func cueKind(for url: URL) -> Cue.Kind? {
-        if accepts(url, for: .video) { return .video }
-        if accepts(url, for: .image) { return .image }
+        UTType(filenameExtension: url.pathExtension).flatMap(cueKind(for:))
+    }
+
+    static func cueKind(for type: UTType) -> Cue.Kind? {
+        if accepts(type, for: .video) { return .video }
+        if accepts(type, for: .image) { return .image }
         return nil
     }
 

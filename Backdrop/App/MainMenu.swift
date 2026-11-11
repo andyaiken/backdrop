@@ -60,6 +60,11 @@ enum MainMenu {
         let addCue = edit.addItem(withTitle: "Add Cue\u{2026}", action: #selector(AppDelegate.addCue(_:)), keyEquivalent: "n")
         addCue.keyEquivalentModifierMask = [.command, .shift]
         edit.addItem(withTitle: "Duplicate Cue", action: #selector(AppDelegate.duplicateCue(_:)), keyEquivalent: "d")
+        // AppKit fills this with the iPhones and iPads nearby, and what each
+        // can do: take a photo, scan a document, add a sketch.
+        let fromDevice = NSMenuItem(title: "Import from iPhone or iPad", action: nil, keyEquivalent: "")
+        fromDevice.identifier = NSMenuItem.importFromDeviceIdentifier
+        edit.addItem(fromDevice)
         edit.addItem(.separator())
         edit.addItem(withTitle: "Renumber All Cues\u{2026}", action: #selector(AppDelegate.renumberAllCues(_:)), keyEquivalent: "")
 

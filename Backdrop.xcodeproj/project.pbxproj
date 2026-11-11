@@ -7,12 +7,52 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA0000000000000000000103 /* BackdropCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000203 /* BackdropCore */; };
+		AA0000000000000000000104 /* BackdropStage in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000204 /* BackdropStage */; };
+		AA0000000000000000000105 /* BackdropCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000205 /* BackdropCore */; };
+		AA0000000000000000000106 /* BackdropStage in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000206 /* BackdropStage */; };
+		AA0000000000000000000107 /* BackdropThumbnail.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000303 /* BackdropThumbnail.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA0000000000000000000108 /* BackdropPreview.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000304 /* BackdropPreview.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA0000000000000000000101 /* BackdropCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000201 /* BackdropCore */; };
 		AA0000000000000000000102 /* BackdropStage in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000202 /* BackdropStage */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AA0000000000000000000C01 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000702;
+			remoteInfo = BackdropThumbnail;
+		};
+		AA0000000000000000000C02 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000703;
+			remoteInfo = BackdropPreview;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000000000000000000803 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA0000000000000000000107 /* BackdropThumbnail.appex in Embed Foundation Extensions */,
+				AA0000000000000000000108 /* BackdropPreview.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AA0000000000000000000301 /* Backdrop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Backdrop.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000303 /* BackdropThumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BackdropThumbnail.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000304 /* BackdropPreview.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BackdropPreview.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000302 /* BackdropCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = BackdropCore; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -20,6 +60,16 @@
 		AA0000000000000000000401 /* Backdrop */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Backdrop;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000402 /* Thumbnail */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Thumbnail;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000403 /* Preview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Preview;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +84,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000502 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000103 /* BackdropCore in Frameworks */,
+				AA0000000000000000000104 /* BackdropStage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000503 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000000105 /* BackdropCore in Frameworks */,
+				AA0000000000000000000106 /* BackdropStage in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -42,6 +110,7 @@
 			children = (
 				AA0000000000000000000401 /* Backdrop */,
 				AA0000000000000000000302 /* BackdropCore */,
+				AA0000000000000000000603 /* QuickLook */,
 				AA0000000000000000000602 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,8 +119,19 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000301 /* Backdrop.app */,
+				AA0000000000000000000303 /* BackdropThumbnail.appex */,
+				AA0000000000000000000304 /* BackdropPreview.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000603 /* QuickLook */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000402 /* Thumbnail */,
+				AA0000000000000000000403 /* Preview */,
+			);
+			path = QuickLook;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -64,10 +144,13 @@
 				AA0000000000000000000801 /* Sources */,
 				AA0000000000000000000501 /* Frameworks */,
 				AA0000000000000000000802 /* Resources */,
+				AA0000000000000000000803 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000000000000000000D01 /* PBXTargetDependency */,
+				AA0000000000000000000D02 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000401 /* Backdrop */,
@@ -81,6 +164,54 @@
 			productReference = AA0000000000000000000301 /* Backdrop.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000000000000000000702 /* BackdropThumbnail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "BackdropThumbnail" */;
+			buildPhases = (
+				AA0000000000000000000804 /* Sources */,
+				AA0000000000000000000502 /* Frameworks */,
+				AA0000000000000000000805 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000402 /* Thumbnail */,
+			);
+			name = BackdropThumbnail;
+			packageProductDependencies = (
+				AA0000000000000000000203 /* BackdropCore */,
+				AA0000000000000000000204 /* BackdropStage */,
+			);
+			productName = BackdropThumbnail;
+			productReference = AA0000000000000000000303 /* BackdropThumbnail.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AA0000000000000000000703 /* BackdropPreview */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000904 /* Build configuration list for PBXNativeTarget "BackdropPreview" */;
+			buildPhases = (
+				AA0000000000000000000806 /* Sources */,
+				AA0000000000000000000503 /* Frameworks */,
+				AA0000000000000000000807 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000403 /* Preview */,
+			);
+			name = BackdropPreview;
+			packageProductDependencies = (
+				AA0000000000000000000205 /* BackdropCore */,
+				AA0000000000000000000206 /* BackdropStage */,
+			);
+			productName = BackdropPreview;
+			productReference = AA0000000000000000000304 /* BackdropPreview.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -92,6 +223,12 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					AA0000000000000000000701 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					AA0000000000000000000702 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					AA0000000000000000000703 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -114,11 +251,27 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000701 /* Backdrop */,
+				AA0000000000000000000702 /* BackdropThumbnail */,
+				AA0000000000000000000703 /* BackdropPreview */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000000805 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000807 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000802 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -129,6 +282,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000000804 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000806 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA0000000000000000000801 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -138,7 +305,130 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000D01 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000702 /* BackdropThumbnail */;
+			targetProxy = AA0000000000000000000C01 /* PBXContainerItemProxy */;
+		};
+		AA0000000000000000000D02 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000703 /* BackdropPreview */;
+			targetProxy = AA0000000000000000000C02 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		AA0000000000000000000B05 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/BackdropQuickLook.entitlements;
+				INFOPLIST_FILE = "Config/BackdropThumbnail-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Backdrop Thumbnail";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.andyaiken.backdrop.thumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000B06 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/BackdropQuickLook.entitlements;
+				INFOPLIST_FILE = "Config/BackdropThumbnail-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Backdrop Thumbnail";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.andyaiken.backdrop.thumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		AA0000000000000000000B07 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/BackdropQuickLook.entitlements;
+				INFOPLIST_FILE = "Config/BackdropPreview-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Backdrop Preview";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.andyaiken.backdrop.preview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000B08 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/BackdropQuickLook.entitlements;
+				INFOPLIST_FILE = "Config/BackdropPreview-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Backdrop Preview";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.andyaiken.backdrop.preview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 		AA0000000000000000000B01 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -192,10 +482,15 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_PRINTING = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = "Config/Backdrop-Debug.entitlements";
 				INFOPLIST_FILE = "Config/Backdrop-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -223,10 +518,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = 3G846V4G68;
-				ENABLE_APP_SANDBOX = NO;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_RESOURCE_ACCESS_CAMERA = YES;
+				ENABLE_RESOURCE_ACCESS_PRINTING = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/Backdrop.entitlements;
 				INFOPLIST_FILE = "Config/Backdrop-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Backdrop;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -246,6 +545,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AA0000000000000000000903 /* Build configuration list for PBXNativeTarget "BackdropThumbnail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000B05 /* Debug */,
+				AA0000000000000000000B06 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000904 /* Build configuration list for PBXNativeTarget "BackdropPreview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000B07 /* Debug */,
+				AA0000000000000000000B08 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA0000000000000000000901 /* Build configuration list for PBXProject "Backdrop" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -274,6 +591,22 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000000203 /* BackdropCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BackdropCore;
+		};
+		AA0000000000000000000204 /* BackdropStage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BackdropStage;
+		};
+		AA0000000000000000000205 /* BackdropCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BackdropCore;
+		};
+		AA0000000000000000000206 /* BackdropStage */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BackdropStage;
+		};
 		AA0000000000000000000201 /* BackdropCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BackdropCore;

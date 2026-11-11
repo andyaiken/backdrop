@@ -357,4 +357,14 @@ public enum CueSheetPrinting {
         operation.showsProgressPanel = false
         return operation.run()
     }
+
+    /// The cue sheet as PDF data, as Export writes it: what Quick Look
+    /// shows when a show's file is previewed.
+    public static func pdfData(for show: Show, title: String, layout: CueSheet.Layout = .dsm, paper: NSSize = CueSheetView.a4,
+                               printed: Date = Date()) -> Data? {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Cue sheet \(UUID().uuidString).pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        guard exportPDF(for: show, title: title, layout: layout, paper: paper, to: url, printed: printed) else { return nil }
+        return try? Data(contentsOf: url)
+    }
 }

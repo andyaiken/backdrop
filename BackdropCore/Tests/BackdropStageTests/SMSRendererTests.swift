@@ -33,11 +33,33 @@ struct SMSRendererTests {
         fire(SMSSettings())
         _ = runner.tick(at: 10)
         let shot = render(live)
-        shot.save("sms-imessage-received")
+        shot.save("sms-blue-received")
         let c = coverage(shot, screen: (0, 0, 0))
         #expect(c > 0.01 && c < 0.4, "a bubble, not the whole screen: \(c)")
         // Received, so on the left; the right is empty.
         #expect(shot.isBlack(x: 600, y: 180))
+    }
+
+    @Test("Green bubbles are blue bubbles in green: the same shape, the sent bubble green")
+    func greenBubbles() {
+        let rect = CGRect(x: 0, y: 0, width: 300, height: 80)
+        #expect(MessageLook.bubblePath(rect, style: .greenBubbles, sent: true, fontSize: 30)
+                == MessageLook.bubblePath(rect, style: .blueBubbles, sent: true, fontSize: 30), "the same outline, tail and all")
+        fire(SMSSettings(style: .greenBubbles, sent: true))
+        _ = runner.tick(at: 10)
+        let shot = render(live)
+        shot.save("sms-green-sent")
+        #expect(shot.isBlack(x: 40, y: 180))
+        let p = shot.pixel(x: 560, y: 180)
+        #expect(p.g > 150 && p.r < 90 && p.b < 120, "green bubble: \(p)")
+        // Received, it is grey, as a blue bubbles message received is.
+        fire(SMSSettings(style: .greenBubbles))
+        _ = runner.tick(at: 10)
+        let received = render(live).pixel(x: 100, y: 180)
+        fire(SMSSettings(style: .blueBubbles))
+        _ = runner.tick(at: 10)
+        let blue = render(live).pixel(x: 100, y: 180)
+        #expect(received == blue, "\(received) and \(blue)")
     }
 
     @Test("A sent message is on the right, in blue")
@@ -45,7 +67,7 @@ struct SMSRendererTests {
         fire(SMSSettings(sent: true))
         _ = runner.tick(at: 10)
         let shot = render(live)
-        shot.save("sms-imessage-sent")
+        shot.save("sms-blue-sent")
         #expect(shot.isBlack(x: 40, y: 180))
         let p = shot.pixel(x: 560, y: 180)
         #expect(p.b > 200 && p.r < 60, "blue bubble")
@@ -180,32 +202,32 @@ extension ConversationRendererTests {
 }
 
 extension SMSRendererTests {
-    @Test("A WhatsApp message is on its green and wallpaper colours, sent or received")
-    func whatsapp() {
-        fire(SMSSettings(style: .whatsapp, entrance: .cut, dark: true, sent: true))
+    @Test("A green rectangles message is on its green and wallpaper colours, sent or received")
+    func greenRectangles() {
+        fire(SMSSettings(style: .greenRectangles, entrance: .cut, dark: true, sent: true))
         _ = runner.tick(at: 0)
         let sent = render(live)
-        sent.save("sms-whatsapp-sent-dark")
+        sent.save("sms-rectangles-sent-dark")
         let screen = sent.pixel(x: 5, y: 5)
         #expect(screen.r == 0x0B && screen.g == 0x14 && screen.b == 0x1A)
         let bubble = sent.pixel(x: 560, y: 180)
         #expect(bubble.g > bubble.r && bubble.g > bubble.b && bubble.g > 60, "green bubble")
-        fire(SMSSettings(style: .whatsapp, entrance: .cut, dark: false))
+        fire(SMSSettings(style: .greenRectangles, entrance: .cut, dark: false))
         _ = runner.tick(at: 0)
         let light = render(live)
-        light.save("sms-whatsapp-received-light")
+        light.save("sms-rectangles-received-light")
         let wallpaper = light.pixel(x: 600, y: 20)
         #expect(wallpaper.r == 0xEF && wallpaper.g == 0xEA && wallpaper.b == 0xE2)
     }
 }
 
 extension ConversationRendererTests {
-    @Test("A WhatsApp conversation draws, with the tail on the first of a run")
-    func whatsappConversation() {
-        fire(ConversationSettings(style: .whatsapp, dark: true, showTyping: false, pauseTicks: 4), script: "< one\n< two\n> three\n> four")
+    @Test("A green rectangles conversation draws, with the tail on the first of a run")
+    func rectanglesConversation() {
+        fire(ConversationSettings(style: .greenRectangles, dark: true, showTyping: false, pauseTicks: 4), script: "< one\n< two\n> three\n> four")
         _ = runner.tick(at: 12)
         let shot = render(live)
-        shot.save("conversation-6-whatsapp")
+        shot.save("conversation-6-rectangles")
         #expect(lit(shot) > 500)
     }
 }
@@ -234,13 +256,13 @@ extension SMSRendererTests {
         #expect(litBelow(render(live), y: 215) == without)
     }
 
-    @Test("In WhatsApp the status is ticks inside the bubble, blue once read")
-    func whatsappTicks() {
+    @Test("In green rectangles the status is ticks inside, blue once read")
+    func rectanglesTicks() {
         func ticks(_ status: SMSStatus) -> (Bitmap, Int) {
-            fire(SMSSettings(style: .whatsapp, entrance: .cut, sent: true, status: status), text: "On my way")
+            fire(SMSSettings(style: .greenRectangles, entrance: .cut, sent: true, status: status), text: "On my way")
             _ = runner.tick(at: 0)
             let shot = render(live)
-            shot.save("sms-whatsapp-\(status.rawValue)")
+            shot.save("sms-rectangles-\(status.rawValue)")
             var blue = 0
             for y in 0..<shot.height { for x in 300..<shot.width {
                 let p = shot.pixel(x: x, y: y)
@@ -266,7 +288,7 @@ extension SMSRendererTests {
 
     @Test("The status waits for GO, then fades to the next one")
     func statusOnGO() {
-        fire(SMSSettings(style: .whatsapp, entrance: .cut, sent: true, status: .delivered, advances: true), text: "On my way")
+        fire(SMSSettings(style: .greenRectangles, entrance: .cut, sent: true, status: .delivered, advances: true), text: "On my way")
         _ = runner.tick(at: 1)
         #expect(blueTicks(render(live)) == 0)
         _ = runner.tick(at: 30)
@@ -280,7 +302,7 @@ extension SMSRendererTests {
 
     @Test("Put up finished, a status that moves on with GO shows its last")
     func statusSettled() {
-        let cue = Cue(number: "1", content: .sms(SMSContent(text: "On my way", settings: SMSSettings(style: .whatsapp, entrance: .cut, sent: true, status: .sending, advances: true))))
+        let cue = Cue(number: "1", content: .sms(SMSContent(text: "On my way", settings: SMSSettings(style: .greenRectangles, entrance: .cut, sent: true, status: .sending, advances: true))))
         runner.load(cue, show: ShowSettings(), presentation: .settled, at: 0)
         #expect(blueTicks(render(live)) > 10)
     }

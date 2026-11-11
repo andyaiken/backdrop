@@ -4,7 +4,7 @@ import BackdropCore
 /// The cue sheet as it reads: every cue in running order, and under the live
 /// or standby cue the GOs it waits for. In edit mode a cue is dragged by its
 /// grip to anywhere in the sheet, and pictures and clips dragged in from
-/// Finder become cues where they are dropped.
+/// Finder, Photos, Safari or another app become cues where they are dropped.
 final class CueListView: NSScrollView {
     private let document = PanelView()
     private var cueRows: [UUID: CueRowView] = [:]
@@ -47,7 +47,7 @@ final class CueListView: NSScrollView {
         documentView = document
         insertion.isHidden = true
         document.addSubview(insertion)
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes(MediaDrop.pasteboardTypes)
     }
 
     required init?(coder: NSCoder) {
@@ -211,13 +211,13 @@ final class CueListView: NSScrollView {
         case before(Int)
     }
 
-    /// The files being dragged over the list, in edit mode.
-    private var dragged: [URL] = []
+    /// What is being dragged over the list, in edit mode: files from Finder,
+    /// or pictures and clips from Photos, Safari or another app.
+    private var dragged: MediaDrop?
     private var drop: Drop? { didSet { if drop != oldValue { showDrop() } } }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        dragged = shownEditing ? sender.draggingPasteboard.readObjects(
-            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [] : []
+        dragged = shownEditing ? MediaDrop(sender.draggingPasteboard) : nil
         return draggingUpdated(sender)
     }
 
@@ -235,17 +235,22 @@ final class CueListView: NSScrollView {
         endDrop()
     }
 
+    /// Promised files arrive after the drop, so the cues are made then, at
+    /// the place the drop was aimed.
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        let urls = dragged, target = drop
-        endDrop()
-        switch target {
-        case .onto(let id):
-            guard let url = urls.first(where: { ShowDocument.cueKind(for: $0) != nil }) else { return false }
-            onDrop(url, id)
-        case .before(let index):
-            onDropFiles(urls, index)
-        case nil:
+        guard let offer = dragged, let target = drop else {
+            endDrop()
             return false
+        }
+        endDrop()
+        offer.receive { [weak self] urls in
+            guard let self else { return }
+            switch target {
+            case .onto(let id):
+                if let url = urls.first(where: { ShowDocument.cueKind(for: $0) != nil }) { onDrop(url, id) }
+            case .before(let index):
+                if !urls.isEmpty { onDropFiles(urls, index) }
+            }
         }
         return true
     }
@@ -254,7 +259,7 @@ final class CueListView: NSScrollView {
     /// to that cue. Anywhere else, over the top or bottom edge of a row,
     /// between rows or below them, the files make new cues there.
     private func target(at point: NSPoint) -> Drop? {
-        let usable = dragged.filter { ShowDocument.cueKind(for: $0) != nil }
+        let usable = (dragged?.types ?? []).filter { ShowDocument.cueKind(for: $0) != nil }
         guard shownEditing, !usable.isEmpty else { return nil }
         if usable.count == 1, let row = visible.first(where: { $0.frame.contains(point) }),
            row.takesMedia, ShowDocument.accepts(usable[0], for: row.cue.kind) {
@@ -270,7 +275,7 @@ final class CueListView: NSScrollView {
     }
 
     private func endDrop() {
-        dragged = []
+        dragged = nil
         drop = nil
     }
 

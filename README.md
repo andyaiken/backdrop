@@ -7,6 +7,22 @@ Backdrop is a native macOS app for running projections in live theatre. An opera
 - Xcode 27 with Swift 6.4. The code builds under strict concurrency with no warnings, and should stay that way.
 - macOS 26 or later to run it. The booth Mac runs macOS 27.
 
+## The sandbox
+
+Backdrop runs in the App Sandbox, as the Mac App Store requires. Its entitlements, in [Backdrop.entitlements](Config/Backdrop.entitlements), are only for what it does:
+
+- the shows and media the operator opens, saves, drops or chooses
+- bookmarks to those shows, to open them again by itself
+- the camera, for live feed cues
+- incoming network connections, for OSC
+- printing, for the cue sheet
+
+A sandboxed app may only open a file the operator gave it. So Backdrop keeps a bookmark to each show while it is open (see [ShowBookmarks.swift](Backdrop/Document/ShowBookmarks.swift)). It uses those bookmarks to reopen the last show at launch, the show that was running after a crash, and a show chosen in Spotlight. A show last opened before Backdrop was sandboxed has no bookmark, so the first time, it is opened by hand. Settings start fresh in the sandbox, too.
+
+[PrivacyInfo.xcprivacy](Backdrop/PrivacyInfo.xcprivacy) is the privacy manifest the App Store asks for. It says Backdrop collects nothing and tracks no one. It also gives Apple's reason codes for the two kinds of API Apple asks about: user defaults, for Backdrop's own settings (CA92.1), and file dates, for the earlier versions of a show that won't open (3B52.1). Code that starts using another kind Apple lists, such as boot time, disk space or the active keyboards, needs a reason added there, or the upload is refused.
+
+Debug builds use [Backdrop-Debug.entitlements](Config/Backdrop-Debug.entitlements), which adds two things only the debug launch tools need: outgoing network, for the show control check, and writing to `/tmp`, where every tool puts its results. The App Store refuses both, so release builds have neither. The Quick Look extensions have a sandbox of their own, which can only read the show Quick Look asks about.
+
 ## Building and running
 
 Open `Backdrop.xcodeproj` and run the Backdrop scheme (⌘R). From the command line:
@@ -35,7 +51,16 @@ On first launch Backdrop opens a new, empty show. To try it:
 
 Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
 
-In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Pictures and clips dragged from Finder onto the cue list become image and video cues where they are dropped, named for their files and numbered between their neighbours; several at once go in order of their names, as one undo step. A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue instead. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
+In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
+
+Pictures and clips come in from wherever they are:
+
+- **Dragged onto the cue list,** from Finder, Photos, Safari, Mail or another app. They become image and video cues where they are dropped, named for their files and numbered between their neighbours. Several at once go in order of their names, as one undo step. An empty show takes them too, to start the sheet.
+- **Dragged onto a cue.** A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue. So does one dropped on the Inspector's picture well, or on a morph's or layered image's strip.
+- **Edit › Import from iPhone or iPad,** with Continuity Camera. A photo goes into the cue standing by if that is an image cue still waiting for its picture, and otherwise becomes a new image cue after it.
+- **Choose…** in the Inspector, whose panel also reaches the Photos library, under Media in its sidebar.
+
+Photos, Safari and Mail don't hand over a file until the drop, so what they send is written into a temporary folder first. Backdrop copies it into the show when the show is saved, as it does a file from Finder.
 
 The console is in the Mac's own controls and follows its light or dark appearance and its accent colour; the stage keeps a palette of its own, because that is the projected picture rather than the interface.
 
@@ -73,25 +98,62 @@ Then group it with the sound cue, or have the sound cue auto-continue into it.
 
 The first time OSC is turned on, macOS may ask whether Backdrop may accept incoming network connections. Allow it, or nothing from another machine arrives.
 
+### Shortcuts and Spotlight
+
+Backdrop offers three actions to Shortcuts, Spotlight and Siri. A Stream Deck can run them too, through its Shortcuts plugin.
+
+| Action | Does |
+| --- | --- |
+| Open Show | Opens a show, in show mode, ready for GO |
+| Stand By Cue | Stands a cue by. It fires nothing |
+| Blackout | Turns blackout on or off, or whichever it isn't |
+
+- **Stand By Cue and Blackout only act in show mode,** like show control. The status line says what each did, and the shortcut reports the same.
+- **A cue is chosen by its number,** so a shortcut for cue 12 stands by cue 12 of whichever show is open.
+- **There is no GO action.** A shortcut mistyped into Spotlight shouldn't be able to fire a cue mid-show. Space and show control are the ways to fire one.
+
+Shows go into Spotlight when they are opened and saved, under their titles and with the words on their cues. Searching for a line in a show finds the show, and choosing it opens it.
+
+### In Finder
+
+Two Quick Look extensions come inside the app:
+
+- **Thumbnail:** Finder shows a show's file as its first cue that puts anything on stage, finished, as the projector would show it. A show with nothing but blanks, clips and camera feeds keeps the plain document icon.
+- **Preview:** Space on a show's file shows its cue sheet, as Print Cue Sheet prints it for the stage manager. It's on A4, or on US Letter where that is the paper.
+
+macOS finds them once Backdrop has been opened from wherever it is kept. Each is sandboxed, as macOS requires, and can only read the show it is asked about.
+
 ## Repository layout
 
 ```
 Backdrop.xcodeproj           the app project and its shared scheme
 Config/Backdrop-Info.plist   document type and the .backdrop UTI
+Config/Backdrop.entitlements the sandbox, and what Backdrop does in it
+Config/Backdrop-Debug.entitlements
+                             the same, and what the debug launch tools need
+Config/BackdropThumbnail-Info.plist,
+Config/BackdropPreview-Info.plist,
+Config/BackdropQuickLook.entitlements
+                             the Quick Look extensions, and their sandbox
 Backdrop/                    the app: AppKit windows, menus, documents
   App/                       launch, menus, keys, preferences, the crash record,
                              the booth watch
   Document/                  the show document and its display clock
-  Console/                   the console window, its palette and PanelHost
+  Console/                   the console window, its palette, PanelHost, and
+                             pictures and clips dragged in from other apps
     CueList/                 the cue list and its rows: cues, transitions, GOs
     Panels/                  the header, standby panel, key bar, wordmark, warning
     Editing/                 edit mode's Inspector: cue editor and settings forms
   Editors/                   edit mode's own windows: morph points, map route
   Projector/                 the projector window and display handling
   ShowControl/               MIDI Show Control and OSC from other machines
+  Intents/                   Shortcuts' actions, and shows in Spotlight
   Debug/                     the snapshot, document-check and show-control-check
                              launch tools
   AppIcon.icon               the app icon, an Icon Composer document
+QuickLook/                   the Quick Look extensions, each a few lines around
+  Thumbnail/                 BackdropStage: Finder's thumbnail of a show
+  Preview/                   and the cue sheet, for Space on a show's file
 BackdropCore/                a Swift package with two libraries
   Sources/BackdropCore       the show model; no AppKit
     Show/                    shows, cues, settings, the package and the cue sheet
@@ -123,6 +185,7 @@ The code is in three layers:
   - `ProjectorState`, in [ProjectorPlacement.swift](BackdropCore/Sources/BackdropStage/Stage/ProjectorPlacement.swift): where the projector window goes.
   - `BoothConditions`, in [BoothCheck.swift](BackdropCore/Sources/BackdropStage/Stage/BoothCheck.swift): what the console warns of about the Mac itself. [BoothWatch.swift](Backdrop/App/BoothWatch.swift) reads it from macOS.
   - `CueSheetView`: prints the cue sheet.
+  - `ShowThumbnail`: draws a show's first cue, finished, for Finder.
 
   None of it needs a window, so its tests render offscreen.
 - **Backdrop**, the app. Its interface is SwiftUI in the Mac's own controls, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
@@ -170,7 +233,7 @@ The JSON files in `BackdropCore/Tests/BackdropCoreTests/Fixtures/` are known-goo
 
 ## Debug tools
 
-Debug builds accept three launch arguments. All are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits.
+Debug builds accept five launch arguments. All are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits. Each writes into the folder it is given, which must be under `/tmp`: that is the one place outside the sandbox a debug build may write.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
@@ -189,6 +252,18 @@ DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropS
 ```
 
 This turns show control on for a show held in memory. It sends Backdrop real OSC over the network and real MSC from a virtual MIDI source, checks that each command does what it should, and writes PASS or FAIL lines to `result.txt` in the folder. It leaves the settings, the disk and Open Recent alone.
+
+```bash
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropMediaCheck /tmp/media
+```
+
+This offers Backdrop pictures and clips the ways other apps do: files as Finder offers them, files promised as Photos and Safari promise them, and pictures as data, as a browser offers them. It also sends photos as an iPhone does. It checks that each lands where it should, and writes PASS or FAIL lines to `result.txt` in the folder. A promised file can only be received during a real drag, so promises are checked only as far as what they say they will be. Dragging from Photos or Safari itself has to be tried by hand.
+
+```bash
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropIntentsCheck /tmp/intents
+```
+
+This runs the Shortcuts actions and their cue lists against a show held in memory, as Shortcuts would. It puts a show into Spotlight, finds it by a word on one of its cues, and takes it out again. It writes PASS or FAIL lines to `result.txt` in the folder.
 
 ## The app icon
 
@@ -243,7 +318,7 @@ tools/package.sh --notarise
 
 With `--notarise`, the script:
 
-- signs the app with the team's Developer ID (team `3G846V4G68`)
+- signs the app, and the Quick Look extensions inside it, with the team's Developer ID (team `3G846V4G68`)
 - sends it to Apple and waits for the result, which usually takes a few minutes
 - staples the result to the app
 - signs, notarises and staples the disk image in the same way
@@ -260,6 +335,29 @@ Each Mac that notarises needs two things, set up once. Andy's Mac has both.
    ```
 
 The script checks both before it builds anything, and says which one is missing. `BACKDROP_SIGN_IDENTITY` and `BACKDROP_NOTARY_PROFILE` override the certificate and the profile it uses.
+
+## The Mac App Store
+
+On the store Backdrop is **Backdrop: Stage Projections**: plain "Backdrop" is another app's. Under its icon it is still Backdrop.
+
+The App Store signs with different certificates from `tools/package.sh`. The Developer ID certificate is only for copies handed out directly. For the store, the team needs:
+
+- **Apple Distribution**, for the app and its extensions
+- **Mac Installer Distribution**, for the package that is uploaded
+- a Mac App Store provisioning profile for each of `com.andyaiken.backdrop`, `com.andyaiken.backdrop.thumbnail` and `com.andyaiken.backdrop.preview`
+
+Xcode makes all of these when it uploads, if the account is the team's account holder or an admin.
+
+To submit a version:
+
+1. The first time only, create the app in App Store Connect: Apps › + › New App. Choose macOS, the name above, and the bundle ID `com.andyaiken.backdrop`.
+2. Raise `CURRENT_PROJECT_VERSION` in the Backdrop target. The store refuses a build number it has had before. Raise `MARKETING_VERSION` for each new version people will see.
+3. In Xcode, Product › Archive.
+4. In the Organizer, Distribute App › App Store Connect › Upload, and let Xcode manage signing.
+5. In App Store Connect, the first time only:
+   - set the privacy label to Data Not Collected, which matches [PrivacyInfo.xcprivacy](Backdrop/PrivacyInfo.xcprivacy)
+   - add the screenshots and description
+   - write notes for the reviewer: a demo show to open; that the projector opens in a window when there is only one display; that the camera is only for live feed cues; and that the local network is only for OSC, which is off until turned on in Settings
 
 ## Before the first real show
 

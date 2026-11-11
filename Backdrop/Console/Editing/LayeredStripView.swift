@@ -51,10 +51,7 @@ struct LayeredStripView: View {
             .padding(.vertical, 2)
         }
         .scrollIndicators(.automatic)
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            MorphPicturesView.urls(from: providers) { state.onAdd($0) }
-            return true
-        }
+        .mediaDrop(accepting: { ShowDocument.accepts($0, for: .layered) }) { [state] urls in state.onAdd(urls) }
     }
 
     /// The marks that say how a layer behaves, under its name.
