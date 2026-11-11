@@ -414,6 +414,22 @@ public final class ShowController {
         return cue.id
     }
 
+    /// Adds cues made elsewhere, such as from files dropped on the cue list,
+    /// to stand together at `position` in the sheet, before the cue there or
+    /// at the end, each numbered between its neighbours. They are one undo
+    /// step, and the first stands by.
+    @discardableResult
+    public func addCues(_ cues: [Cue], at position: Int, _ actionName: String) -> Bool {
+        guard let first = cues.first else { return false }
+        let position = min(max(position, 0), show.cues.count)
+        guard edit(actionName, { show in
+            for (i, cue) in cues.enumerated() { show.insert(cue, at: position + i) }
+        }) else { return false }
+        playhead.standBy(first.id)
+        changed()
+        return true
+    }
+
     /// Copies a cue to stand just after it, numbered between it and its
     /// neighbour, and stands the copy by.
     @discardableResult

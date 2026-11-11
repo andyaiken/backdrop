@@ -3,7 +3,8 @@ import BackdropCore
 
 /// The cue sheet as it reads: every cue in running order, and under the live
 /// or standby cue the GOs it waits for. In edit mode a cue is dragged by its
-/// grip to anywhere in the sheet.
+/// grip to anywhere in the sheet, and pictures and clips dragged in from
+/// Finder become cues where they are dropped.
 final class CueListView: NSScrollView {
     private let document = PanelView()
     private var cueRows: [UUID: CueRowView] = [:]
@@ -20,7 +21,11 @@ final class CueListView: NSScrollView {
     var onClick: (UUID) -> Void = { _ in }
     /// A sub-cue clicked: its cue, and which GO.
     var onStepClick: (UUID, Int) -> Void = { _, _ in }
+    /// A picture or clip dropped on a cue that takes it, as its file.
     var onDrop: (URL, UUID) -> Void = { _, _ in }
+    /// Files dropped between cues, to be new cues standing before the cue
+    /// at this index, or at the end.
+    var onDropFiles: ([URL], Int) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
     var onDuplicate: (UUID) -> Void = { _ in }
     /// A transition row clicked: the cue it leads into.
@@ -42,6 +47,7 @@ final class CueListView: NSScrollView {
         documentView = document
         insertion.isHidden = true
         document.addSubview(insertion)
+        registerForDraggedTypes([.fileURL])
     }
 
     required init?(coder: NSCoder) {
@@ -74,7 +80,6 @@ final class CueListView: NSScrollView {
                 }
                 let row = CueRowView(cue: cue)
                 row.onClick = { [weak self] in self?.onClick($0) }
-                row.onDrop = { [weak self] url, id in self?.onDrop(url, id) }
                 row.onDelete = { [weak self] in self?.onDelete($0) }
                 row.onGrip = { [weak self] row, event in self?.drag(row, from: event) }
                 row.onMenu = { [weak self] id in self?.menu(forCue: id) }
@@ -92,7 +97,6 @@ final class CueListView: NSScrollView {
             row.isStandby = id == standby && standbyStep == nil
             row.isLive = id == live
             row.hasIssue = issues.contains(id)
-            row.acceptsMedia = editing
             row.isEditing = editing
             // A cue's GOs open out while it is live or standing by, and fold
             // to a count otherwise.
@@ -195,6 +199,93 @@ final class CueListView: NSScrollView {
     /// middle is below the pointer, or at the end.
     private func slot(at y: CGFloat) -> Int {
         visible.firstIndex { y < $0.frame.midY } ?? visible.count
+    }
+
+    // MARK: Dropping files
+
+    /// Where files dragged over the list would go.
+    private enum Drop: Equatable {
+        /// Onto a cue that takes the file, as its picture or clip.
+        case onto(UUID)
+        /// New cues, standing before the cue at this index, or at the end.
+        case before(Int)
+    }
+
+    /// The files being dragged over the list, in edit mode.
+    private var dragged: [URL] = []
+    private var drop: Drop? { didSet { if drop != oldValue { showDrop() } } }
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        dragged = shownEditing ? sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [] : []
+        return draggingUpdated(sender)
+    }
+
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        autoscroll(toward: sender)
+        drop = target(at: document.convert(sender.draggingLocation, from: nil))
+        return drop == nil ? [] : .copy
+    }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        endDrop()
+    }
+
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        endDrop()
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let urls = dragged, target = drop
+        endDrop()
+        switch target {
+        case .onto(let id):
+            guard let url = urls.first(where: { ShowDocument.cueKind(for: $0) != nil }) else { return false }
+            onDrop(url, id)
+        case .before(let index):
+            onDropFiles(urls, index)
+        case nil:
+            return false
+        }
+        return true
+    }
+
+    /// A single picture or clip over the middle of a cue that takes it goes
+    /// to that cue. Anywhere else, over the top or bottom edge of a row,
+    /// between rows or below them, the files make new cues there.
+    private func target(at point: NSPoint) -> Drop? {
+        let usable = dragged.filter { ShowDocument.cueKind(for: $0) != nil }
+        guard shownEditing, !usable.isEmpty else { return nil }
+        if usable.count == 1, let row = visible.first(where: { $0.frame.contains(point) }),
+           row.takesMedia, ShowDocument.accepts(usable[0], for: row.cue.kind) {
+            let edge = min(10, row.frame.height / 4)
+            if point.y > row.frame.minY + edge, point.y < row.frame.maxY - edge { return .onto(row.cue.id) }
+        }
+        return .before(slot(at: point.y))
+    }
+
+    private func showDrop() {
+        for row in cueRows.values { row.isTargeted = drop == .onto(row.cue.id) }
+        if case .before(let index) = drop { showInsertion(at: index) } else { insertion.isHidden = true }
+    }
+
+    private func endDrop() {
+        dragged = []
+        drop = nil
+    }
+
+    /// Near the top or bottom of the list a drag scrolls it, so files can be
+    /// dropped anywhere in a long sheet.
+    private func autoscroll(toward sender: any NSDraggingInfo) {
+        let clip = contentView, shownRect = clip.bounds
+        let y = clip.convert(sender.draggingLocation, from: nil).y
+        let edge: CGFloat = 24
+        let step: CGFloat = y < shownRect.minY + edge ? -10 : y > shownRect.maxY - edge ? 10 : 0
+        guard step != 0 else { return }
+        let top = min(max(shownRect.minY + step, 0), max(document.frame.height - shownRect.height, 0))
+        guard top != shownRect.minY else { return }
+        clip.scroll(to: NSPoint(x: shownRect.minX, y: top))
+        reflectScrolledClipView(clip)
     }
 
     private func showInsertion(at slot: Int) {

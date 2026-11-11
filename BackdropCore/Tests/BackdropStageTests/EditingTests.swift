@@ -30,6 +30,7 @@ struct EditingTests {
     @Test func showModeLocksTheSheet() {
         let c = controller([numbered("1")], mode: .show)
         #expect(c.addCue(.title) == nil)
+        #expect(!c.addCues([numbered("2")], at: 1, "Add Cues"))
         c.deleteCue(c.show.cues[0].id)
         c.setGeometry(Geometry(width: 50))
         #expect(c.show.cues.count == 1 && c.show.settings.geometry == Geometry())
@@ -103,6 +104,20 @@ struct EditingTests {
         c.tick(at: time)
         #expect(!c.runner.isRunning)
         #expect(text(of: try #require(titles.tree(for: live)).title.runs).isEmpty)
+    }
+
+    @Test("Cues added together, as files dropped on the list are, are one undo step")
+    func addingSeveralCuesAtAPlace() {
+        let c = controller([numbered("1"), numbered("2")])
+        let a = Cue(content: .image(ImageContent(text: "LOUVRE", src: "media/louvre.jpg")))
+        let b = Cue(content: .video(VideoContent(text: "RAIN", src: "media/rain.mov")))
+        #expect(c.addCues([a, b], at: 1, "Add Cues"))
+        #expect(c.show.cues.map(\.number) == ["1", "1.5", "1.8", "2"])
+        #expect(c.show.cues[1].id == a.id && c.show.cues[2].id == b.id, "in the order given")
+        #expect(c.playhead.standby == a.id, "the first stands by")
+        #expect(log.edits.count == 1 && log.edits.last?.1 == "Add Cues")
+        #expect(log.edits.last?.0.cues.count == 2, "the sheet before, for undo")
+        #expect(!c.addCues([], at: 0, "Add Cues") && log.edits.count == 1, "nothing to add isn't an edit")
     }
 
     @Test func anEmptySheetGetsCueOne() {

@@ -51,6 +51,21 @@ extension Show {
         return position
     }
 
+    /// Inserts `cue` to stand at `position`, before the cue there or at the
+    /// end, numbered as `insert(_:after:)` numbers it. Before the first cue
+    /// it is numbered between 0 and that cue's number. Returns where it went.
+    @discardableResult
+    public mutating func insert(_ cue: Cue, at position: Int) -> Int {
+        let position = min(max(position, 0), cues.count)
+        guard position == 0, let first = cues.first else {
+            return insert(cue, after: position == 0 ? nil : position - 1)
+        }
+        var cue = cue
+        cue.number = Self.number(between: "0", and: first.number) ?? ""
+        cues.insert(cue, at: 0)
+        return 0
+    }
+
     /// 1, 2, 3... in running order. The book will need rewriting to match.
     public mutating func renumberAll() {
         for i in cues.indices { cues[i].number = String(i + 1) }

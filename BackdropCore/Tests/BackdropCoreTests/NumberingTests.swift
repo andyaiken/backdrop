@@ -65,6 +65,26 @@ struct NumberingTests {
         #expect(show.cues.last?.number == "4")
     }
 
+    @Test("Inserting at a place in the sheet numbers the cue between its neighbours there")
+    func insertingAtAPlace() {
+        var show = sheet(["1", "2"])
+        #expect(show.insert(blank(""), at: 1) == 1)
+        #expect(show.insert(blank(""), at: 2) == 2)
+        #expect(show.cues.map(\.number) == ["1", "1.5", "1.8", "2"], "one after another, each between the last and the next")
+        #expect(show.insert(blank(""), at: 4) == 4)
+        #expect(show.cues.last?.number == "3", "at the end, the next whole number")
+        #expect(show.insert(blank(""), at: 0) == 0)
+        #expect(show.cues.first?.number == "0.5", "before the first, between 0 and its number")
+        #expect(show.insert(blank(""), at: 99) == 6, "past the end is the end")
+
+        var empty = Show()
+        #expect(empty.insert(blank(""), at: 0) == 0)
+        #expect(empty.cues.map(\.number) == ["1"])
+        var lettered = sheet(["P1"])
+        lettered.insert(blank(""), at: 0)
+        #expect(lettered.cues.map(\.number) == ["", "P1"], "before P1, the operator types it")
+    }
+
     @Test func duplicatesAreFound() {
         let show = sheet(["1", "2", " 1", "P3", "p3", "4", ""])
         let duplicates = show.duplicateNumbers

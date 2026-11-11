@@ -13,9 +13,6 @@ final class CueRowView: NSView {
     /// How many GOs the cue waits for while they are folded away: shown as a
     /// count. Zero while its sub-cues are open, or when it has none.
     var foldedGoes = 0 { didSet { if foldedGoes != oldValue { needsDisplay = true } } }
-    /// In edit mode, a picture or clip dropped on an image or video row goes
-    /// to that cue.
-    var acceptsMedia = false
     /// Edit mode: a delete button and a grip to drag the row by, at the right.
     var isEditing = false {
         didSet {
@@ -26,10 +23,11 @@ final class CueRowView: NSView {
     }
     /// Dimmed while it's being dragged to a new place.
     var isLifted = false { didSet { alphaValue = isLifted ? 0.45 : 1 } }
-    private var targeted = false { didSet { needsDisplay = true } }
+    /// A picture or clip dragged over it would go to this cue. The list
+    /// decides, since it takes every drop.
+    var isTargeted = false { didSet { if isTargeted != oldValue { needsDisplay = true } } }
     private var isHovered = false { didSet { if isHovered != oldValue { needsDisplay = true } } }
     var onClick: (UUID) -> Void = { _ in }
-    var onDrop: (URL, UUID) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
     /// The grip was pressed: the list takes the drag from here.
     var onGrip: (CueRowView, NSEvent) -> Void = { _, _ in }
@@ -39,8 +37,12 @@ final class CueRowView: NSView {
         super.init(frame: .zero)
         let continues = cue.continueMode.continues ? "Continues " + cue.continueMode.summary : nil
         toolTip = [cue.line.isEmpty ? nil : cue.line, continues].compactMap { $0 }.joined(separator: "\n").nilIfEmpty
-        if [.image, .morph, .map, .video].contains(cue.kind) { registerForDraggedTypes([.fileURL]) }
     }
+
+    /// Whether a picture or clip dropped on the row goes to the cue, as its
+    /// file. A layered image has a base and layers, so a drop would be
+    /// ambiguous; its strip in the Inspector takes them instead.
+    var takesMedia: Bool { [.image, .morph, .map, .video].contains(cue.kind) }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -135,7 +137,7 @@ final class CueRowView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let box = bounds.insetBy(dx: 0.5, dy: 0.5)
-        if targeted {
+        if isTargeted {
             let path = NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3)
             Desk.raised.setFill()
             path.fill()
@@ -149,7 +151,7 @@ final class CueRowView: NSView {
             path.stroke()
         }
         // Standing by is a tint and a bar; the pointer over a row is a lighter tint.
-        if isStandby || (isHovered && !targeted) {
+        if isStandby || (isHovered && !isTargeted) {
             (isStandby ? Desk.selected : Desk.hover).setFill()
             NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
         }
@@ -234,28 +236,5 @@ final class CueRowView: NSView {
             return
         }
         onClick(cue.id)
-    }
-
-    private func droppedURL(_ info: any NSDraggingInfo) -> URL? {
-        guard acceptsMedia else { return nil }
-        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-        guard let url = urls?.first, ShowDocument.accepts(url, for: cue.kind) else { return nil }
-        return url
-    }
-
-    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        targeted = droppedURL(sender) != nil
-        return targeted ? .copy : []
-    }
-
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
-        targeted = false
-    }
-
-    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        targeted = false
-        guard let url = droppedURL(sender) else { return false }
-        onDrop(url, cue.id)
-        return true
     }
 }

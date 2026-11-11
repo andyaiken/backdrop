@@ -137,6 +137,25 @@ enum DocumentCheck {
         check(document.mediaURL(src) == picture, "before saving, it is read from where it came from")
         check(document.undoManager?.canUndo == true, "edits are undoable")
 
+        // Files dropped between cues: a picture becomes an image cue there,
+        // named for its file, and anything else is left out.
+        let notes = folder.appendingPathComponent("notes.txt")
+        try? "Not a picture".write(to: notes, atomically: true, encoding: .utf8)
+        let count = controller.show.cues.count
+        document.addMediaCues(from: [notes, picture], at: 0)
+        let dropped = controller.show.cues.first
+        check(controller.show.cues.count == count + 1 && dropped?.kind == .image && dropped?.text == "gallery",
+              "a picture dropped on the cue list makes an image cue named for it")
+        check(dropped?.number == "0.5" && controller.playhead.standby == dropped?.id,
+              "dropped above cue 1, it is numbered 0.5 and stands by: \(dropped?.number ?? "")")
+        check(dropped?.mediaPath == "media/gallery 2.png" && document.mediaURL(dropped?.mediaPath ?? "") == picture,
+              "and its picture is copied into the show: \(dropped?.mediaPath ?? "")")
+        check(controller.message?.contains("notes.txt") == true, "a file that isn\u{2019}t a picture or clip is left out, and the console says so")
+        check(ShowDocument.cueKind(for: folder.appendingPathComponent("rain.mov")) == .video
+              && ShowDocument.cueKind(for: folder.appendingPathComponent("rain.mp4")) == .video,
+              "a clip dropped on the cue list makes a video cue")
+        if let dropped { controller.deleteCue(dropped.id) }
+
         let url = folder.appendingPathComponent("Check.backdrop")
         try? FileManager.default.removeItem(at: url)
         document.save(to: url, ofType: ShowDocument.typeName, for: .saveAsOperation) { error in

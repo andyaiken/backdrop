@@ -99,6 +99,9 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     var importMedia: (URL, UUID, ShowDocument.MediaSlot?) -> Void = { _, _, _ in }
     /// Offers an open panel for a cue's picture or clip.
     var chooseMedia: (UUID, ShowDocument.MediaSlot?) -> Void = { _, _ in }
+    /// Makes new cues from files dropped between cues, to stand at this
+    /// place in the sheet.
+    var addMediaCues: ([URL], Int) -> Void = { _, _ in }
     /// Where a file in the show is on disk.
     var mediaURL: (String) -> URL? = { _ in nil } {
         didSet { editor.mediaURL = mediaURL; kindEditor.mediaURL = mediaURL }
@@ -204,6 +207,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             self.refresh()
         }
         cueList.onDrop = { [weak self] url, id in self?.importMedia(url, id, nil) }
+        cueList.onDropFiles = { [weak self] urls, position in self?.filesDropped(urls, at: position) }
         cueList.onDelete = { [weak controller] id in controller?.deleteCue(id) }
         cueList.onDuplicate = { [weak self] id in self?.duplicateCue(id) }
         cueList.onClearTransition = { [weak controller] id in
@@ -593,6 +597,18 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// A new cue stands by, and the Cue tab opens on it to be filled in.
     private func addCueChosen(_ kind: Cue.Kind) {
         guard controller.addCue(kind) != nil else { return }
+        showInspectorTab(0)
+        window?.makeFirstResponder(root)
+    }
+
+    /// Pictures and clips dropped between cues become cues there, and the
+    /// first stands by with the Cue tab open on it, as Add Cue leaves it.
+    private func filesDropped(_ urls: [URL], at position: Int) {
+        let before = controller.show.cues.count
+        addMediaCues(urls, position)
+        guard controller.show.cues.count > before else { return }
+        selectedTransition = nil
+        showingShowSettings = false
         showInspectorTab(0)
         window?.makeFirstResponder(root)
     }

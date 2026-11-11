@@ -129,6 +129,7 @@ final class ShowDocument: NSDocument {
         let console = ConsoleWindowController(controller: controller)
         console.importMedia = { [weak self] url, cue, slot in self?.importMedia(from: url, into: cue, slot: slot) }
         console.chooseMedia = { [weak self] cue, slot in self?.chooseMedia(for: cue, slot: slot) }
+        console.addMediaCues = { [weak self] urls, position in self?.addMediaCues(from: urls, at: position) }
         console.mediaURL = { [weak self] path in self?.mediaURL(path) }
         addWindowController(console)
         self.console = console
@@ -321,6 +322,52 @@ final class ShowDocument: NSDocument {
         case .image, .morph, .map, .layered: return type.conforms(to: .image)
         case .video: return type.conforms(to: .movie)
         default: return false
+        }
+    }
+
+    /// The kind of cue a file dropped between cues makes: an image cue for
+    /// a picture, a video cue for a clip, and none for anything else.
+    static func cueKind(for url: URL) -> Cue.Kind? {
+        if accepts(url, for: .video) { return .video }
+        if accepts(url, for: .image) { return .image }
+        return nil
+    }
+
+    /// Files dropped between cues: each picture becomes an image cue and
+    /// each clip a video cue, named for its file and with the file copied
+    /// into the show. They stand together at `position` in the sheet, in
+    /// order of their names, as one undo step. Anything else is left out.
+    func addMediaCues(from urls: [URL], at position: Int) {
+        guard let controller, controller.mode == .edit else { return }
+        let usable = urls.filter { Self.cueKind(for: $0) != nil }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        let refused = urls.filter { Self.cueKind(for: $0) == nil }
+        var cues: [Cue] = []
+        var failed: [URL] = []
+        if let package = try? ShowPackage.updated(self.package, with: controller.show) {
+            self.package = package
+            for url in usable {
+                guard let path = try? ShowPackage.importMedia(from: url, into: package) else {
+                    failed.append(url)
+                    continue
+                }
+                pendingMedia[path] = url
+                let name = url.deletingPathExtension().lastPathComponent
+                cues.append(Cue(content: Self.cueKind(for: url) == .video
+                    ? .video(VideoContent(text: name, src: path))
+                    : .image(ImageContent(text: name, src: path))))
+            }
+        } else {
+            failed = usable
+        }
+        controller.addCues(cues, at: position, cues.count == 1 ? "Add \(cues[0].kind.heading) Cue" : "Add Cues")
+        func names(_ urls: [URL]) -> String { urls.map(\.lastPathComponent).joined(separator: ", ") }
+        if !failed.isEmpty {
+            controller.say("\(names(failed)) couldn\u{2019}t be copied into the show.")
+        } else if !refused.isEmpty {
+            controller.say(refused.count == 1
+                ? "\(names(refused)) isn\u{2019}t a picture or a clip, so it wasn\u{2019}t added."
+                : "\(names(refused)) aren\u{2019}t pictures or clips, so they weren\u{2019}t added.")
         }
     }
 

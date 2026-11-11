@@ -35,7 +35,7 @@ On first launch Backdrop opens a new, empty show. To try it:
 
 Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
 
-In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
+In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Pictures and clips dragged from Finder onto the cue list become image and video cues where they are dropped, named for their files and numbered between their neighbours; several at once go in order of their names, as one undo step. A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue instead. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
 
 The console is in the Mac's own controls and follows its light or dark appearance and its accent colour; the stage keeps a palette of its own, because that is the projected picture rather than the interface.
 
