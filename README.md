@@ -160,14 +160,14 @@ BackdropCore/                a Swift package with two libraries
     Running/                 the playhead, the clock, continues, transitions
     Decryption/ Anagrams/    one folder per kind of cue that has a model
     Images/ Morphs/ Maps/
-    Keypad/
+    Keypad/ Cascade/
     ShowControl/             OSC and MSC messages, and what they ask of the show
     Support/                 colour, random numbers, rounding, small helpers
   Sources/BackdropStage      the renderers and the show controller; no windows
     Stage/                   the controller, the runner, surfaces and type
     Decryption/ Anagrams/    one folder per kind of cue: its renderer, and
     Images/ Morphs/ Maps/    its layout and drawing where they need their own
-    Keypad/ Text/ Video/
+    Keypad/ Cascade/ Text/ Video/
     Blank/
     Printing/                the printed cue sheet
   Tests/                     tests for both, including recorded outputs
@@ -179,7 +179,7 @@ The code is in three layers:
 - **BackdropCore** is plain logic: the cue and show model, the cipher and decryption reveal, anagram matching, tile schedules, numbering, the playhead, the tick clock, the `.backdrop` package format and the cue sheet rows. Its tests compare its output exactly against recorded outputs.
 - **BackdropStage** paints cues into Core Animation layer trees and runs the show. Its pieces:
   - `SurfaceLayer`: a surface to paint into.
-  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer`, `KeypadRenderer`, `TextRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer` and `KeypadRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a layered image cue brings on each layer at a GO, a morph cue of several pictures waits before each stage, a map cue's dot at each stop, and a keypad cue before each stage of keying.
+  - One renderer per cue kind: `TitleRenderer`, `AnagramRenderer`, `ImageRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer`, `KeypadRenderer`, `CascadeRenderer`, `TextRenderer`, `VideoRenderer` and `BlankRenderer`, all conforming to `CueRenderer`. `MorphRenderer` draws with Metal; it and `MapRenderer` conform to `PaintsBetweenFrames`, so they paint on every display refresh. `AnagramRenderer`, `LayeredRenderer`, `MorphRenderer`, `MapRenderer`, `KeypadRenderer` and `CascadeRenderer` also conform to `WaitsForGO`, because an anagram cue can stop partway for GO, a layered image cue brings on each layer at a GO, a morph cue of several pictures waits before each stage, a map cue's dot at each stop, a keypad cue before each stage of keying, and a cascade cue's message can wait for one. A cascade's rain keeps falling while it waits, so it never tells the runner to rest the clock. `CascadeRenderer` also conforms to `KeepsMoving`: rain with no message never finishes, so put up finished, as in edit mode or after a crash, it carries on falling rather than freezing on one frame.
   - `StageRunner`: drives the renderers on every tick.
   - `ShowController`: the keys, the playhead, modes and editing.
   - `ProjectorState`, in [ProjectorPlacement.swift](BackdropCore/Sources/BackdropStage/Stage/ProjectorPlacement.swift): where the projector window goes.

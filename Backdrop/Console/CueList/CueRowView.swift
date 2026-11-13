@@ -99,6 +99,7 @@ final class CueRowView: NSView {
             c.messages.isEmpty ? "no messages" : "\(c.messages.count) message\(c.messages.count == 1 ? "" : "s")"
         case .sms(let c): [c.sub.isEmpty ? "no sender" : "from \(c.sub)", c.settings.shownStatus == .none ? (c.settings.sent ? "sent" : "") : "sent, \(c.settings.shownStatus.name.lowercased())" + (c.settings.goStatuses.isEmpty ? "" : " \u{2192} read")].filter { !$0.isEmpty }.joined(separator: "   ")
         case .keypad(let c): c.script.isEmpty ? "no keys" : "\(c.boxCount) boxes"
+        case .cascade(let c): c.hasMessage ? (c.settings.messageOnGO ? "message on GO" : "") : "rain only"
         case .text: ""
         case .layered(let c):
             c.layers.isEmpty ? "no layers" : "\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s")"

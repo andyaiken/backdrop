@@ -59,6 +59,15 @@ public protocol PaintsBetweenFrames: CueRenderer {
     func paint(at position: Double) -> Bool
 }
 
+/// A renderer whose cue may never finish moving, as rain with no message
+/// doesn't: put up finished, it is still painted on every frame, rather than
+/// frozen on one.
+@MainActor
+public protocol KeepsMoving: CueRenderer {
+    /// Whether the cue it holds moves on for as long as it is up.
+    var keepsMoving: Bool { get }
+}
+
 /// A renderer that can find something wrong while loading a cue, such as a
 /// missing image. The console shows what it says; the stage carries on.
 @MainActor

@@ -9,7 +9,7 @@ import QuartzCore
 public enum ShowThumbnail {
     /// The cues a thumbnail can show. A blank shows nothing, a video would
     /// need playing, and a feed a camera.
-    static let kinds: Set<Cue.Kind> = [.title, .anagram, .image, .morph, .map, .layered, .keypad, .sms, .conversation, .text]
+    static let kinds: Set<Cue.Kind> = [.title, .anagram, .image, .morph, .map, .layered, .keypad, .sms, .conversation, .cascade, .text]
 
     /// The cue a show's thumbnail shows, if it has one.
     public static func cue(of show: Show) -> Cue? {
@@ -26,7 +26,7 @@ public enum ShowThumbnail {
         let renderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(media: media),
             .morph: MorphRenderer(media: media), .map: MapRenderer(media: media), .layered: LayeredRenderer(media: media),
-            .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .text: TextRenderer(),
+            .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .cascade: CascadeRenderer(), .text: TextRenderer(),
         ]
         let runner = StageRunner(renderers: renderers)
         runner.geometry = show.settings.geometry

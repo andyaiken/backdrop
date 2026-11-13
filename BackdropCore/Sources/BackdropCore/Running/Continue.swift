@@ -45,12 +45,14 @@ public enum ContinueMode: Equatable, Sendable {
 }
 
 extension Cue {
-    /// A looping clip or a live feed: it runs until the next cue replaces it,
-    /// so a continue set for when it finishes would never come.
+    /// A looping clip, a live feed or rain with no message: it runs until
+    /// the next cue replaces it, so a continue set for when it finishes would
+    /// never come.
     public var neverFinishes: Bool {
         switch content {
         case .video(let v): v.atEnd == .loop
         case .feed: true
+        case .cascade(let c): !c.hasMessage
         default: false
         }
     }
@@ -61,6 +63,7 @@ extension Cue {
         switch content {
         case .title, .anagram, .image, .morph, .map, .layered, .keypad, .sms, .conversation: true
         case .video(let v): v.atEnd != .loop
+        case .cascade(let c): c.hasMessage
         case .blank, .text, .feed: false
         }
     }

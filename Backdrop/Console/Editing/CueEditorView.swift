@@ -23,7 +23,7 @@ enum CueField: String, Hashable, CaseIterable {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
         case .video, .feed, .sms: fields += [.text, .sub]
-        case .image, .text, .morph, .map, .layered: fields += [.text]
+        case .image, .text, .morph, .map, .layered, .cascade: fields += [.text]
         case .keypad: fields += [.text, .script]
         case .conversation: fields += [.text, .sub, .script]
         case .blank: break
@@ -513,6 +513,22 @@ struct CueEditorView: View {
                                     } }, onFinished: onFinished)
                 }
                 Text("Typed a stage at a time, a GO for each after the first: digits, * and # press that key, \u{003C} deletes, and each new line starts the next stage. A stage with GOOD or BAD presses OK after its keys, then flashes the boxes green or red. The boxes are as many as the script ever holds at once.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .cascade(let c):
+            Section {
+                textRow("Message", cue, name: "Change Message", multiline: true)
+                FieldRow(label: "Colour") {
+                    ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
+                        if case .cascade(var m) = cue.content { m.colour = rgb; cue.content = .cascade(m) }
+                    })
+                        .labelsHidden()
+                        .focusable(false)
+                }
+                Text(c.hasMessage
+                     ? "The rain clears and leaves the message, a line to a line, in the middle of the picture. Its letters are the size of the rain\u{2019}s glyphs: fewer columns, below, makes them bigger."
+                     : "With no message, the rain falls until the next cue, and never finishes. Type one to have the rain clear and leave it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -31,10 +31,11 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case keypad(KeypadContent)
         case sms(SMSContent)
         case conversation(ConversationContent)
+        case cascade(CascadeContent)
     }
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
-        case title, anagram, image, text, morph, map, video, feed, blank, layered, keypad, sms, conversation
+        case title, anagram, image, text, morph, map, video, feed, blank, layered, keypad, sms, conversation, cascade
 
         /// What the operator calls it, as it reads mid-sentence. The raw
         /// value is what show.json stores, and doesn't change with the name.
@@ -70,6 +71,8 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .keypad: "circle.grid.3x3"
             case .sms: "message"
             case .conversation: "bubble.left.and.bubble.right"
+            // Streaks falling, which is what the glyphs do.
+            case .cascade: "chevron.down.dotted.2"
             }
         }
 
@@ -89,13 +92,61 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .keypad: "Keys numbers into boxes on a numpad, a stage on each GO, then flashes green or red."
             case .sms: "Pops a text message bubble onto the screen, with a from line."
             case .conversation: "A whole text exchange, with typing dots, each message released on GO."
+            case .cascade: "Glyphs rain down the screen in streaks, then clear to leave a message."
+            }
+        }
+
+        /// Other words the Add Cue sheet finds this kind by, which its name
+        /// and blurb don't say: what the effect is called elsewhere, or what
+        /// it's used to show.
+        public var keywords: [String] {
+            switch self {
+            case .title: ["cipher", "code", "cryptex", "decode", "decipher", "hacker", "password", "reveal", "unlock"]
+            case .anagram: ["jumble", "puzzle", "scramble", "shuffle", "unscramble", "word"]
+            case .image: ["backdrop", "background", "graphic", "jpeg", "jpg", "photograph", "png", "scenery", "slide", "still"]
+            case .text: ["caption", "color", "lettering", "signage", "subtitle", "surtitle", "title", "typeface", "typography"]
+            case .morph: ["blend", "crossfade", "fade", "mix", "transform"]
+            case .map: ["directions", "flight", "gps", "journey", "location", "path", "travel", "trip"]
+            case .video: ["animation", "clip", "film", "footage", "movie", "mp4", "playback"]
+            case .feed: ["capture", "relay", "stream", "video", "webcam"]
+            case .blank: ["black", "blackout", "color", "empty", "nothing", "off"]
+            case .layered: ["collage", "composite", "montage", "overlay"]
+            case .keypad: ["access", "code", "combination", "door", "entry", "keycode", "lock", "passcode", "password", "pin", "safe", "security"]
+            case .sms: ["cellphone", "chat", "mobile", "notification", "phone", "sms", "smartphone"]
+            case .conversation: ["cellphone", "chat", "dialogue", "message", "mobile", "phone", "sms", "smartphone", "thread"]
+            case .cascade: ["code", "computer", "digital", "falling", "hacker", "matrix", "terminal"]
             }
         }
 
         /// The kinds a show uses most, which the Add Cue menus list first.
         public static let common: [Kind] = [.image, .text, .video]
         /// The rest, after a separator, by the name they show.
-        public static let others: [Kind] = [.anagram, .blank, .title, .keypad, .layered, .feed, .map, .morph, .conversation, .sms]
+        public static let others: [Kind] = [.anagram, .blank, .cascade, .title, .keypad, .layered, .feed, .map, .morph, .conversation, .sms]
+
+        /// The kinds the Add Cue sheet lists for a search, best first. Every
+        /// word searched for must begin a word of the kind's name, keywords or
+        /// blurb, and a plural finds the singular. A kind the search names
+        /// comes before one it only describes; otherwise the menus' order holds.
+        public static func matching(_ query: String) -> [Kind] {
+            let all = common + others
+            let terms = words(in: query).map { $0.count > 3 && $0.hasSuffix("s") ? String($0.dropLast()) : $0 }
+            guard !terms.isEmpty else { return all }
+            let ranked = all.enumerated().compactMap { index, kind -> (rank: Int, index: Int, kind: Kind)? in
+                // Best first: what it's called (here or in show.json), then its keywords, then its blurb.
+                let tiers = [words(in: kind.name + " " + kind.rawValue), kind.keywords.flatMap(words(in:)), words(in: kind.blurb)]
+                var rank = 0
+                for term in terms {
+                    guard let tier = tiers.firstIndex(where: { $0.contains { $0.hasPrefix(term) } }) else { return nil }
+                    rank += tier
+                }
+                return (rank, index, kind)
+            }
+            return ranked.sorted { ($0.rank, $0.index) < ($1.rank, $1.index) }.map(\.kind)
+        }
+
+        private static func words(in text: String) -> [String] {
+            text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        }
     }
 
     public init(id: UUID = UUID(), number: String = "", line: String = "", continueMode: ContinueMode = .whenCued,
@@ -123,6 +174,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
         case .keypad: .keypad
         case .sms: .sms
         case .conversation: .conversation
+        case .cascade: .cascade
         }
     }
 
@@ -144,6 +196,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .keypad(let c): c.text
             case .sms(let c): c.text
             case .conversation(let c): c.text
+            case .cascade(let c): c.text
             }
         }
         set {
@@ -164,6 +217,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             case .keypad(var c): c.text = newValue; content = .keypad(c)
             case .sms(var c): c.text = newValue; content = .sms(c)
             case .conversation(var c): c.text = newValue; content = .conversation(c)
+            case .cascade(var c): c.text = newValue; content = .cascade(c)
             }
         }
     }
@@ -176,7 +230,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
             switch content {
             case .title(let c): c.sub
             case .anagram(let c): c.anagrams.first?.answer ?? ""
-            case .image, .text, .morph, .map, .layered, .keypad: ""
+            case .image, .text, .morph, .map, .layered, .keypad, .cascade: ""
             case .video(let c): c.sub
             case .feed(let c): c.sub
             case .sms(let c): c.sub
@@ -191,7 +245,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
                 if c.anagrams.isEmpty { c.anagrams = [Anagram()] }
                 c.anagrams[0].answer = newValue
                 content = .anagram(c)
-            case .image, .text, .morph, .map, .layered, .keypad: break
+            case .image, .text, .morph, .map, .layered, .keypad, .cascade: break
             case .video(var c): c.sub = newValue; content = .video(c)
             case .feed(var c): c.sub = newValue; content = .feed(c)
             case .sms(var c): c.sub = newValue; content = .sms(c)
@@ -215,7 +269,7 @@ public struct Cue: Identifiable, Equatable, Sendable {
 // and answer, in place of the cue's own text and answer.
 extension Cue: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, script, src, into, pairs, pictures, route, reference, colour, atEnd, font, align, valign, background
+        case id, num, kind, line, continueMode = "continue", transition, text, sub, key, answer, anagrams, script, src, into, pairs, pictures, route, reference, colour, atEnd, font, align, valign, background, goLine
         case settings, layers
     }
 
@@ -325,6 +379,13 @@ extension Cue: Codable {
                 script: try c.decodeIfPresent(String.self, forKey: .script) ?? "",
                 settings: try c.value(.settings, ConversationSettings())
             ))
+        case .cascade:
+            content = .cascade(CascadeContent(
+                text: text,
+                colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? CascadeContent.green,
+                goLine: try c.decodeIfPresent(String.self, forKey: .goLine) ?? "",
+                settings: try c.value(.settings, CascadeSettings())
+            ))
         case .blank:
             content = .blank(BlankContent(
                 colour: try c.decodeIfPresent(RGB.self, forKey: .colour) ?? .black
@@ -404,6 +465,10 @@ extension Cue: Codable {
         case .conversation(let m):
             try c.encode(m.sub, forKey: .sub)
             try c.encode(m.script, forKey: .script)
+            try c.encode(m.settings, forKey: .settings)
+        case .cascade(let m):
+            try c.encode(m.colour, forKey: .colour)
+            if !m.goLine.isEmpty { try c.encode(m.goLine, forKey: .goLine) }
             try c.encode(m.settings, forKey: .settings)
         case .blank(let b):
             try c.encode(b.colour, forKey: .colour)

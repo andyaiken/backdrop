@@ -166,7 +166,12 @@ enum SettingState {
             if case .title(let c) = cue.content { return (c.settings.histogram, nil) }
             return (true, nil)
         case .hold:
+            // Rain with no message has nothing to hold before.
+            if case .cascade(let c) = cue.content, !c.hasMessage { return (false, nil) }
             return (true, SettingKey.holdLength(holdTicks: timing.holdTicks, clockMs: timing.clockMs))
+        case .advance:
+            if case .cascade(let c) = cue.content, !c.hasMessage { return (false, nil) }
+            return (true, nil)
         case .pause:
             // A step, stage or stop on GO leaves nothing to pause between.
             switch cue.content {
@@ -345,7 +350,7 @@ struct CueSettingsSections: View {
             "A text conversation runs on the standard clock, so it has no clock or hold; its script, look and typing are above. How the stage changes to it is in the transition row above it in the cue list."
         case .sms:
             "A text message is instant to set up, so it has no clock or hold; how it looks and arrives is above. How the stage changes to it is in the transition row above it in the cue list."
-        case .title, .anagram, .image, .morph, .map, .layered, .keypad:
+        case .title, .anagram, .image, .morph, .map, .layered, .keypad, .cascade:
             nil
         }
     }

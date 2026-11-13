@@ -213,7 +213,9 @@ public final class StageRunner {
             (renderer as? WaitsForGO)?.carryOnToEnd()
             _ = renderer.frame(Self.settledFrame)
             lastFrame = Self.settledFrame
-            isRunning = false
+            // Finished is still moving for a cue that never stops, such as
+            // rain: it carries on from here rather than freezing.
+            isRunning = (renderer as? KeepsMoving)?.keepsMoving == true
             settlePending = true
         case .run, .carryOn:
             if let step, let waits = renderer as? WaitsForGO, let clock { waits.goTo(step, at: clock.frame(at: time)) }

@@ -144,21 +144,14 @@ struct HeaderBar: View {
 }
 
 /// The Add Cue sheet: every kind with its icon, name and a line on what it
-/// does, narrowed as the user types. Return picks the first match.
+/// does, narrowed as the user types by name, blurb or keyword ("sms" finds
+/// both text message kinds). Return picks the first match.
 private struct AddCueSheet: View {
     let done: (Cue.Kind?) -> Void
     @State private var query = ""
     @FocusState private var searching: Bool
 
-    private var matches: [Cue.Kind] {
-        let words = query.lowercased().split(separator: " ").map(String.init)
-        let all = Cue.Kind.common + Cue.Kind.others
-        guard !words.isEmpty else { return all }
-        return all.filter { kind in
-            let text = (kind.heading + " " + kind.blurb).lowercased()
-            return words.allSatisfy { text.contains($0) }
-        }
-    }
+    private var matches: [Cue.Kind] { Cue.Kind.matching(query) }
 
     var body: some View {
         VStack(spacing: 0) {

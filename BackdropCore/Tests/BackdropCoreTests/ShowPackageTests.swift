@@ -105,11 +105,12 @@ struct ShowPackageTests {
         #expect(throws: ShowPackage.ReadError.notAPackage) {
             try ShowPackage.read(FileWrapper(directoryWithFileWrappers: [:]))
         }
+        let next = Show.formatVersion + 1
         let newer = FileWrapper(directoryWithFileWrappers: [
             "show.json": FileWrapper(regularFileWithContents: try sample().jsonData()),
-            "version": FileWrapper(regularFileWithContents: Data("12\n".utf8)),
+            "version": FileWrapper(regularFileWithContents: Data("\(next)\n".utf8)),
         ])
-        #expect(throws: ShowPackage.ReadError.newerVersion(12)) { try ShowPackage.read(newer) }
+        #expect(throws: ShowPackage.ReadError.newerVersion(next)) { try ShowPackage.read(newer) }
     }
 
     @Test("Names are de-duplicated without regard to case")

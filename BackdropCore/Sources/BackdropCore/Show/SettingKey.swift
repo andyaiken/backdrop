@@ -24,6 +24,7 @@ public enum SettingValue: Equatable, Sendable {
 public enum SettingKey: String, CaseIterable, Sendable {
     case clock, wave, hold, advance, pause, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, font, morphTime, camera, zoom, trail
     case layerTime, baseLevel, context, strength, length, entrance, push, move
+    case columns, density, streak
     case transition, fade, wipeFrom
 
     /// What a title cue has.
@@ -41,6 +42,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
     ]
     /// What a keypad cue has: the pause is the time between key presses.
     public static let keypad: [SettingKey] = [.clock, .hold, .pause]
+    /// What a cascade cue has: the hold is the rain before the message.
+    public static let cascade: [SettingKey] = [.clock, .hold, .advance, .columns, .density, .streak]
     /// What an image cue has.
     public static let image: [SettingKey] = [.clock, .wave, .hold, .grid, .flip, .order, .reveal]
     /// The transition into a cue, which every cue has.
@@ -56,6 +59,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         ("Morph cues", [.morphTime]),
         ("Map cues", [.camera, .zoom, .trail]),
         ("Layered image cues", [.layerTime, .baseLevel, .context, .strength, .length, .entrance, .push, .move]),
+        ("Cascade cues", [.columns, .density, .streak]),
         ("Transitions", transitions),
     ]
 
@@ -88,6 +92,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .entrance: "Arriving layer"
         case .push: "Frame"
         case .move: "Frame move"
+        case .columns: "Columns"
+        case .density: "Density"
+        case .streak: "Streak"
         case .transition: "Transition"
         case .fade: "Fade"
         case .wipeFrom: "Wipe from"
@@ -100,12 +107,12 @@ public enum SettingKey: String, CaseIterable, Sendable {
         switch self {
         case .clock: "How long each step of the cue takes. Every other timing is counted in these steps, so a shorter clock runs the whole cue faster."
         case .wave: "How many steps apart neighbouring letters, or diagonals of tiles, start to move. None moves them all together."
-        case .hold: "How many steps the cue shows its opening state, the ciphertext, the first phrase or the colour blocks, before it starts to resolve."
+        case .hold: "How many steps the cue shows its opening state, the ciphertext, the first phrase, the colour blocks or the rain, before it starts to resolve."
         case .textScale: "The size of decryption and anagram text, as a share of the largest that fits."
         case .histogram: "The letter-frequency bars and readouts beneath the text."
         case .sceneLine: "The smaller line of text beneath the main one."
         case .bars: "What the histogram counts: single letters, or the commonest pairs of letters, which tell more on a long text."
-        case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. A morph cue of several pictures, a map cue's dot, or a layered image cue's layers move on by themselves, or wait for GO before each stage, stop or step on either GO choice. GO carries the cue on rather than firing the next one."
+        case .advance: "Whether an anagram cue moves on through its working and from one anagram to the next by itself, a pause apart, or waits for GO: before each anagram, or before every step. A morph cue of several pictures, a map cue's dot, or a layered image cue's layers move on by themselves, or wait for GO before each stage, stop or step on either GO choice. A cascade cue's message comes out of the rain by itself, after the hold, or on GO. GO carries the cue on rather than firing the next one."
         case .pause: "How many steps of the clock an anagram rests on each step of its working, and once solved, before the next moves; a morph on each picture before it becomes the next; a map's dot at each stop; and a layered image cue between steps when it moves on by itself; and a keypad between key presses."
         case .morphTime: "How long each picture takes to become the next, after the hold. A stage can have its own, set in the Cue tab."
         case .camera: "Whether a map follows its dot, the dot fixed at the middle and the map sliding under it, or holds still, framed round the whole route, with the dot moving across it."
@@ -125,6 +132,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .entrance: "What the arriving layer does: simply fades up, has its edge drawn as a brass line, settles in slightly magnified, or blooms past its level and back."
         case .push: "What the frame does as layers arrive: holds still on the whole picture, pulls back out and in on each new part, or travels straight from one part to the next. Every move happens on a GO."
         case .move: "How long a move of the frame takes."
+        case .columns: "How many glyphs across the rain is. Fewer makes bigger glyphs, and a bigger message. A line of the message longer than this widens the rain to fit."
+        case .density: "How much of the time each column has a streak falling in it. Low is a light drizzle; high fills the picture."
+        case .streak: "How many glyphs long a streak is, on average, from its bright head to the tip of its fading tail. Each streak is a little longer or shorter than this."
         case .transition: "How the stage changes to this cue: a fade through black, a crossfade from the cue before, a wipe across it from one side or corner, or a snap."
         case .fade: "How long each half of a fade takes: out, then in. A crossfade or a wipe takes this long in all."
         case .wipeFrom: "The side or corner of the stage a wipe starts from. The new cue is uncovered from there, and the old picture wiped off ahead of it."
@@ -179,6 +189,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .entrance: .choice(["Fade", "Outline", "Settle", "Bloom"])
         case .push: .choice(["Holds still", "Pulls back between parts", "Travels part to part"])
         case .move: .slider(SettingRange.cameraMs, step: 100)
+        case .columns: .slider(SettingRange.cascadeColumns, step: 2)
+        case .density: .slider(SettingRange.cascadeDensity, step: 5)
+        case .streak: .slider(SettingRange.cascadeStreak, step: 1)
         case .transition: .choice(["Fade through black", "Snap", "Crossfade", "Wipe"])
         case .wipeFrom: .choice(["Left", "Right", "Top", "Bottom", "Top left", "Top right", "Bottom left", "Bottom right"])
         case .fade: .slider(SettingRange.fadeMs, step: 100)
@@ -198,13 +211,18 @@ public enum SettingKey: String, CaseIterable, Sendable {
         if self == .advance, kind == .layered {
             return [("By itself", .advance(.byItself)), ("Each step on GO", .advance(.eachStep))]
         }
+        if self == .advance, kind == .cascade {
+            return [("By itself", .advance(.byItself)), ("Message on GO", .advance(.eachStep))]
+        }
         guard case .choice(let options) = control else { return [] }
         return options.indices.compactMap { i in choice(at: i).map { (options[i], $0) } }
     }
 
     /// Where a value sits in the menu `choices(for:)` gives.
     public func choiceIndex(of value: SettingValue, for kind: Cue.Kind?) -> Int? {
-        if self == .advance, kind == .morph || kind == .map || kind == .layered, case .advance(let a) = value { return a == .byItself ? 0 : 1 }
+        if self == .advance, kind == .morph || kind == .map || kind == .layered || kind == .cascade, case .advance(let a) = value {
+            return a == .byItself ? 0 : 1
+        }
         return choiceIndex(of: value)
     }
 
@@ -213,6 +231,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         if self == .advance, kind == .morph, case .advance(let a) = value { return a == .byItself ? "by itself" : "each stage on GO" }
         if self == .advance, kind == .map, case .advance(let a) = value { return a == .byItself ? "by itself" : "each stop on GO" }
         if self == .advance, kind == .layered, case .advance(let a) = value { return a == .byItself ? "by itself" : "each step on GO" }
+        if self == .advance, kind == .cascade, case .advance(let a) = value { return a == .byItself ? "by itself" : "message on GO" }
         return format(value)
     }
 
@@ -254,7 +273,9 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case (.layerTime, .number(let n)), (.move, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
         case (.trail, .number(let n)): n == 0 ? "none" : "\(n) s"
         case (.fade, .number(let n)), (.morphTime, .number(let n)): fixedDecimal(Double(n) / 1000, digits: 1) + " s"
-        case (.grid, .number(let n)): "\(n) wide"
+        case (.grid, .number(let n)), (.columns, .number(let n)): "\(n) wide"
+        case (.density, .number(let n)): "\(n)%"
+        case (.streak, .number(let n)): "\(n) glyphs"
         case (_, .flag(let on)): on ? "on" : "off"
         case (_, .order(.diagonal)): "wave"
         case (_, .order(.random)): "random"
@@ -327,6 +348,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .image: Self.image.contains(self)
         case .layered: Self.layered.contains(self)
         case .keypad: Self.keypad.contains(self)
+        case .cascade: Self.cascade.contains(self)
         case .video, .blank, .text, .feed, .sms, .conversation: false
         }
     }
@@ -423,6 +445,17 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .clock: return .number(o.clockMs)
             case .hold: return .number(o.holdTicks)
             case .pause: return .number(o.pauseTicks)
+            default: return nil
+            }
+        case .cascade(let c):
+            let o = c.settings
+            switch self {
+            case .clock: return .number(o.clockMs)
+            case .hold: return .number(o.holdTicks)
+            case .advance: return .advance(o.advance)
+            case .columns: return .number(o.columns)
+            case .density: return .number(o.density)
+            case .streak: return .number(o.streak)
             default: return nil
             }
         case .video, .blank, .text, .feed, .sms, .conversation:
@@ -531,6 +564,17 @@ public enum SettingKey: String, CaseIterable, Sendable {
             default: return
             }
             cue.content = .keypad(c)
+        case .cascade(var c):
+            switch (self, value) {
+            case (.clock, .number(let n)): c.settings.clockMs = n
+            case (.hold, .number(let n)): c.settings.holdTicks = n
+            case (.advance, .advance(let advance)): c.settings.advance = advance
+            case (.columns, .number(let n)): c.settings.columns = n
+            case (.density, .number(let n)): c.settings.density = n
+            case (.streak, .number(let n)): c.settings.streak = n
+            default: return
+            }
+            cue.content = .cascade(c)
         case .video, .blank, .text, .feed, .sms, .conversation:
             return
         }

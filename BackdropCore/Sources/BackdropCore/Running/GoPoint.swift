@@ -4,11 +4,11 @@ import Foundation
 /// working can, or a morph cue before each stage. GO carries the cue on rather than firing the next one.
 public struct GoPoint: Equatable, Sendable {
     public enum Unit: String, Sendable {
-        case anagram, step, stage, stop, layer
+        case anagram, step, stage, stop, layer, message
     }
 
-    /// What it is the GO for: an anagram's turn, a step of one, or a morph's
-    /// stage.
+    /// What it is the GO for: an anagram's turn, a step of one, a morph's
+    /// stage, or a cascade's message.
     public var unit: Unit
     /// What GO brings on: the anagram whose turn it is, the step it moves
     /// to, or the picture a stage becomes.
@@ -36,6 +36,7 @@ extension Cue {
         case .keypad(let c): c.goPoints()
         case .conversation(let c): c.goPoints()
         case .sms(let c): c.settings.goStatuses.map { GoPoint(unit: .step, text: $0.line) }
+        case .cascade(let c): c.goPoints()
         default: []
         }
     }
@@ -76,6 +77,10 @@ extension Cue {
             guard c.settings.eachStepOnGO else { return }
             c.setCuePoint(line, ofStep: point)
             content = .layered(c)
+        case .cascade(var c):
+            guard point == 0, !c.goPoints().isEmpty else { return }
+            c.goLine = line
+            content = .cascade(c)
         default:
             return
         }
@@ -88,6 +93,7 @@ extension Cue {
         case .morph(let c): c.pictures.contains { !$0.cuePoint.isEmpty }
         case .map(let c): c.route.contains { !($0.stop?.cuePoint.isEmpty ?? true) }
         case .layered(let c): c.hasGoCuePoints
+        case .cascade(let c): !c.goLine.isEmpty
         default: false
         }
     }

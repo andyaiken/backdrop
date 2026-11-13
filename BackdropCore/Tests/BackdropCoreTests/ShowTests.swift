@@ -31,6 +31,25 @@ struct CueKindTests {
         #expect(Cue.Kind.others == byName, "the rest read alphabetically: \(Cue.Kind.others.map(\.heading))")
     }
 
+    @Test("The Add Cue search finds kinds by name, keyword or blurb, the ones it names first")
+    func searchFindsByKeyword() {
+        #expect(Cue.Kind.matching("") == Cue.Kind.common + Cue.Kind.others, "no search lists everything in menu order")
+        #expect(Cue.Kind.matching("  ") == Cue.Kind.common + Cue.Kind.others)
+        #expect(Cue.Kind.matching("sms") == [.sms, .conversation], "both text message kinds, the single message first")
+        #expect(Cue.Kind.matching("SMS") == [.sms, .conversation], "whatever the case")
+        #expect(Cue.Kind.matching("blackout") == [.blank])
+        #expect(Cue.Kind.matching("passcode") == [.keypad])
+        #expect(Cue.Kind.matching("video") == [.video, .feed], "the kind it names, then the one it describes")
+        #expect(Cue.Kind.matching("text bubble") == [.sms], "every word must match")
+        #expect(Cue.Kind.matching("cameras") == [.feed], "a plural finds the singular")
+        #expect(Cue.Kind.matching("pin") == [.keypad], "a word matches from its start, so \u{201C}typing\u{201D} isn't found")
+        #expect(Cue.Kind.matching("zzz").isEmpty)
+        for kind in Cue.Kind.allCases {
+            #expect(Cue.Kind.matching(kind.heading).first == kind, "searching for \(kind.heading) puts it first")
+            #expect(kind.keywords.allSatisfy { $0 == $0.lowercased() && !$0.contains(" ") }, "\(kind.heading)'s keywords are lowercase words")
+        }
+    }
+
     @Test("A text cue keeps its words, font, colours and alignments, and nothing else")
     func textCueRoundTrips() throws {
         let cue = Cue(number: "4", content: .text(TextContent(text: "INTERVAL", font: "Georgia", colour: RGB(0xAA, 0xBB, 0xCC), alignment: .right,

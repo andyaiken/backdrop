@@ -98,6 +98,7 @@ public struct CueSheet: Equatable, Sendable {
         case .conversation(let c):
             lines = [c.text, c.sub] + c.messages.map { ($0.side == .sent ? "\u{2192} " : "\u{2190} ") + $0.text }
         case .keypad(let c): lines = [c.text] + c.script.split(whereSeparator: \.isNewline).map(String.init)
+        case .cascade(let c): lines = c.lines
         case .blank(let c): lines = [c.colour.hex.uppercased()]
         }
         return lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -192,6 +193,11 @@ public struct CueSheet: Equatable, Sendable {
             return timing(SettingKey.keypad) + [
                 Setting(name: "Boxes", value: "\(c.boxCount)"),
                 Setting(name: "Keys", value: c.script.isEmpty ? "none" : c.script.split(whereSeparator: \.isNewline).joined(separator: " / ")),
+            ]
+        case .cascade(let c):
+            return timing(SettingKey.cascade) + [
+                Setting(name: "Colour", value: c.colour.hex.uppercased()),
+                Setting(name: "Message", value: c.hasMessage ? (c.settings.messageOnGO ? "on GO" : "after the hold") : "none: rain until the next cue"),
             ]
         case .video(let c):
             let end = switch c.atEnd {

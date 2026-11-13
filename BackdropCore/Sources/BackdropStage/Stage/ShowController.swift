@@ -66,11 +66,11 @@ public final class ShowController {
         mode: Mode = .show,
         renderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(), .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(),
-            .text: TextRenderer(), .video: VideoRenderer(), .feed: FeedRenderer(), .blank: BlankRenderer(),
+            .cascade: CascadeRenderer(), .text: TextRenderer(), .video: VideoRenderer(), .feed: FeedRenderer(), .blank: BlankRenderer(),
         ],
         nextRenderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(), .morph: MorphRenderer(),
-            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
+            .map: MapRenderer(), .layered: LayeredRenderer(), .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .cascade: CascadeRenderer(), .text: TextRenderer(), .blank: BlankRenderer(),
             .feed: FeedRenderer(),
         ],
         now: @escaping () -> Double = CACurrentMediaTime
@@ -449,6 +449,7 @@ public final class ShowController {
         case .keypad: cue = Cue(content: .keypad(KeypadContent()))
         case .sms: cue = Cue(content: .sms(SMSContent()))
         case .conversation: cue = Cue(content: .conversation(ConversationContent()))
+        case .cascade: cue = Cue(content: .cascade(CascadeContent()))
         case .video: cue = Cue(content: .video(VideoContent()))
         case .feed: cue = Cue(content: .feed(FeedContent()))
         case .blank: cue = Cue(content: .blank(BlankContent()))

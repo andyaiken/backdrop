@@ -253,6 +253,32 @@ enum Snapshots {
             }
         }
 
+        // A cascade cue in its tab, with a message on GO, finished in the
+        // preview; then with no message, its rain falling in the preview.
+        console.showInspectorTab(1)
+        if let cascade = controller.addCue(.cascade) {
+            controller.updateCue(cascade, "Change Message") { $0.text = "WAKE UP\nNEO" }
+            controller.setSetting(.advance, to: .advance(.eachStep), for: cascade)
+            controller.setSetting(.columns, to: .number(36), for: cascade)
+            // Run on stage, and given its GO: the rain, then the message.
+            controller.runSelected()
+            var start = CACurrentMediaTime()
+            for i in 1...120 { controller.tick(at: start + Double(i) / 30) }
+            controller.runner.carryOn(at: start + 4)
+            for i in 1...300 { controller.tick(at: start + 4 + Double(i) / 30) }
+            save(console, "console-edit-cascade", to: directory)
+            controller.updateCue(cascade, "Change Message") { $0.text = "" }
+            controller.runSelected()
+            // In real time: rain never settles, so the console's own display
+            // link keeps ticking it too, and a made-up clock would lose.
+            start = CACurrentMediaTime()
+            while CACurrentMediaTime() < start + 4 {
+                controller.tick(at: CACurrentMediaTime())
+                RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 30))
+            }
+            save(console, "console-edit-cascade-rain", to: directory)
+        }
+
         // Backdrop › Settings.
         // Its content is SwiftUI, which sizes itself as it lays out, so it
         // is laid out before it is measured.
