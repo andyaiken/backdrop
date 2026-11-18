@@ -171,7 +171,6 @@ BackdropCore/                a Swift package with two libraries
     Blank/
     Printing/                the printed cue sheet
   Tests/                     tests for both, including recorded outputs
-tools/package.sh             builds the zip and disk image for another Mac
 ```
 
 The code is in three layers:
@@ -288,80 +287,9 @@ DaVinciCode.backdrop/
 
 `show.json` is readable JSON, so a show can be diffed in a repository and repaired by hand if it ever has to be. Backdrop autosaves in place and keeps versions with macOS's version history. If a show won't open, the file is left untouched and Backdrop offers to restore an earlier version. A show saved by a newer version of Backdrop is refused rather than rewritten. See [ShowPackage.swift](BackdropCore/Sources/BackdropCore/Show/ShowPackage.swift).
 
-## Copying to another Mac
-
-```bash
-tools/package.sh
-```
-
-This builds a Release copy from clean and writes two packages to `dist/`. Either one carries the app intact on a thumb drive:
-
-- `Backdrop-<version>.zip`
-- `Backdrop-<version>.dmg`, a disk image that opens to the app beside a link to Applications
-
-The app runs on Intel and Apple silicon Macs with macOS 26 or later. On the other Mac, drag Backdrop into Applications and open it. Keep shows on that Mac's internal disk, not on the stick.
-
-### Gatekeeper
-
-Until it is notarised, the app is signed ad hoc, and Gatekeeper rejects it. That only matters when macOS has marked a copy as coming from the internet:
-
-- **Copied from a thumb drive in Finder:** normally not marked, so it opens straight away.
-- **Downloaded, emailed or AirDropped:** marked, so macOS blocks it until it is allowed with Open Anyway in System Settings › Privacy & Security.
-
-### Notarising
-
-A notarised app opens on any Mac with no warnings, however it got there. To notarise as well as package:
-
-```bash
-tools/package.sh --notarise
-```
-
-With `--notarise`, the script:
-
-- signs the app, and the Quick Look extensions inside it, with the team's Developer ID (team `3G846V4G68`)
-- sends it to Apple and waits for the result, which usually takes a few minutes
-- staples the result to the app
-- signs, notarises and staples the disk image in the same way
-
-If Apple refuses either one, the script prints Apple's log and stops.
-
-Each Mac that notarises needs two things, set up once. Andy's Mac has both.
-
-1. **The Developer ID Application certificate in its keychain.** To add it, sign in to the team in Xcode, go to Settings › Accounts, then Manage Certificates… › + › Developer ID Application. Only the account holder can create one.
-2. **The notarisation password, saved as the `backdrop-notary` profile.** Make an app-specific password at [account.apple.com](https://account.apple.com), under Sign-In and Security › App-Specific Passwords. Then run this command, which asks for the password and keeps it in the keychain:
-
-   ```bash
-   xcrun notarytool store-credentials backdrop-notary --apple-id <your Apple ID> --team-id 3G846V4G68
-   ```
-
-The script checks both before it builds anything, and says which one is missing. `BACKDROP_SIGN_IDENTITY` and `BACKDROP_NOTARY_PROFILE` override the certificate and the profile it uses.
-
-## The Mac App Store
-
-On the store Backdrop is **Backdrop: Stage Projections**: plain "Backdrop" is another app's. Under its icon it is still Backdrop.
-
-The App Store signs with different certificates from `tools/package.sh`. The Developer ID certificate is only for copies handed out directly. For the store, the team needs:
-
-- **Apple Distribution**, for the app and its extensions
-- **Mac Installer Distribution**, for the package that is uploaded
-- a Mac App Store provisioning profile for each of `com.andyaiken.backdrop`, `com.andyaiken.backdrop.thumbnail` and `com.andyaiken.backdrop.preview`
-
-Xcode makes all of these when it uploads, if the account is the team's account holder or an admin.
-
-To submit a version:
-
-1. The first time only, create the app in App Store Connect: Apps › + › New App. Choose macOS, the name above, and the bundle ID `com.andyaiken.backdrop`.
-2. Raise `CURRENT_PROJECT_VERSION` in the Backdrop target. The store refuses a build number it has had before. Raise `MARKETING_VERSION` for each new version people will see.
-3. In Xcode, Product › Archive.
-4. In the Organizer, Distribute App › App Store Connect › Upload, and let Xcode manage signing.
-5. In App Store Connect, the first time only:
-   - set the privacy label to Data Not Collected, which matches [PrivacyInfo.xcprivacy](Backdrop/PrivacyInfo.xcprivacy)
-   - add the screenshots and description
-   - write notes for the reviewer: a demo show to open; that the projector opens in a window when there is only one display; that the camera is only for live feed cues; and that the local network is only for OSC, which is off until turned on in Settings
-
 ## Before the first real show
 
-- Package the copy for the booth Mac with `tools/package.sh --notarise`.
+- Install Backdrop on the booth Mac from the Mac App Store.
 - Run the booth checklist: a Focus mode is on, the projector's wallpaper is black and automatic updates are off. macOS doesn't let Backdrop check these itself.
 
 Backdrop checks the rest of the booth itself, and says so above the preview for as long as anything is wrong. Two warnings come up in either mode, because they decide where the picture goes:

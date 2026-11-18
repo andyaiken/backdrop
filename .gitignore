@@ -5,6 +5,3 @@
 .swiftpm/
 DerivedData/
 xcuserdata/
-
-# Packaged builds, from tools/package.sh
-dist/
