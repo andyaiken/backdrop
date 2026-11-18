@@ -214,14 +214,51 @@ struct AnagramRendererTests {
         let top = layout.centre(of: .init(line: 0, column: 0), track: 0, step: 0)
         let bottom = layout.centre(of: .init(line: 0, column: 0), track: 1, step: 0)
         #expect(top.y > bottom.y, "the first above the second")
-        #expect(abs((top.y + bottom.y) / 2 - 540) < 1e-6, "the stack centred on the stage")
-        #expect(abs(top.y - bottom.y - layout.lineHeight * (1 + AnagramLayout.gap)) < 1e-6)
+        let half = layout.lineHeight / 2
+        let below = bottom.y - half, between = top.y - bottom.y - 2 * half, above = 1080 - top.y - half
+        #expect(abs(below - between) < 1e-6 && abs(above - between) < 1e-6, "as much room above and below them as between")
 
         // Its first letter goes within a couple of frames, as the dice fall.
         _ = renderer.frame(second.offset + (second.plan.pieces.map(\.start).min() ?? 0))
         #expect(pieces(1).contains { $0.animation(forKey: "travel") != nil }, "LISTEN sets off")
         #expect(!renderer.frame(plan.parts[0] - 1) && renderer.frame(plan.parts[0]))
         render(live).save("anagram-several")
+    }
+
+    @Test("However many anagrams share the stage, every letter's journey stays on it, clear of the anagrams above and below")
+    func journeysStayOnStage() throws {
+        let pairs = [("DORMITORY", "DIRTY ROOM"), ("ASTRONOMER", "MOON STARER"), ("THE EYES", "THEY SEE"), ("RATS", "STAR")]
+        for count in 1...pairs.count {
+            renderer.prepare(cue(pairs.prefix(count).map { Anagram(text: $0.0, answer: $0.1) }), show: ShowSettings())
+            _ = renderer.frame(0)
+            let plan = try #require(renderer.plan), layout = try currentLayout()
+            // As far as a letter's glyph reaches above or below its middle.
+            let ink = (CTFontGetAscent(layout.font) + CTFontGetDescent(layout.font)) / 2
+            // How high and low each anagram's letters go: standing in each of
+            // its steps, and on every journey between them.
+            var standing: [ClosedRange<CGFloat>] = [], travelling: [ClosedRange<CGFloat>] = []
+            for (t, track) in plan.tracks.enumerated() {
+                var rows: [CGFloat] = [], journeys: [CGFloat] = []
+                for (k, move) in track.moves.enumerated() {
+                    let shown = AnagramRenderer.Shown(track: t, move: k, plan: move.plan, from: k, to: k + 1, warms: false, start: 0)
+                    for piece in move.plan.pieces {
+                        rows += [layout.start(of: piece, in: shown).y, layout.end(of: piece, in: shown).y]
+                        guard let from = piece.from, let to = piece.to else { continue }
+                        let arc = layout.arc(from: from, to: to, in: shown)
+                        journeys += (0...100).map { arc.point(at: Double($0) / 100).y }
+                    }
+                }
+                standing.append(rows.min()! - ink...rows.max()! + ink)
+                travelling.append(journeys.min()! - ink...journeys.max()! + ink)
+            }
+            for t in plan.tracks.indices {
+                let label = Comment(rawValue: "anagram \(t + 1) of \(count)")
+                #expect(travelling[t].lowerBound >= 0 && travelling[t].upperBound <= 1080, label)
+                // Up the stage is up in Core Animation's coordinates.
+                if t > 0 { #expect(travelling[t].upperBound < standing[t - 1].lowerBound, label) }
+                if t < count - 1 { #expect(travelling[t].lowerBound > standing[t + 1].upperBound, label) }
+            }
+        }
     }
 
     // MARK: Working

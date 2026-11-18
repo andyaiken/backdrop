@@ -320,8 +320,16 @@ struct CueEditorView: View {
                 }
             }
         case .anagram(let c):
-            Section("Anagrams") {
+            Section {
                 AnagramsEditor(focus: $focus, order: fieldOrder, anagrams: c.anagrams, edit: edit, onFinished: onFinished)
+            } header: {
+                HStack(spacing: 6) {
+                    Text("Anagrams")
+                    // How to write them, on hover, rather than as text in the form.
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .help(Anagram.formatExplanation)
+                }
             }
         case .image(let c):
             Section {
