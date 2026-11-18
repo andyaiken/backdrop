@@ -169,7 +169,7 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             status.stringValue = morph.isAvailable ? "" : "This Mac can\u{2019}t draw morphs: it has no Metal graphics."
         } else {
             images = nil
-            status.stringValue = "The morph needs two pictures at least. Add them in the Cue tab."
+            status.stringValue = "The morph needs two pictures at least. Add them in the Inspector."
         }
     }
 

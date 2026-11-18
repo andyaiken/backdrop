@@ -31,7 +31,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let warning = WarningBox()
     private let previewHeading = Desk.label("On screen", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
-    /// The Inspector's outline, around its tabs and forms, so it reads as a
+    /// The Inspector's outline, around its forms, so it reads as a
     /// place even with nothing in it. It has no fill: the desk shows through.
     private let inspectorFrame = PanelView(fill: Desk.line)
     /// Edit mode: runs the selected cue on the stage again.
@@ -43,26 +43,19 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     }()
     private let nextHeading = Desk.label("Up next", font: Desk.sans(12.5), colour: Desk.dim)
     private let nextFrame = PanelView(fill: .black, border: Desk.line, radius: 2)
-    private(set) var editor = CueEditorPanel(scope: .common)
-    private(set) var kindEditor = CueEditorPanel(scope: .kind)
-    private let cueTransitions = CueSettingsPanel(scope: .transitions)
+    private(set) var editor = CueEditorPanel()
+    private let cueTransitions = CueSettingsPanel()
     private let showSettingsPanel = ShowSettingsPanel()
     /// The Inspector shows the Show Settings rather than a cue. Choosing a cue
     /// or a transition in the list switches it off.
     private var showingShowSettings = false
-    /// The Inspector's tabs: everything a cue has in common, then what this
-    /// kind of cue runs with, named for the kind.
-    private let tabs = NSSegmentedControl(labels: ["Cue", "Settings"],
-                                          trackingMode: .selectOne, target: nil, action: nil)
-    private var inspectorPanels: [NSView] { [editor, kindEditor] }
     /// The cue whose transition in is selected in the cue list, if one is.
-    /// The Inspector then shows that transition alone, without the tabs.
+    /// The Inspector then shows that transition alone, in place of the cue.
     private var selectedTransition: UUID?
     /// The cue that stood by at the last refresh: a different one deselects the transition.
     private var lastStandby: UUID?
-    /// What the Inspector says with no cue standing by. It takes the tabs'
-    /// place rather than sitting under them: with nothing to inspect, tabs
-    /// onto empty forms are only noise.
+    /// What the Inspector says with no cue standing by, in place of an
+    /// empty form.
     private let inspectorEmpty: NSTextField = {
         let label = Desk.label("No cue selected.",
                                font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
@@ -104,7 +97,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     var addMediaCues: ([URL], Int) -> Void = { _, _ in }
     /// Where a file in the show is on disk.
     var mediaURL: (String) -> URL? = { _ in nil } {
-        didSet { editor.mediaURL = mediaURL; kindEditor.mediaURL = mediaURL }
+        didSet { editor.mediaURL = mediaURL }
     }
     /// The morph points window, while one is open.
     private var points: MorphPointsWindowController?
@@ -219,18 +212,16 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         cueList.onMoveCue = { [weak controller] id, row in controller?.moveCue(id, before: row) }
         cueList.onRenumberAll = { [weak self] in self?.confirmRenumber() }
-        for panel in [editor, kindEditor] {
-            panel.controller = controller
-            panel.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
-            panel.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
-            panel.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
-            panel.editRoute = { [weak self] id in self?.showRoute(for: id) }
-            panel.finishedEditing = { [weak self] in
-                guard let self else { return }
-                self.window?.makeFirstResponder(self.root)
-            }
+        editor.controller = controller
+        editor.importMedia = { [weak self] url, id, slot in self?.importMedia(url, id, slot) }
+        editor.chooseMedia = { [weak self] id, slot in self?.chooseMedia(id, slot) }
+        editor.editPoints = { [weak self] id, stage in self?.showPoints(for: id, stage: stage) }
+        editor.editRoute = { [weak self] id in self?.showRoute(for: id) }
+        editor.finishedEditing = { [weak self] in
+            guard let self else { return }
+            self.window?.makeFirstResponder(self.root)
         }
-        kindEditor.onSetting = { [weak controller] key, value, continuous in
+        editor.onSetting = { [weak controller] key, value, continuous in
             guard let controller, let id = controller.standingByCue?.id else { return }
             controller.setSetting(key, to: value, for: id, coalescing: continuous)
         }
@@ -255,13 +246,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         inspectorDivider.onFinished = { [weak self] in
             if let self { UserDefaults.standard.set(Double(self.inspectorWidth.clamped(to: Self.inspectorRange)), forKey: "ConsoleInspectorWidth") }
         }
-        tabs.selectedSegment = 0
-        tabs.refusesFirstResponder = true
-        tabs.target = self
-        tabs.action = #selector(tabChosen)
-
         for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, nextHeading, nextFrame, runAgainButton, wordmark, inspectorFrame, editor, kindEditor, cueTransitions, showSettingsPanel, tabs, inspectorEmpty,
+                     warning, previewHeading, previewFrame, nextHeading, nextFrame, runAgainButton, wordmark, inspectorFrame, editor, cueTransitions, showSettingsPanel, inspectorEmpty,
                      keybar, cueListEmpty, listDivider, inspectorDivider] as [NSView] {
             root.addSubview(view)
         }
@@ -385,16 +371,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
                        selectedTransition: selectedTransition)
         let editing = controller.mode == .edit ? controller.standingByCue : nil
         editor.update(cue: editing, goPoint: controller.standingByGoPoint)
-        kindEditor.update(cue: editing, goPoint: controller.standingByGoPoint)
         cueTransitions.update(cue: selectedTransition.flatMap { show[$0] })
-        // The second tab is named for the kind of cue standing by, so what
-        // it holds is plain before it is opened.
-        let kindTab = editing.map(\.kind.heading) ?? "Settings"
-        if tabs.label(forSegment: 1) != kindTab {
-            tabs.setLabel(kindTab, forSegment: 1)
-            tabs.sizeToFit()
-            root.needsLayout = true
-        }
 
         status.stringValue = controller.message ?? ""
         warning.messages = booth().warnings(mode: controller.mode, projector: projector)
@@ -449,19 +426,17 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let headingHeight: CGFloat = 27, gap = Self.columnGap
         let editing = controller.mode == .edit
         // In edit mode with nothing standing by there is no cue to inspect,
-        // so the message stands alone where the tabs would be.
+        // so the message stands alone where the form would be.
         let settingsOn = editing && showingShowSettings
         let transitionSelected = editing && !settingsOn && selectedTransition != nil
         let inspecting = editing && !settingsOn && !transitionSelected && controller.standingByCue != nil
         showSettingsPanel.isHidden = !settingsOn
-        tabs.isHidden = !inspecting
-        for (i, panel) in inspectorPanels.enumerated() { panel.isHidden = !inspecting || i != tabs.selectedSegment }
+        editor.isHidden = !inspecting
         cueTransitions.isHidden = !transitionSelected
         inspectorEmpty.isHidden = !editing || settingsOn || inspecting || transitionSelected
         // The Inspector is always there: in edit mode it edits the cue
         // standing by, and in show mode it says what stands by and what is on screen.
         standby.isHidden = editing
-        let tabsSize = tabs.fittingSize
 
         listDivider.frame = NSRect(x: leftWidth - 4, y: top, width: 9, height: max(0, bottom - top))
         // The Inspector is a column of its own, full height, so a long
@@ -480,10 +455,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         if editing {
             let inner = column.insetBy(dx: Self.inspectorPadding, dy: Self.inspectorPadding)
             centre(inspectorEmpty, in: inner)
-            tabs.frame = NSRect(x: inner.minX, y: inner.minY, width: tabsSize.width, height: tabsSize.height)
-            let panelTop = inner.minY + tabsSize.height + 10
-            let panelFrame = NSRect(x: inner.minX, y: panelTop, width: inner.width, height: max(0, inner.maxY - panelTop))
-            for panel in inspectorPanels { panel.frame = panelFrame }
+            editor.frame = inner
             cueTransitions.frame = inner
             showSettingsPanel.frame = inner
         } else {
@@ -598,22 +570,20 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         window?.makeFirstResponder(root)
     }
 
-    /// A new cue stands by, and the Cue tab opens on it to be filled in.
+    /// A new cue stands by, and the Inspector opens on it to be filled in.
     private func addCueChosen(_ kind: Cue.Kind) {
         guard controller.addCue(kind) != nil else { return }
-        showInspectorTab(0)
         window?.makeFirstResponder(root)
     }
 
     /// Pictures and clips dropped between cues become cues there, and the
-    /// first stands by with the Cue tab open on it, as Add Cue leaves it.
+    /// first stands by in the Inspector, as Add Cue leaves it.
     private func filesDropped(_ urls: [URL], at position: Int) {
         let before = controller.show.cues.count
         addMediaCues(urls, position)
         guard controller.show.cues.count > before else { return }
         selectedTransition = nil
         showingShowSettings = false
-        showInspectorTab(0)
         window?.makeFirstResponder(root)
     }
 
@@ -621,11 +591,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         setMode(editing)
         window?.makeFirstResponder(root)
         refresh()
-    }
-
-    @objc private func tabChosen() {
-        root.needsLayout = true
-        window?.makeFirstResponder(root)
     }
 
     /// Show Settings in the Inspector, or back to the cue standing by.
@@ -645,7 +610,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     /// Copies a cue and stands the copy by, as adding one does.
     func duplicateCue(_ id: UUID) {
         guard controller.mode == .edit, controller.duplicateCue(id) != nil else { return }
-        showInspectorTab(0)
         window?.makeFirstResponder(root)
     }
 
@@ -658,12 +622,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     func showAddCue() {
         guard controller.mode == .edit else { return }
         header.state.showingAddCue = true
-    }
-
-    /// For the snapshot tool: shows one of the Inspector's tabs.
-    func showInspectorTab(_ index: Int) {
-        tabs.selectedSegment = index
-        root.needsLayout = true
     }
 
     /// The Go-to field: Return stands the cue by, Escape gives up. Either way

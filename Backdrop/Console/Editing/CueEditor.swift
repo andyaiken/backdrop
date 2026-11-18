@@ -28,17 +28,15 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     /// Return or Escape in a field gives the keyboard back to the show keys.
     var finishedEditing: () -> Void = {}
 
-    /// Set on the kind's tab: a change to one of the cue's settings.
+    /// A change to one of the cue's settings.
     var onSetting: (SettingKey, SettingValue, Bool) -> Void = { _, _, _ in }
-    private let scope: CueField.Scope
 
     private(set) var cue: Cue?
     private let morphPictures = MorphPicturesState()
     private let layeredStrip = LayeredStripState()
 
-    init(scope: CueField.Scope) {
-        self.scope = scope
-        super.init(rootView: CueEditorView(scope: scope, cue: nil, goPoint: nil,
+    init() {
+        super.init(rootView: CueEditorView(cue: nil, goPoint: nil,
                                            morphPictures: MorphPicturesState(), layeredStrip: LayeredStripState(), edit: { _, _ in }, typing: { _, _ in },
                                            onFinished: {},
                                            onChooseMedia: {}, onRemoveMedia: {}, onDropMedia: { _ in }, onEditRoute: {},
@@ -67,7 +65,6 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
             if layeredStrip.cueLayerMs != layerMs { layeredStrip.cueLayerMs = layerMs }
         }
         rootView = CueEditorView(
-            scope: scope,
             cue: cue,
             goPoint: point,
             morphPictures: morphPictures,
@@ -182,7 +179,7 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
     /// form's own order rather than a walk of it.
     var tabStops: [String] {
         guard let cue else { return [] }
-        return CueField.order(for: cue.kind, continues: cue.continueMode.continues, scope: scope).map(\.rawValue)
+        return CueField.order(for: cue.kind, continues: cue.continueMode.continues).map(\.rawValue)
     }
     #endif
 }

@@ -84,31 +84,31 @@ enum Snapshots {
         save(console, "console-edit", to: directory)
         controller.standBy(controller.show.cues[5].id)
         save(console, "console-edit-image", to: directory)
+        // The Inspector's other forms: the image cue's transition in, then
+        // the Show Settings.
+        console.cueList.onTransitionClick(controller.show.cues[5].id)
+        save(console, "console-edit-transition", to: directory)
+        console.showShowSettings()
+        save(console, "console-show-settings", to: directory)
+        console.cueList.onClick(controller.show.cues[5].id)
 
-        // The settings tabs: the image cue with two values of its own, then
-        // the show's settings.
+        // The image cue with settings of its own.
         let image = controller.show.cues[5].id
         controller.setSetting(.grid, to: .number(20), for: image)
         controller.setSetting(.order, to: .order(.spiral), for: image)
         controller.setSetting(.reveal, to: .reveal(.sharpen), for: image)
-        console.showInspectorTab(1)
         save(console, "console-cue-settings", to: directory)
         // Wide enough that the inspector stands beside the preview.
         console.window?.setFrame(NSRect(x: 0, y: 0, width: 1700, height: 980), display: false)
-        console.showInspectorTab(1)
-        save(console, "console-wide-cue-settings", to: directory)
-        console.showInspectorTab(0)
         save(console, "console-wide-cue", to: directory)
         console.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 860), display: false)
         // A decryption cue whose letters are on dials.
         let decryption = controller.show.cues[4].id
         controller.setSetting(.letters, to: .letters(.dials), for: decryption)
         controller.standBy(decryption)
-        console.showInspectorTab(1)
         save(console, "console-cue-settings-decryption", to: directory)
 
         // A cue just added: every field empty, and flagged.
-        console.showInspectorTab(0)
         controller.addCue(.title)
         save(console, "console-new-cue", to: directory)
 
@@ -123,20 +123,18 @@ enum Snapshots {
             save(console, "console-edit-anagram", to: directory)
             // Its settings, set in a hand.
             controller.setSetting(.font, to: .font("Noteworthy"), for: anagram)
-            console.showInspectorTab(1)
             save(console, "console-cue-settings-anagram", to: directory)
 
             // In show mode, each anagram on GO: the first solved, through
             // its working, and the second standing by in the cue's place.
             controller.setSetting(.advance, to: .advance(.eachAnagram), for: anagram)
             controller.setSetting(.font, to: .font(""), for: anagram)
-            // Each GO with its own cue point, the second typed in the Cue tab
+            // Each GO with its own cue point, the second typed in the Inspector
             // with that GO standing by.
             controller.updateCue(anagram, "Change GO Cue Point") { cue in
                 cue.setCuePoint("SOPHIE: \u{201C}It\u{2019}s an anagram.\u{201D}", ofGoPoint: 0)
                 cue.setCuePoint("LANGDON: \u{201C}The Mona Lisa\u{2026}\u{201D}", ofGoPoint: 1)
             }
-            console.showInspectorTab(0)
             controller.standBy(anagram, step: 1)
             save(console, "console-edit-go-cue-point", to: directory)
             controller.enterShowMode()
@@ -151,9 +149,8 @@ enum Snapshots {
         }
 
         // A morph through three drawn faces, five points matched into the
-        // second, in the Cue tab and in its points window.
+        // second, in the Inspector and in its points window.
         controller.enterEditMode()
-        console.showInspectorTab(0)
         if let morph = controller.addCue(.morph) {
             controller.updateCue(morph, "Change Label") { $0.text = "LEONARDO" }
             let faces = [(name: "first.png", wide: 0.30, eyes: 0.40), (name: "second.png", wide: 0.36, eyes: 0.46),
@@ -253,9 +250,8 @@ enum Snapshots {
             }
         }
 
-        // A cascade cue in its tab, with a message on GO, finished in the
+        // A cascade cue in the Inspector, with a message on GO, finished in the
         // preview; then with no message, its rain falling in the preview.
-        console.showInspectorTab(1)
         if let cascade = controller.addCue(.cascade) {
             controller.updateCue(cascade, "Change Message") { $0.text = "WAKE UP\nNEO" }
             controller.setSetting(.advance, to: .advance(.eachStep), for: cascade)

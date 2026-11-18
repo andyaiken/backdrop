@@ -8,17 +8,10 @@ import SwiftUI
 enum CueField: String, Hashable, CaseIterable {
     case number, line, seconds, text, sub, key, anagrams, script
 
-    /// Which of the Inspector's tabs a form is: the fields every cue has, or
-    /// the ones this kind of cue adds to them.
-    enum Scope { case common, kind }
-
-    static func order(for kind: Cue.Kind, continues: Bool, scope: Scope) -> [CueField] {
-        if scope == .common {
-            var fields: [CueField] = [.number, .line]
-            if continues { fields.append(.seconds) }
-            return fields
-        }
-        var fields: [CueField] = []
+    /// The fields every cue has, then the ones this kind of cue adds to them.
+    static func order(for kind: Cue.Kind, continues: Bool) -> [CueField] {
+        var fields: [CueField] = [.number, .line]
+        if continues { fields.append(.seconds) }
         switch kind {
         case .title: fields += [.text, .sub, .key]
         case .anagram: fields += [.anagrams]
@@ -150,13 +143,11 @@ struct CommittingField: View {
     }
 }
 
-/// Edit mode's Cue tab and its kind's tab. The Cue tab holds what every cue
-/// has: its number, cue point and continue. The kind's tab holds what only
-/// this kind has (its text, pictures and the like), then the settings it
-/// runs with. Every change goes through the show controller as one
-/// undoable edit.
+/// Edit mode's Inspector for the cue standing by. It starts with what every
+/// cue has (its number, cue point and continue), then what only this kind
+/// has (its text, pictures and the like), then the settings it runs with.
+/// Every change goes through the show controller as one undoable edit.
 struct CueEditorView: View {
-    let scope: CueField.Scope
     let cue: Cue?
     /// The GO of the cue that stands by, if one does: its cue point is the
     /// one the Cue point field edits.
@@ -179,14 +170,13 @@ struct CueEditorView: View {
     /// The fields this cue shows, in the order Tab walks them.
     private var fieldOrder: [CueField] {
         guard let cue else { return [] }
-        return CueField.order(for: cue.kind, continues: cue.continueMode.continues, scope: scope)
+        return CueField.order(for: cue.kind, continues: cue.continueMode.continues)
     }
 
     var body: some View {
         Form {
             if let cue {
-                if scope == .common {
-                  Section {
+                Section("Cue") {
                     FieldRow(label: "Number") {
                         CommittingField(field: .number, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.number,
                                         commit: { v in typing("Change Cue Number") { $0.number = v.trimmingCharacters(in: .whitespaces) } },
@@ -197,16 +187,12 @@ struct CueEditorView: View {
                                         commit: commitCuePoint(cue), onFinished: onFinished)
                     }
                     continueRow(cue)
-                  }
-                } else {
-                    content(cue)
-                    CueSettingsSections(transitions: false, cue: cue, onChange: onSetting)
                 }
+                content(cue)
+                CueSettingsSections(transitions: false, cue: cue, onChange: onSetting)
             } else {
                 Section {
-                    Text(scope == .common
-                         ? "Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it."
-                         : "Nothing is standing by. Click a cue in the list to see what it holds.")
+                    Text("Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it.")
                 }
             }
         }
@@ -308,7 +294,7 @@ struct CueEditorView: View {
     private func content(_ cue: Cue) -> some View {
         switch cue.content {
         case .title(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Text", cue, name: "Change Text")
                 subRow("Subtext", cue, name: "Change Subtext")
                 FieldRow(label: "Key") {
@@ -332,12 +318,12 @@ struct CueEditorView: View {
                 }
             }
         case .image(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Picture", path: c.src, kind: .image, empty: "No picture \u{2014} drop one here", cue: cue)
             }
         case .text(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Text", cue, name: "Change Text", multiline: true)
                 FieldRow(label: "Font") {
                     Picker("", selection: Binding(get: { c.font }, set: { family in
@@ -398,14 +384,14 @@ struct CueEditorView: View {
                 }
             }
         case .morph:
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
             }
             Section("Pictures") {
                 MorphPicturesView(state: morphPictures)
             }
         case .map(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Header", cue, name: "Change Label")
                 mediaRow("Map", path: c.src, kind: .map, empty: "No map \u{2014} drop one here", cue: cue)
                 FieldRow(label: "Route") {
@@ -417,7 +403,7 @@ struct CueEditorView: View {
                 }
             }
         case .video(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Caption", cue, name: "Change Caption")
                 mediaRow("Clip", path: c.src, kind: .video, empty: "No clip \u{2014} drop one here", cue: cue)
@@ -437,7 +423,7 @@ struct CueEditorView: View {
                 }
             }
         case .feed(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Caption", cue, name: "Change Caption")
                 FieldRow(label: "Camera") {
@@ -501,7 +487,7 @@ struct CueEditorView: View {
                 }
             }
         case .layered(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Base", path: c.base, kind: .image, empty: "No base \u{2014} black", cue: cue)
             }
@@ -512,7 +498,7 @@ struct CueEditorView: View {
                     .foregroundStyle(.secondary)
             }
         case .keypad(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 FieldRow(label: "Keys") {
                     CommittingField(field: .script, focus: $focus, order: fieldOrder, prompt: "a stage per line, e.g. 1332, <<<<, 1123, GOOD", mono: true, multiline: true, value: c.script,
@@ -525,7 +511,7 @@ struct CueEditorView: View {
                     .foregroundStyle(.secondary)
             }
         case .cascade(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Message", cue, name: "Change Message", multiline: true)
                 FieldRow(label: "Colour") {
                     ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
@@ -541,7 +527,7 @@ struct CueEditorView: View {
                     .foregroundStyle(.secondary)
             }
         case .conversation(let c):
-            Section {
+            Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Contact", cue, name: "Change Contact")
                 FieldRow(label: "Script") {
@@ -600,7 +586,7 @@ struct CueEditorView: View {
                 }
             }
         case .sms(let c):
-            Section {
+            Section(cue.kind.heading) {
                 FieldRow(label: "Message") {
                     CommittingField(field: .text, focus: $focus, order: fieldOrder, prompt: "", mono: true, multiline: true, value: cue.text,
                                     commit: { v in typing("Change Message") { $0.text = v } }, onFinished: onFinished)
@@ -697,7 +683,7 @@ struct CueEditorView: View {
                 }
             }
         case .blank(let c):
-            Section {
+            Section(cue.kind.heading) {
                 FieldRow(label: "Colour") {
                     ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
                         if case .blank(var b) = cue.content { b.colour = rgb; cue.content = .blank(b) }

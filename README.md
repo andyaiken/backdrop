@@ -37,7 +37,7 @@ open DerivedData/Build/Products/Debug/Backdrop.app
 
 On first launch Backdrop opens a new, empty show. To try it:
 
-1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview has two tabs: Cue, for what every cue has, and one named for the kind of cue standing by, for what it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
+1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview edits the cue standing by: what every cue has at the top, then what this kind of cue shows, then the settings it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
 2. Choose Show › Enter Show Mode, then Show › Open Projector.
 3. Press Space to fire the standby cue.
 
@@ -192,7 +192,7 @@ The code is in three layers:
   - [ConsoleWindow.swift](Backdrop/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
   - [Projector.swift](Backdrop/Projector/Projector.swift): the projector window and display handling.
   - [CueListView.swift](Backdrop/Console/CueList/CueListView.swift): the cue list, which lays out and drags the rows beside it in `CueList/`.
-  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift): the Inspector's two tabs, Cue and the one named for the cue's kind. [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): what takes their place for a selected transition or the Show Settings. Each is a SwiftUI form, in `Editing/`, behind a small AppKit `PanelHost`.
+  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift): the Inspector's form for the cue standing by. [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): what takes their place for a selected transition or the Show Settings. Each is a SwiftUI form, in `Editing/`, behind a small AppKit `PanelHost`.
   - [MorphPointsWindow.swift](Backdrop/Editors/MorphPointsWindow.swift) and [MapRouteWindow.swift](Backdrop/Editors/MapRouteWindow.swift): the windows a morph's points and a map's route are laid in, opened from the Inspector.
   - [BackdropApp.swift](Backdrop/App/BackdropApp.swift) and [MainMenu.swift](Backdrop/App/MainMenu.swift): launch and the menus.
 
@@ -204,7 +204,7 @@ Every kind of cue keeps its code in a folder of its own name in each library, so
 
 The projector window and the console's live preview are both surfaces. A renderer paints every surface from one shared plan, so any randomness is rolled once per frame and the two surfaces never disagree. Only `VideoRenderer` treats the two differently: the preview shows a poster and a position readout instead of a second player.
 
-`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram, morph or map cue set to advance on GO waits partway, and each GO it waits for is a step that can stand by like a cue, with a cue point of its own: in edit mode, stand the GO by and the Cue tab's cue point field edits it. Advance and Pause are settings on each cue, shared by all these kinds: on a morph, either GO choice waits for GO before each stage, and on a map before the dot leaves for each stop. GO on a step of the live cue carries it on there, or straight there, forward or back; GO on a step of another cue fires that cue at that step, with the steps before it already done.
+`ShowController` owns the `Playhead`. Its model is standby and live: only GO puts a cue on stage, and a cue marked to follow fires when the one before it settles. An anagram, morph or map cue set to advance on GO waits partway, and each GO it waits for is a step that can stand by like a cue, with a cue point of its own: in edit mode, stand the GO by and the Inspector's cue point field edits it. Advance and Pause are settings on each cue, shared by all these kinds: on a morph, either GO choice waits for GO before each stage, and on a map before the dot leaves for each stop. GO on a step of the live cue carries it on there, or straight there, forward or back; GO on a step of another cue fires that cue at that step, with the steps before it already done.
 
 In edit mode, every change goes through `ShowController.edit`. That makes it one undo step, and slider drags are merged into a single step. If the cue on stage is affected, it is redrawn in its finished state.
 
@@ -238,7 +238,7 @@ Debug builds accept five launch arguments. All are for checking the app without 
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
-This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue, the Inspector's tabs), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
+This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue and their settings in the Inspector, a transition, the Show Settings), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents

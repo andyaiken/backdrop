@@ -40,7 +40,7 @@ public struct Anagram: Equatable, Sendable {
     /// already, stands still from the start and takes no turn.
     public var isSolvedOnStage: Bool { !ignored && steps.count > 1 }
 
-    // MARK: The Cue tab's text box
+    // MARK: The Inspector's text box
 
     /// What starts the first line of an ignored anagram's paragraph.
     public static let ignoreMark: Character = "~"
@@ -48,7 +48,7 @@ public struct Anagram: Equatable, Sendable {
     /// How the text box reads what is typed into it, for its tooltip.
     public static let formatExplanation = "One anagram to a paragraph, with a blank line before the next. The first line is the phrase that appears and the last is the answer its letters rearrange into. Any lines between are working: steps on the way, which may be partial or wrong, since only the phrase and the answer need the same letters. A paragraph of one line shows solved already. Start a paragraph with \(ignoreMark) to leave that anagram jumbled: the cue shows its phrase and skips it."
 
-    /// The anagrams as the Cue tab writes them: a paragraph each, the phrase
+    /// The anagrams as the Inspector writes them: a paragraph each, the phrase
     /// on its first line, the answer on its last and any working between,
     /// with a blank line before the next. An ignored one starts with `~`.
     public static func paragraphs(_ anagrams: [Anagram]) -> String {

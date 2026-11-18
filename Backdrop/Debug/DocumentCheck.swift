@@ -112,23 +112,23 @@ enum DocumentCheck {
                   "a cue's right-click menu duplicates it or renumbers every cue: \(cueMenu.joined(separator: " | "))")
         }
 
-        // Tab runs down what the cue shows, then where it comes in the book,
+        // Tab runs down where the cue comes in the book, then what it shows,
         // skipping what this kind of cue doesn't have.
         if let console = document.console {
             func stops(for id: UUID) -> [String] {
                 controller.standBy(id)
                 console.refresh()
                 console.window?.contentView?.layoutSubtreeIfNeeded()
-                return console.kindEditor.tabStops
+                return console.editor.tabStops
             }
             let decryption = stops(for: titleID), image = stops(for: imageID)
             if let anagramID = controller.addCue(.anagram) {
                 let anagram = stops(for: anagramID)
-                check(anagram == ["anagrams"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
+                check(anagram == ["number", "line", "anagrams"], "Tab through an anagram cue: \(anagram.joined(separator: ", "))")
                 controller.deleteCue(anagramID)
             }
-            check(decryption == ["text", "sub", "key"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
-            check(image == ["text"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
+            check(decryption == ["number", "line", "text", "sub", "key"], "Tab through a decryption cue: \(decryption.joined(separator: ", "))")
+            check(image == ["number", "line", "text"], "Tab through an image cue, which has no caption: \(image.joined(separator: ", "))")
         }
 
         document.importMedia(from: picture, into: imageID)

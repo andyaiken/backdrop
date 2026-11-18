@@ -2,7 +2,7 @@ import AppKit
 import BackdropCore
 import SwiftUI
 
-/// What the Cue tab's layer strip shows of a layered cue, and what it can
+/// What the Inspector's layer strip shows of a layered cue, and what it can
 /// ask for. The panel fills it in from the cue standing by.
 @MainActor
 final class LayeredStripState: ObservableObject {

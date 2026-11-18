@@ -4,7 +4,7 @@ import BackdropStage
 import SwiftUI
 
 /// The Inspector's Show Settings: the show's title, text size and projection
-/// area, in place of a cue's tabs while the header's Show Settings is on.
+/// area, in place of the cue's form while the header's Show Settings is on.
 ///
 /// AppKit on the outside so the console's layout places it like any other
 /// panel; SwiftUI within, in the Mac's own controls.
@@ -46,16 +46,14 @@ final class ShowSettingsPanel: PanelHost<ShowSettingsView> {
     }
 }
 
-/// Edit mode's Settings and Transitions tabs: what the cue standing by runs
-/// with, and how the stage changes to it.
+/// The Inspector for a transition selected in the cue list: how the stage
+/// changes to the cue after it.
 @MainActor
 final class CueSettingsPanel: PanelHost<CueSettingsView> {
     var onChange: (SettingKey, SettingValue, Bool) -> Void = { _, _, _ in }
-    private let scope: CueSettingsView.Scope
 
-    init(scope: CueSettingsView.Scope) {
-        self.scope = scope
-        super.init(rootView: CueSettingsView(scope: scope, cue: nil, onChange: { _, _, _ in }))
+    init() {
+        super.init(rootView: CueSettingsView(cue: nil, onChange: { _, _, _ in }))
     }
 
     required init?(coder: NSCoder) {
@@ -64,7 +62,6 @@ final class CueSettingsPanel: PanelHost<CueSettingsView> {
 
     func update(cue: Cue?) {
         rootView = CueSettingsView(
-            scope: scope,
             cue: cue,
             onChange: { [weak self] key, value, continuous in self?.onChange(key, value, continuous) }
         )

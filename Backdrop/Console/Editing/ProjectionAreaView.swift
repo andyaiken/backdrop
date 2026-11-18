@@ -53,6 +53,8 @@ struct ProjectionAreaView: View {
             }
             Button("Fill the Output") { onChange(Geometry()) }
                 .focusable(false)
+        } header: {
+            Text("Alignment")
         }
     }
 

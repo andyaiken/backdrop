@@ -246,6 +246,8 @@ struct ShowSettingsView: View {
                         .onSubmit(onFinishedEditing)
                         .onExitCommand(perform: onFinishedEditing)
                 }
+            } header: {
+                Text("Cue sheet")
             } footer: {
                 Text("Printed at the head of every page of the cue sheet.")
             }
@@ -255,6 +257,8 @@ struct ShowSettingsView: View {
                                onChange: { value, continuous in
                                    if case .number(let n) = value { onTextScale(n, continuous) }
                                })
+            } header: {
+                Text("Text")
             } footer: {
                 Text("Changes show on the cue on stage at once.")
             }
@@ -271,22 +275,18 @@ struct ShowSettingsView: View {
     }
 }
 
-/// Edit mode's Cue Settings tab: what the cue standing by runs with.
+/// A transition selected in the cue list: how the stage changes to its cue.
 struct CueSettingsView: View {
-    /// The Settings tab, or the transition selected in the cue list.
-    enum Scope { case settings, transitions }
-
-    let scope: Scope
     let cue: Cue?
     let onChange: (SettingKey, SettingValue, Bool) -> Void
 
     var body: some View {
         Form {
             if let cue {
-                CueSettingsSections(transitions: scope == .transitions, cue: cue, onChange: onChange)
+                CueSettingsSections(transitions: true, cue: cue, onChange: onChange)
             } else {
                 Section {
-                    Text("Nothing is standing by. Click a cue in the list to see the settings it runs with.")
+                    Text("No transition selected. Click one in the cue list to see how the stage changes to its cue.")
                 }
             }
         }
@@ -327,10 +327,14 @@ struct CueSettingsSections: View {
                             .help(SettingKey.timingExplanation)
                     }
                 }
+            } footer: {
+                if transitions { Text(Self.transitionNote) }
             }
         }
-        if let text = transitions ? Self.transitionNote : note(for: cue) {
-            Section { Text(text) }
+        // A kind with few or no settings of its own says why, and where its
+        // look is set instead.
+        if !transitions, let text = note(for: cue) {
+            Section("Settings") { Text(text) }
         }
     }
 

@@ -69,7 +69,6 @@ enum StoreAssets {
 
         // Edit mode, on the title cue and then the image.
         controller.standBy(ids[0])
-        console.showInspectorTab(0)
         settle(console)
         save(console, "1-edit-title", to: folder)
         controller.standBy(ids[1])

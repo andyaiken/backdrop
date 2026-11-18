@@ -46,7 +46,7 @@ private struct MapCanvas: View {
                         .frame(width: frame.width, height: frame.height)
                         .offset(x: frame.minX, y: frame.minY)
                 } else {
-                    Text("No map yet. Add one in the Cue tab.").foregroundStyle(Look.dim)
+                    Text("No map yet. Add one in the Inspector.").foregroundStyle(Look.dim)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 Canvas { context, _ in draw(&context, in: frame) }

@@ -3,7 +3,7 @@ import BackdropCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// What the Cue tab's picture strip shows of a morph cue, and what it can
+/// What the Inspector's picture strip shows of a morph cue, and what it can
 /// ask for. The panel fills it in from the cue standing by.
 @MainActor
 final class MorphPicturesState: ObservableObject {
