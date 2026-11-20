@@ -57,7 +57,7 @@ struct SettingRowView: View {
     private var showsReading: Bool {
         switch key.control {
         case .slider, .toggle: true
-        case .choice, .font: false
+        case .choice, .font, .effects: false
         }
     }
 
@@ -87,6 +87,22 @@ struct SettingRowView: View {
                 }
                 .labelsHidden()
                 .focusable(false)
+            }
+        case .effects(let names):
+            HStack(spacing: 16) {
+                ForEach(Array(names.enumerated()), id: \.offset) { i, name in
+                    // The row hides controls' labels, so each box is named
+                    // beside it, and the name is clickable as a label is.
+                    HStack(spacing: 4) {
+                        Toggle(name, isOn: effect(i))
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                            .focusable(false)
+                        Text(name)
+                            .onTapGesture { effect(i).wrappedValue.toggle() }
+                    }
+                }
+                Spacer(minLength: 0)
             }
         case .font:
             HStack {
@@ -126,6 +142,11 @@ struct SettingRowView: View {
                     guard options.indices.contains(i) else { return }
                     onChange(options[i].value, false)
                 })
+    }
+
+    private func effect(_ index: Int) -> Binding<Bool> {
+        Binding(get: { key.isOn(effect: index, in: value) },
+                set: { onChange(key.turning(effect: index, on: $0, in: value), false) })
     }
 
     private var family: Binding<String> {

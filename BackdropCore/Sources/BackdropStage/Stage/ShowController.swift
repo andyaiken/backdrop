@@ -11,9 +11,15 @@ public final class ShowController {
     public private(set) var playhead: Playhead
     public let runner: StageRunner
     /// A second stage, for the console's "up next" preview: it paints the
-    /// cue standing by, finished, and never runs, fires or reports anything.
+    /// cue standing by, finished. In edit mode, where it is the only preview,
+    /// Run again and GO run that cue in it too. It never fires or reports
+    /// anything.
     public let nextRunner: StageRunner
     private var lastNext: (cue: Cue?, settings: ShowSettings)?
+    /// Edit mode: the cue the console's preview is running, from Run again
+    /// or GO, rather than showing finished. It takes each GO as the stage
+    /// does, as it is the only picture edit mode shows.
+    private var previewRunning: UUID?
     private let now: () -> Double
     /// The live cue's timed continue, from GO or from it finishing: when
     /// the next cue fires by itself.
@@ -100,6 +106,7 @@ public final class ShowController {
         runner.unload()
         nextRunner.unload()
         lastNext = nil
+        previewRunning = nil
         self.show = show
         playhead = Playhead(show: show)
         runner.blackout = false
@@ -124,6 +131,7 @@ public final class ShowController {
         let cue = playhead.standby.flatMap { show[$0] }
         if let last = lastNext, last.cue == cue, last.settings == show.settings { return }
         lastNext = (cue, show.settings)
+        previewRunning = nil
         nextRunner.geometry = show.settings.geometry
         if let cue, nextRunner.kinds.contains(cue.kind) {
             nextRunner.redraw(cue, show: show.settings, at: now())
@@ -215,14 +223,23 @@ public final class ShowController {
             say("No cue is selected.")
             return
         }
+        // On the stage and, as edit mode fires it, in the console's own preview.
         perform(fire)
-        // And in the console's own preview, from black, so the operator sees
-        // the cue arrive as the projector does.
-        if let cue = show[fire.cue], nextRunner.kinds.contains(cue.kind) {
-            nextRunner.unload()
-            nextRunner.change(to: cue, show: show.settings, transition: cue.transition, at: now())
-            needsTicks(true)
-        }
+    }
+
+    /// Edit mode: whether the console's preview runs what this fire does to
+    /// the stage. A continue firing the next cue by itself leaves it alone.
+    private func previewFollows(_ fire: Playhead.Fire) -> Bool {
+        mode == .edit && !fire.automatic
+    }
+
+    /// Runs the cue in the console's own preview, from black, so the
+    /// operator sees it arrive as the projector does.
+    private func runInPreview(_ cue: Cue, startingAt step: Int?) {
+        guard nextRunner.kinds.contains(cue.kind) else { return }
+        nextRunner.unload()
+        nextRunner.change(to: cue, show: show.settings, transition: cue.transition, at: now(), startingAt: step)
+        previewRunning = cue.id
     }
 
     public func toggleBlackout() {
@@ -571,6 +588,10 @@ public final class ShowController {
             // new for the crash record.
             message = nil
             if let step = fire.step { runner.goTo(step, at: now()) } else { runner.carryOn(at: now()) }
+            // A preview showing the cue finished has nothing to carry on.
+            if previewFollows(fire), previewRunning == cue.id {
+                if let step = fire.step { nextRunner.goTo(step, at: now()) } else { nextRunner.carryOn(at: now()) }
+            }
             needsTicks(true)
             changed()
             return
@@ -583,6 +604,9 @@ public final class ShowController {
             let time = now()
             runner.change(to: cue, show: show.settings, transition: cue.transition, at: time,
                           startingAt: fire.step)
+            // Only while the cue stays selected: a GO that moves the
+            // selection on leaves the preview to show the next cue.
+            if previewFollows(fire), playhead.standby == cue.id { runInPreview(cue, startingAt: fire.step) }
             // Timed from GO, whatever the cue's transition.
             if case .after(let ms) = cue.continueMode {
                 continueAt = (cue.id, time + Double(ms) / 1000)

@@ -127,6 +127,10 @@ public struct Playhead: Equatable, Sendable {
         let saved = (standby ?? id, standby == nil ? nil : standbyStep)
         let fired = fire(id, in: show, presentation: .run, automatic: false, step: nil)
         (standby, standbyStep) = saved
+        // Selected as a whole, a cue that waits for GO has its first GO
+        // standing by, as R leaves it in show mode, so GO carries it on
+        // rather than starting it again. A GO selected to edit stays.
+        if standbyStep == nil, goPoints > 0 { standbyStep = 0 }
         return fired
     }
 
@@ -152,14 +156,15 @@ public struct Playhead: Equatable, Sendable {
     }
 
     /// The live cue was put up finished, as an edit in edit mode does, so
-    /// every step of it is done and it waits for nothing: a step of it that
-    /// stood by gives way to the next cue. Its steps can still be stood by
-    /// again, to go back to.
+    /// every step of it is done and it waits for nothing. A step of it that
+    /// stood by gives way to the cue itself, which stays selected: it is the
+    /// cue being edited, and GO runs it again from the start. Its steps can
+    /// still be stood by again, to go back to.
     public mutating func liveCueRedrawn(in show: Show) {
         guard let live else { return }
         goPoints = points(of: live, in: show)
         goPointsTaken = goPoints
-        if standby == live, standbyStep != nil { standByRow(after: live, step: goPoints > 0 ? goPoints - 1 : nil, in: show) }
+        if standby == live { standbyStep = nil }
     }
 
     // MARK: Rows

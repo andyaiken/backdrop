@@ -56,7 +56,7 @@ In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its n
 Pictures and clips come in from wherever they are:
 
 - **Dragged onto the cue list,** from Finder, Photos, Safari, Mail or another app. They become image and video cues where they are dropped, named for their files and numbered between their neighbours. Several at once go in order of their names, as one undo step. An empty show takes them too, to start the sheet.
-- **Dragged onto a cue.** A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue. So does one dropped on the Inspector's picture well, or on a morph's or layered image's strip.
+- **Dragged onto a cue.** A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue. So does one dropped on the Inspector's picture well, or on its list of a morph's pictures or a layered image's layers, where it goes at the end.
 - **Edit › Import from iPhone or iPad,** with Continuity Camera. A photo goes into the cue standing by if that is an image cue still waiting for its picture, and otherwise becomes a new image cue after it.
 - **Choose…** in the Inspector, whose panel also reaches the Photos library, under Media in its sidebar.
 

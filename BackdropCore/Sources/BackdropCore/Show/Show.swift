@@ -9,9 +9,11 @@ public struct Show: Equatable, Sendable {
     /// reader would take for an empty cue; 3 put group headings in the
     /// running list, a feature since removed; 4 lists a morph cue's
     /// pictures, for a morph of more than two; 5 has map cues; 6 gives the
-    /// GOs a cue waits for cue points of their own; 7 has layered image cues; 8 has keypad cues; 9 has live feed cues; 10 has text message cues; 11 has text conversation cues; 12 has cascade cues.
+    /// GOs a cue waits for cue points of their own; 7 has layered image cues; 8 has keypad cues; 9 has live feed cues; 10 has text message cues; 11 has text conversation cues; 12 has cascade cues;
+    /// 13 lets a layered image cue's arriving layer take several effects at
+    /// once, as a list, and renames Settle to Magnify.
     /// Older files read as they are.
-    public static let formatVersion = 12
+    public static let formatVersion = 13
 
     /// For the window and the printed cue sheet header.
     public var title: String
@@ -29,6 +31,7 @@ public struct Show: Equatable, Sendable {
     /// a show with no morph of more than two pictures stays readable by a
     /// version 2 Backdrop.
     public var version: Int {
+        if cues.contains(where: { if case .layered(let l) = $0.content { l.hasNewEntrances } else { false } }) { return 13 }
         if cues.contains(where: { $0.kind == .cascade }) { return 12 }
         if cues.contains(where: { $0.kind == .conversation }) { return 11 }
         if cues.contains(where: { $0.kind == .sms }) { return 10 }

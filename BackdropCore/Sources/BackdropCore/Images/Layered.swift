@@ -47,16 +47,73 @@ public enum LayerContext: String, Codable, Sendable, CaseIterable {
     case none, dim, desaturate, spotlight
 }
 
-/// What the arriving layer itself does.
-public enum LayerEntrance: String, Codable, Sendable, CaseIterable {
-    /// It fades up to its level, and nothing more.
-    case fade
-    /// Its alpha edge is drawn as a brass line that blooms and fades.
-    case outline
-    /// It fades in slightly magnified and settles to size.
-    case settle
-    /// It fades past its level and settles back.
-    case bloom
+/// What the arriving layer itself does. Every layer fades up to its level;
+/// any mix of these effects goes with it, and none is a plain fade.
+public struct LayerEntrance: OptionSet, Hashable, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    /// Its alpha edge is drawn as a brass line that flares and fades.
+    public static let outline = LayerEntrance(rawValue: 1 << 0)
+    /// It comes up a little larger than life, about its own centre, and once
+    /// it has arrived eases slowly back to size.
+    public static let magnify = LayerEntrance(rawValue: 1 << 1)
+    /// It flares brighter than itself as it lands, then settles back.
+    public static let bloom = LayerEntrance(rawValue: 1 << 2)
+
+    /// A fade and nothing more.
+    public static let fade: LayerEntrance = []
+
+    /// Each effect alone, in the order the panels list them and show.json
+    /// writes them.
+    public static let each: [LayerEntrance] = [.outline, .magnify, .bloom]
+
+    /// What show.json and the sheet call it: an effect's name, or several
+    /// joined.
+    public var name: String {
+        switch self {
+        case .fade: "fade"
+        case .outline: "outline"
+        case .magnify: "magnify"
+        case .bloom: "bloom"
+        default: Self.each.filter(contains).map(\.name).joined(separator: " + ")
+        }
+    }
+
+    /// Whether a version 12 reader can hold it: a single effect it knew by
+    /// name, or none. Magnify was Settle then, and smaller.
+    var isOneOfTheFirst: Bool {
+        self == .fade || self == .outline || self == .bloom
+    }
+}
+
+extension LayerEntrance: Codable {
+    /// A name, as an entrance was written before effects could be combined,
+    /// or a list of names. Settle is magnify's old name; a name not known is
+    /// passed over.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        let names = try (try? c.decode([String].self)) ?? [c.decode(String.self)]
+        self = names.reduce(into: .fade) { entrance, name in
+            if let effect = Self.each.first(where: { $0.name == name }) {
+                entrance.insert(effect)
+            } else if name == "settle" {
+                entrance.insert(.magnify)
+            }
+        }
+    }
+
+    /// A single name where it can be, so a cue with one effect or none reads
+    /// in a Backdrop that knew only those; a list for several.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        let names = Self.each.filter(contains).map(\.name)
+        switch names.count {
+        case 0: try c.encode("fade")
+        case 1: try c.encode(names[0])
+        default: try c.encode(names)
+        }
+    }
 }
 
 /// What the frame does as the cue runs.
@@ -288,6 +345,12 @@ extension LayeredContent {
     public func goPoints(eachStepOnGO: Bool) -> [GoPoint] {
         guard eachStepOnGO else { return [] }
         return steps.map { GoPoint(unit: .layer, text: $0.name, cuePoint: $0.cuePoint) }
+    }
+
+    /// Whether any entrance, the cue's or a layer's own, is one a version 12
+    /// reader can't hold: several effects at once, or magnify.
+    var hasNewEntrances: Bool {
+        !settings.entrance.isOneOfTheFirst || layers.contains { $0.highlight?.entrance.map { !$0.isOneOfTheFirst } ?? false }
     }
 
     /// Whether any GO has a cue point of its own.

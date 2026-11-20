@@ -129,7 +129,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .context: "What happens to the layers already standing while a new one arrives: nothing, dimmed, drained of colour, or darkened round the new part. A layer can have its own, set with it in the strip above."
         case .strength: "How far the treatment of the layers already standing goes, as a percentage."
         case .length: "How long that treatment lasts, in steps of the clock, before everything comes back."
-        case .entrance: "What the arriving layer does: simply fades up, has its edge drawn as a brass line, settles in slightly magnified, or blooms past its level and back."
+        case .entrance: "Every arriving layer fades up to its level, and any mix of these goes with it. Outline draws its edge as a brass line that flares and fades. Magnify brings it up a little larger than life, about its own centre, and once it has arrived eases it slowly back to size. Bloom flares it brighter than itself as it lands, then settles it back. With none, it simply fades up. A layer can have its own, set with it in the strip above."
         case .push: "What the frame does as layers arrive: holds still on the whole picture, pulls back out and in on each new part, or travels straight from one part to the next. Every move happens on a GO."
         case .move: "How long a move of the frame takes."
         case .columns: "How many glyphs across the rain is. Fewer makes bigger glyphs, and a bigger message. A line of the message longer than this widens the rain to fit."
@@ -156,6 +156,8 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case slider(ClosedRange<Int>, step: Int)
         case toggle
         case choice([String])
+        /// Any mix of a few effects, each on or off, named in order.
+        case effects([String])
         /// One of the Mac's font families, or the stage's own type.
         case font
     }
@@ -186,7 +188,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .context: .choice(["None", "Dim", "Desaturate", "Spotlight"])
         case .strength: .slider(SettingRange.contextLevel, step: 5)
         case .length: .slider(SettingRange.contextTicks, step: 2)
-        case .entrance: .choice(["Fade", "Outline", "Settle", "Bloom"])
+        case .entrance: .effects(["Outline", "Magnify", "Bloom"])
         case .push: .choice(["Holds still", "Pulls back between parts", "Travels part to part"])
         case .move: .slider(SettingRange.cameraMs, step: 100)
         case .columns: .slider(SettingRange.cascadeColumns, step: 2)
@@ -245,13 +247,25 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .letters: [SettingValue.letters(.cycle), .letters(.dials)][safe: index]
         case .bars: [SettingValue.bars(.letters), .bars(.digraphs)][safe: index]
         case .context: [SettingValue.context(.none), .context(.dim), .context(.desaturate), .context(.spotlight)][safe: index]
-        case .entrance: [SettingValue.entrance(.fade), .entrance(.outline), .entrance(.settle), .entrance(.bloom)][safe: index]
         case .push: [SettingValue.push(.still), .push(.push), .push(.travel)][safe: index]
         case .transition: [SettingValue.style(.fade), .style(.snap), .style(.crossfade), .style(.wipe)][safe: index]
         case .wipeFrom: [SettingValue.edge(.left), .edge(.right), .edge(.top), .edge(.bottom),
                          .edge(.topLeft), .edge(.topRight), .edge(.bottomLeft), .edge(.bottomRight)][safe: index]
         default: nil
         }
+    }
+
+    /// For effects, whether the one at `index` is on in `value`.
+    public func isOn(effect index: Int, in value: SettingValue) -> Bool {
+        guard case .entrance(let entrance) = value, let effect = LayerEntrance.each[safe: index] else { return false }
+        return entrance.contains(effect)
+    }
+
+    /// For effects, `value` with the one at `index` turned on or off.
+    public func turning(effect index: Int, on: Bool, in value: SettingValue) -> SettingValue {
+        guard case .entrance(var entrance) = value, let effect = LayerEntrance.each[safe: index] else { return value }
+        if on { entrance.insert(effect) } else { entrance.remove(effect) }
+        return .entrance(entrance)
     }
 
     /// For a choice, where a value sits in its menu.
@@ -318,7 +332,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .desaturate: "desaturate"
             case .spotlight: "spotlight"
             }
-        case (_, .entrance(let e)): e.rawValue
+        case (_, .entrance(let e)): e.name
         case (_, .push(.still)): "holds still"
         case (_, .push(.push)): "pulls back between parts"
         case (_, .push(.travel)): "travels part to part"

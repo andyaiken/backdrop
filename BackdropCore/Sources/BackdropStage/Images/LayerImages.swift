@@ -31,7 +31,7 @@ enum LayerImages {
     }
 
     /// The layer's alpha edge drawn as a line in `colour`, on transparency:
-    /// what an outline entrance blooms and fades. At most 1024 across.
+    /// what an outline entrance flares and fades. At most 1024 across.
     static func edge(of image: CGImage, colour: CGColor) -> CGImage? {
         let scale = min(1, 1024 / Double(max(image.width, 1)))
         let source = CIImage(cgImage: image)

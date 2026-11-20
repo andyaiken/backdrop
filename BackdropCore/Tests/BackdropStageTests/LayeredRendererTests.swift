@@ -220,7 +220,9 @@ struct LayeredRendererTests {
         await prepare(cue([layer("red.png"), green]), settings: dark)
         _ = renderer.frame(-1)
         #expect(tree.base.opacity == 0)
-        #expect(tree.layers[0].compositingFilter == nil && tree.layers[1].compositingFilter as? String == "screenBlendMode")
+        #expect(tree.holders[0].compositingFilter == nil && tree.holders[1].compositingFilter as? String == "screenBlendMode",
+                "on the holder, with the filters, so it blends with what is under it while one is on")
+        #expect(tree.layers[1].compositingFilter == nil)
     }
 
     @Test("A cue with no base is black under its layers")
@@ -244,8 +246,10 @@ struct LayeredRendererTests {
             #expect(tree.base.animation(forKey: "context") == nil, "nothing was standing at the first step")
             renderer.carryOn(at: 30)
             _ = renderer.frame(30)
-            #expect(tree.layers[0].animation(forKey: "context") != nil, "\\(context): the first layer is treated while the second arrives")
-            #expect(tree.layers[1].animation(forKey: "context") == nil, "and the arriving layer is not")
+            // Dimming fades the picture; draining its colour filters its holder.
+            let treated = context == .dim ? tree.layers : tree.holders
+            #expect(treated[0].animation(forKey: "context") != nil, "\\(context): the first layer is treated while the second arrives")
+            #expect(treated[1].animation(forKey: "context") == nil, "and the arriving layer is not")
         }
         var spot = onGo
         spot.context = .spotlight
@@ -267,22 +271,100 @@ struct LayeredRendererTests {
         #expect(tree.edges[0].contents != nil && tree.edges[0].animation(forKey: "outline") != nil)
     }
 
-    @Test("Settle scales about the part's own centre, and bloom overshoots its level")
+    @Test("Magnify brings the part up larger than life and, once arrived, eases it back without turning, and bloom flares it brighter at full level")
     func entrances() async {
         var defaults = onGo
-        defaults.entrance = .settle
+        defaults.entrance = .magnify
         await prepare(cue([layer("red.png")]), settings: defaults)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
-        #expect(tree.layers[0].animation(forKey: "settle") != nil)
+        let settle = tree.layers[0].animation(forKey: "magnify") as? CAKeyframeAnimation
+        let scales = settle?.values?.compactMap { ($0 as? NSNumber)?.doubleValue } ?? []
+        let times = settle?.keyTimes?.map(\.doubleValue) ?? []
+        let duration = settle?.duration ?? 0
+        #expect(scales.first.map { $0 >= 1.1 - 1e-9 } == true && scales.last == 1, "larger than life, then back to size: \(scales)")
+        #expect(zip(scales, scales.dropFirst()).allSatisfy { $0 >= $1 }, "it never grows again on its way back, or it jiggles as it lands: \(scales)")
+        #expect(times.count == 3 && abs(times[1] * duration - 0.4) < 1e-6, "held larger until it has arrived: \(times) of \(duration) s")
+        #expect(duration > 0.4 * 2, "the return is slower than the arrival")
         #expect(abs(tree.layers[0].anchorPoint.x - 0.25) < 0.02 && abs(tree.layers[0].anchorPoint.y - 0.75) < 0.02, "about the top left part")
+        #expect(tree.holders[0].animation(forKey: "bloom") == nil && tree.edges[0].animation(forKey: "outline") == nil, "only what was asked for")
+
         var bloom = onGo
         bloom.entrance = .bloom
         await prepare(cue([layer("red.png")]), settings: bloom)
         _ = renderer.frame(0)
         renderer.carryOn(at: 10); _ = renderer.frame(10)
-        let k = tree.layers[0].animation(forKey: "opacity") as? CAKeyframeAnimation
-        #expect((k?.values?.compactMap { $0 as? Float }.max() ?? 0) > 1 - 0.0001 && k?.values?.count == 3)
+        let filters = tree.holders[0].filters?.compactMap { $0 as? CIFilter } ?? []
+        #expect(filters.contains { $0.name == "bloom" && ($0.value(forKey: kCIInputEVKey) as? NSNumber)?.doubleValue == 0 }, "at rest it is itself")
+        let flare = tree.holders[0].animation(forKey: "bloom") as? CAKeyframeAnimation
+        #expect(flare?.keyPath == "filters.bloom.inputEV" && (flare?.values?.compactMap { ($0 as? NSNumber)?.doubleValue }.max() ?? 0) > 0)
+        #expect(close(opacities[0], 1) && tree.layers[0].animation(forKey: "opacity") is CABasicAnimation, "a plain fade to full, which bloom no longer bends")
+    }
+
+    @Test("Effects combine: outlined, magnified and blooming at once, the outline swelling with the part")
+    func combinedEntrances() async {
+        var defaults = onGo
+        defaults.entrance = [.outline, .magnify, .bloom]
+        await prepare(cue([layer("red.png")]), settings: defaults)
+        _ = renderer.frame(0)
+        renderer.carryOn(at: 10); _ = renderer.frame(10)
+        let l = tree.layers[0], e = tree.edges[0]
+        #expect(l.animation(forKey: "opacity") != nil && l.animation(forKey: "magnify") != nil && tree.holders[0].animation(forKey: "bloom") != nil)
+        #expect(e.animation(forKey: "outline") != nil && e.animation(forKey: "magnify") != nil)
+        #expect(e.anchorPoint == l.anchorPoint && e.position == l.position, "so the line stays on the part's edge")
+    }
+
+    @Test("A filter never sits on a layer that moves: magnify moves the picture, and bloom and the drained colour filter its still holder")
+    func filtersStayStill() async {
+        var defaults = onGo
+        defaults.entrance = [.magnify, .bloom]
+        defaults.context = .desaturate
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
+        _ = renderer.frame(0)
+        renderer.carryOn(at: 10); _ = renderer.frame(10)
+        // Green arrives while red is still settling from its own magnify.
+        renderer.carryOn(at: 20); _ = renderer.frame(20)
+        for i in 0..<2 {
+            let holder = tree.holders[i], picture = tree.layers[i]
+            #expect(picture.superlayer === holder && holder.superlayer === tree.zoomer)
+            #expect(holder.animationKeys() == nil || !holder.animationKeys()!.contains("magnify"), "the holder never moves")
+            #expect(CATransform3DIsIdentity(holder.transform) && holder.frame == tree.zoomer.bounds, "a whole-pixel rect: the picture's own")
+            #expect(picture.filters == nil, "and the picture, which does move, has no filters")
+        }
+        #expect(tree.layers[0].animation(forKey: "magnify") != nil && tree.holders[0].animation(forKey: "context") != nil,
+                "red is drained of colour on its holder while it still settles inside it")
+        #expect(tree.layers[1].animation(forKey: "magnify") != nil && tree.holders[1].animation(forKey: "bloom") != nil)
+    }
+
+    @Test("A layer's own entrance replaces the cue's, and a plain fade has no effects")
+    func ownEntrance() async {
+        var plain = layer("red.png")
+        plain.highlight = LayerHighlight(entrance: .fade)
+        var bloomer = layer("green.png")
+        bloomer.highlight = LayerHighlight(entrance: [.bloom, .magnify])
+        await prepare(cue([plain, bloomer]), settings: onGo)
+        _ = renderer.frame(0)
+        renderer.carryOn(at: 10); _ = renderer.frame(10)
+        #expect(tree.layers[0].animation(forKey: "opacity") != nil)
+        #expect(tree.layers[0].animation(forKey: "magnify") == nil && tree.holders[0].animation(forKey: "bloom") == nil)
+        #expect(tree.edges[0].animation(forKey: "outline") == nil, "the cue's outline isn't drawn on a layer that fades plainly")
+        renderer.carryOn(at: 30); _ = renderer.frame(30)
+        #expect(tree.layers[1].animation(forKey: "magnify") != nil && tree.holders[1].animation(forKey: "bloom") != nil)
+        #expect(tree.edges[1].animation(forKey: "outline") == nil)
+    }
+
+    @Test("A jump puts the picture straight, with no effect left running or filtering")
+    func jumpClearsEffects() async {
+        var defaults = onGo
+        defaults.entrance = [.outline, .magnify, .bloom]
+        await prepare(cue([layer("red.png"), layer("green.png")]), settings: defaults)
+        _ = renderer.frame(0)
+        renderer.carryOn(at: 10); _ = renderer.frame(10)
+        renderer.goTo(1, at: 20); _ = renderer.frame(20)
+        #expect(tree.layers[0].animation(forKey: "magnify") == nil && tree.holders[0].animation(forKey: "bloom") == nil)
+        let filters = tree.holders[0].filters?.compactMap { ($0 as? CIFilter)?.name } ?? []
+        #expect(!filters.contains("bloom") && CATransform3DIsIdentity(tree.layers[0].transform), "the arriving green may drain it, but nothing blooms: \(filters)")
+        #expect(tree.edges[0].animation(forKey: "outline") == nil && tree.edges[0].animation(forKey: "magnify") == nil)
     }
 
     @Test("A pushing camera frames each part, pulling back through the whole picture, and settles on it")

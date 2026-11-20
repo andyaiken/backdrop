@@ -57,7 +57,13 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         /// Everything the camera moves: the base, the layers and what is drawn on them.
         let zoomer = StillLayer()
         let base = StillLayer()
+        /// Each layer's picture, which moves as it arrives.
         var layers: [StillLayer] = []
+        /// What holds each picture: the picture's whole rect, never moving,
+        /// with its Core Image filters and its blend. A filter drawn on a
+        /// layer that is moving shifts it by a pixel as it lands, so the
+        /// filters stay out here and the motion stays inside.
+        var holders: [StillLayer] = []
         var edges: [StillLayer] = []
         let spotlight = CAGradientLayer()
 
@@ -113,10 +119,11 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         shownStep = -1
         snapping = true
         guard let tree = tree(for: surface) else { return }
-        tree.layers.forEach { $0.removeFromSuperlayer() }
+        tree.holders.forEach { $0.removeFromSuperlayer() }
         tree.edges.forEach { $0.removeFromSuperlayer() }
         tree.spotlight.removeFromSuperlayer()
         tree.layers = []
+        tree.holders = []
         tree.edges = []
         tree.base.contents = nil
         tree.base.opacity = 0
@@ -203,10 +210,9 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         tree.zoomer.position = CGPoint(x: 0, y: h)
         tree.base.frame = full
         for (i, layer) in tree.layers.enumerated() {
-            place(layer, bounds: plan.bounds[i], in: full)
-            tree.edges[i].frame = layer.frame
-            tree.edges[i].anchorPoint = layer.anchorPoint
-            tree.edges[i].position = layer.position
+            tree.holders[i].frame = full
+            place(layer, bounds: plan.bounds[i], in: tree.holders[i].bounds)
+            place(tree.edges[i], bounds: plan.bounds[i], in: full)
         }
         tree.spotlight.frame = full
         if tree.zoomer.animation(forKey: "camera") == nil {
@@ -297,7 +303,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
                 }
             }
         }
-        let wantsOutline = settings.entrance == .outline || content.layers.contains { $0.highlight?.entrance == .outline }
+        let wantsOutline = settings.entrance.contains(.outline) || content.layers.contains { $0.highlight?.entrance?.contains(.outline) == true }
         var built = Plan(
             cuePlan: cuePlan, timeline: GoTimeline(parts: cuePlan.parts), base: base, images: images,
             bounds: images.map { $0.flatMap { LayerImages.opaqueBounds(of: $0) } },
@@ -323,24 +329,30 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
 
     private func build(_ tree: Tree) {
         guard let plan, let content else { return }
-        tree.layers.forEach { $0.removeFromSuperlayer() }
+        tree.holders.forEach { $0.removeFromSuperlayer() }
         tree.edges.forEach { $0.removeFromSuperlayer() }
         tree.layers = []
+        tree.holders = []
         tree.edges = []
         tree.base.contents = plan.base
         tree.base.opacity = 0
         for (i, layer) in content.layers.enumerated() {
+            let h = StillLayer()
+            // The blend goes with the filters, on the holder, so the picture
+            // still blends with what is under it while a filter is on.
+            switch layer.blend {
+            case .normal: break
+            case .screen: h.compositingFilter = "screenBlendMode"
+            case .multiply: h.compositingFilter = "multiplyBlendMode"
+            }
             let l = StillLayer()
             l.contents = plan.images[i]
             l.opacity = 0
             l.isHidden = plan.images[i] == nil
-            switch layer.blend {
-            case .normal: break
-            case .screen: l.compositingFilter = "screenBlendMode"
-            case .multiply: l.compositingFilter = "multiplyBlendMode"
-            }
-            tree.zoomer.addSublayer(l)
+            h.addSublayer(l)
+            tree.zoomer.addSublayer(h)
             tree.layers.append(l)
+            tree.holders.append(h)
             let e = StillLayer()
             e.contents = plan.edges[i]
             e.opacity = 0
@@ -351,7 +363,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
     }
 
     /// Fills the picture's rect, but anchored at the centre of the layer's own
-    /// part, so a settling entrance scales about it rather than the middle.
+    /// part, so a magnified entrance settles about it rather than the middle.
     private func place(_ layer: StillLayer, bounds part: PictureRect?, in full: CGRect) {
         let cx = part.map { $0.x + $0.width / 2 } ?? 0.5, cy = part.map { $0.y + $0.height / 2 } ?? 0.5
         layer.bounds = CGRect(origin: .zero, size: full.size)
@@ -378,7 +390,8 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         for (i, layer) in tree.layers.enumerated() {
             layer.removeAllAnimations()
             layer.transform = CATransform3DIdentity
-            layer.filters = nil
+            tree.holders[i].removeAllAnimations()
+            tree.holders[i].filters = nil
             layer.opacity = standing.contains(i) ? level(content.layers[i]) : 0
             tree.edges[i].removeAllAnimations()
             tree.edges[i].opacity = 0
@@ -425,7 +438,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
             for i in step.arriving where plan.images[i] != nil {
                 let layer = content.layers[i]
                 let entrance = layer.highlight?.entrance ?? settings.entrance
-                enter(tree, i, layer, entrance: entrance, seconds: Double(plan.cuePlan.arriveMs(of: i)) / 1000, bounds: plan.bounds[i])
+                enter(tree, i, layer, entrance: entrance, seconds: Double(plan.cuePlan.arriveMs(of: i)) / 1000)
             }
             // The first layer has nothing standing to treat but the base.
             guard !step.arriving.isEmpty, !standing.isEmpty, contextSeconds > 0, settings.contextLevel > 0 else { continue }
@@ -470,42 +483,63 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         layer.add(a, forKey: "opacity")
     }
 
-    private func enter(_ tree: Tree, _ i: Int, _ layer: ImageLayer, entrance: LayerEntrance, seconds: Double, bounds: PictureRect?) {
-        let target = level(layer)
-        let l = tree.layers[i]
-        switch entrance {
-        case .fade, .outline:
-            animate(l, to: target, seconds: seconds)
-            if entrance == .outline, tree.edges[i].contents != nil {
-                // The brass edge blooms as the part comes up, then fades.
-                let e = tree.edges[i]
-                e.removeAllAnimations()
-                e.opacity = 0
-                let bloom = CAKeyframeAnimation(keyPath: "opacity")
-                bloom.values = [0, 1, 0]
-                bloom.keyTimes = [0, 0.4, 1]
-                bloom.duration = max(seconds * 2, 0.4)
-                e.add(bloom, forKey: "outline")
-            }
-        case .settle:
-            animate(l, to: target, seconds: seconds)
-            // A small move, about the part's own centre: the part is also
-            // showing, faintly, in the base underneath.
-            let s = CABasicAnimation(keyPath: "transform.scale")
-            s.fromValue = 1.03
-            s.toValue = 1.0
-            s.duration = max(seconds, 0.2)
-            s.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            l.add(s, forKey: "settle")
-        case .bloom:
-            l.removeAnimation(forKey: "opacity")
-            l.opacity = target
+    /// How much larger than life a magnified part arrives before it eases
+    /// back to size.
+    static let magnification: CGFloat = 1.1
+    /// How far a blooming part flares past itself, in stops of exposure.
+    static let bloomStops = 1.0
+
+    /// Layer `i` arriving: it fades up to its level, and the entrance's
+    /// effects go with it, each on its own animation so any mix plays.
+    private func enter(_ tree: Tree, _ i: Int, _ layer: ImageLayer, entrance: LayerEntrance, seconds: Double) {
+        let l = tree.layers[i], e = tree.edges[i]
+        animate(l, to: level(layer), seconds: seconds)
+        let outlined = entrance.contains(.outline) && e.contents != nil
+        if outlined {
+            // The brass edge flares as the part comes up, then fades.
+            e.removeAllAnimations()
+            e.opacity = 0
             let k = CAKeyframeAnimation(keyPath: "opacity")
-            k.values = [0, min(1, target * 1.4), target]
-            k.keyTimes = [0, 0.6, 1]
-            k.duration = max(seconds, 0.05)
-            l.add(k, forKey: "opacity")
+            k.values = [0, 1, 0]
+            k.keyTimes = [0, 0.4, 1]
+            k.duration = max(seconds * 2, 0.4)
+            e.add(k, forKey: "outline")
         }
+        if entrance.contains(.magnify) {
+            // It comes up larger than life, about its own centre, held there
+            // while it fades up so the magnification is seen; once it has
+            // arrived it eases slowly back to where the faint base has it.
+            // One move that never turns back. Its outline moves with it.
+            let total = max(seconds * 2.5, 0.6)
+            let k = CAKeyframeAnimation(keyPath: "transform.scale")
+            k.values = [Self.magnification, Self.magnification, 1]
+            k.keyTimes = [0, NSNumber(value: min(seconds / total, 0.9)), 1]
+            k.timingFunctions = [CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeInEaseOut)]
+            k.duration = total
+            l.add(k, forKey: "magnify")
+            if outlined { e.add(k, forKey: "magnify") }
+        }
+        if entrance.contains(.bloom), let filter = CIFilter(name: "CIExposureAdjust") {
+            // Brighter rather than more opaque, so a layer at full level
+            // blooms too. It peaks as the part lands. On the holder, as the
+            // picture may be magnifying.
+            filter.name = "bloom"
+            filter.setValue(0, forKey: kCIInputEVKey)
+            let h = tree.holders[i]
+            setFilter(filter, on: h)
+            let k = CAKeyframeAnimation(keyPath: "filters.bloom.inputEV")
+            k.values = [0, Self.bloomStops, 0]
+            k.keyTimes = [0, 0.5, 1]
+            k.duration = max(seconds * 1.6, 0.4)
+            h.add(k, forKey: "bloom")
+        }
+    }
+
+    /// Puts `filter` on the layer in place of any of the same name, keeping
+    /// the others: a part still blooming can be drained of colour by the
+    /// next one's arrival.
+    private func setFilter(_ filter: CIFilter, on layer: CALayer) {
+        layer.filters = (layer.filters ?? []).filter { ($0 as? CIFilter)?.name != filter.name } + [filter as Any]
     }
 
     /// What happens to the layers already standing while one arrives: a beat
@@ -525,12 +559,13 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
                 layer.add(k, forKey: "context")
             }
         case .desaturate:
-            let layers = [tree.base] + standing.map { tree.layers[$0] }
+            // On the holders: a layer standing may still be magnifying.
+            let layers = [tree.base] + standing.map { tree.holders[$0] }
             for layer in layers {
                 // The animation finds the filter by this name, one to a layer.
                 guard let filter = CIFilter(name: "CIColorControls") else { return }
                 filter.name = "colorControls"
-                layer.filters = [filter]
+                setFilter(filter, on: layer)
                 let k = CAKeyframeAnimation(keyPath: "filters.colorControls.inputSaturation")
                 k.values = [1, 1 - strength, 1]
                 k.keyTimes = [0, 0.25, 1]

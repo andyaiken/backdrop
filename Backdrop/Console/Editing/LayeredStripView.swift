@@ -9,6 +9,11 @@ final class LayeredStripState: ObservableObject {
     @Published var layers: [ImageLayer] = []
     /// The fade a layer without its own takes.
     @Published var cueLayerMs = 800
+    /// The entrance a layer without its own makes.
+    @Published var cueEntrance: LayerEntrance = .outline
+    /// What each thumbnail shows faintly behind its layer, so a small part
+    /// can be seen where it sits: the base, or the first layer without one.
+    @Published var backdrop = ""
     let thumbnails: Thumbnails
 
     init(thumbnails: Thumbnails = Thumbnails()) {
@@ -25,15 +30,18 @@ final class LayeredStripState: ObservableObject {
     var onChange: (_ layer: Int, _ name: String, _ change: @escaping (inout ImageLayer) -> Void) -> Void = { _, _, _ in }
 }
 
-/// A layered cue's layers in the order they arrive, left to right, which is
-/// also the order they stack. Drop pictures anywhere on the strip to add them
-/// at the end; drag one onto another to move it there. Each layer is a menu:
-/// its level, blend, life, own fade time and how it arrives.
+/// A layered cue's layers, top to bottom in the order they arrive, which is
+/// also the order they stack: the last sits on top. Drop pictures anywhere
+/// on the list to add them at the end; drag a row up or down to move it, a
+/// brass line showing where it will land. Each row's menu sets its level,
+/// blend, life, own fade time and how it arrives.
 ///
 /// Edit mode only, so it may take the keyboard as any edit-mode control can.
 struct LayeredStripView: View {
     @ObservedObject var state: LayeredStripState
     @ObservedObject var thumbnails: Thumbnails
+    /// Where a row being dragged would land, while one is over the list.
+    @State private var drop: RowDropTarget?
 
     init(state: LayeredStripState) {
         self.state = state
@@ -41,17 +49,16 @@ struct LayeredStripView: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 6) {
-                ForEach(Array(state.layers.enumerated()), id: \.offset) { i, layer in
-                    LayerTile(index: i, layer: layer, count: state.layers.count, state: state, image: thumbnails.image(layer.src))
-                }
-                AddLayerTile(first: state.layers.isEmpty) { state.onChoose(nil) }
+        VStack(spacing: 0) {
+            ForEach(Array(state.layers.enumerated()), id: \.offset) { i, layer in
+                LayerRow(index: i, layer: layer, count: state.layers.count, state: state,
+                         image: thumbnails.image(layer.src), backdrop: thumbnails.image(state.backdrop), drop: $drop)
+                Divider()
             }
-            .padding(.vertical, 2)
+            AddLayerRow(first: state.layers.isEmpty) { state.onChoose(nil) }
         }
-        .scrollIndicators(.automatic)
         .mediaDrop(accepting: { ShowDocument.accepts($0, for: .layered) }) { [state] urls in state.onAdd(urls) }
+        .clearsStaleRowDrop($drop)
     }
 
     /// The marks that say how a layer behaves, under its name.
@@ -70,93 +77,101 @@ struct LayeredStripView: View {
 }
 
 private enum Strip {
-    static let thumb = CGSize(width: 74, height: 44)
-    static let text = Color(nsColor: Desk.text)
-    static let dim = Color(nsColor: Desk.dim)
+    static let thumb = CGSize(width: 64, height: 36)
     static let brass = Color(nsColor: Desk.brass)
-    static let sunk = Color(nsColor: Desk.sunk)
     static let line = Color(nsColor: Desk.lineBright)
 }
 
-private struct LayerTile: View {
+private struct LayerRow: View {
     let index: Int
     let layer: ImageLayer
     let count: Int
     @ObservedObject var state: LayeredStripState
     let image: NSImage?
-    @State private var hovering = false
-    @State private var targeted = false
+    let backdrop: NSImage?
+    @Binding var drop: RowDropTarget?
     @State private var name = ""
     @State private var seeded = false
     @State private var showDetails = false
+    @State private var hovering = false
+
+    static let height: CGFloat = 48
 
     static let levels = [20, 30, 40, 50, 60, 70, 80, 90, 100]
     static let fades = [200, 400, 600, 800, 1200, 1600, 2000, 3000, 4000]
 
     var body: some View {
-        VStack(spacing: 3) {
-            ZStack(alignment: .topLeading) {
-                // A checkerboard-ish dark ground, so a layer's transparency reads.
-                RoundedRectangle(cornerRadius: 3).fill(Strip.sunk)
-                if let image {
-                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
-                        .frame(width: Strip.thumb.width, height: Strip.thumb.height)
-                }
-                Text("\(index + 1)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Strip.text)
-                    .padding(.horizontal, 3)
-                    .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 2))
-                    .padding(2)
-                if hovering {
-                    Button { state.onRemove(index) } label: {
-                        Image(systemName: "xmark.circle.fill").font(.system(size: 13)).foregroundStyle(Strip.text, Color.black.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Remove this layer")
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(2)
+        HStack(spacing: 8) {
+            Text("\(index + 1)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 16, alignment: .trailing)
+            thumbnail
+            VStack(alignment: .leading, spacing: 2) {
+                // A grouped form keeps a label column, and sets text to the
+                // trailing edge, for any field that might have a label.
+                TextField("", text: $name, prompt: Text(MorphContent.name(of: layer.src)))
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(1)
+                    .onSubmit { commitName() }
+                    .help("What the operator and the book call this part")
+                let marks = LayeredStripView.marks(layer)
+                if !marks.isEmpty {
+                    Text(marks)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Strip.brass)
+                        .lineLimit(1)
                 }
             }
-            .frame(width: Strip.thumb.width, height: Strip.thumb.height)
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(targeted ? Strip.brass : Strip.line, lineWidth: targeted ? 2 : 1))
-            TextField("", text: $name, prompt: Text(MorphContent.name(of: layer.src)))
-                .textFieldStyle(.plain)
-                .font(.system(size: 10.5))
-                .multilineTextAlignment(.center)
-                .frame(width: Strip.thumb.width + 8)
-                .onSubmit { commitName() }
-                .help("What the operator and the book call this part")
-            Text(LayeredStripView.marks(layer))
-                .font(.system(size: 9.5, design: .monospaced))
-                .foregroundStyle(layer.fadeMs == nil && layer.level == nil && layer.life == .stays && !layer.withPrevious ? Strip.dim : Strip.brass)
-                .lineLimit(1)
-                .frame(width: Strip.thumb.width + 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fadesUnderRowControls(hovering)
         }
+        .frame(height: Self.height)
+        .contentShape(Rectangle())
+        .overlay(alignment: .trailing) {
+            RowControls(showing: hovering, menuHelp: "This layer\u{2019}s settings", removeHelp: "Remove this layer",
+                        dragHelp: "Drag to move this layer earlier or later", remove: { state.onRemove(index) }) { menu }
+        }
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .overlay(alignment: .top) { if drop?.gap == index { RowReorder.insertion.offset(y: -1) } }
+        .overlay(alignment: .bottom) { if drop?.gap == count, index == count - 1 { RowReorder.insertion.offset(y: 1) } }
         .onAppear {
             guard !seeded else { return }
             seeded = true
             name = layer.name
         }
         .onChange(of: layer.name) { _, new in if new != name { name = new } }
-        .onHover { hovering = $0 }
         .help(layer.src.isEmpty ? "No picture" : (layer.src as NSString).lastPathComponent)
-        // Dragged onto another layer, it moves to that place: arrival and
-        // stacking together.
-        .onDrag { NSItemProvider(object: "\(index)" as NSString) }
-        .onDrop(of: [.plainText], isTargeted: $targeted) { providers in
-            guard let provider = providers.first else { return false }
-            let to = index
-            _ = provider.loadObject(ofClass: NSString.self) { text, _ in
-                guard let from = (text as? String).flatMap(Int.init) else { return }
-                Task { @MainActor in state.onMove(from, to) }
-            }
-            return true
-        }
+        // The top half of a row puts a dragged one before it, the bottom half after.
+        .onDrag { RowReorder.payload("layer", index) }
+        .onDrop(of: [.plainText], delegate: RowReorderDrop(list: "layer", row: index, gap: { $0 < Self.height / 2 ? index : index + 1 },
+                                                           target: $drop, move: { [state] from, to in state.onMove(from, to) }))
         .contextMenu { menu }
-        .popover(isPresented: $showDetails, arrowEdge: .bottom) {
+        .popover(isPresented: $showDetails, arrowEdge: .leading) {
             LayerDetails(index: index, layer: layer, state: state)
         }
+    }
+
+    /// The layer as the stage shows it: on black, over the whole picture
+    /// faintly, so even a small part reads, and where it sits.
+    private var thumbnail: some View {
+        ZStack {
+            Color.black
+            if let backdrop, layer.src != state.backdrop {
+                Image(nsImage: backdrop).resizable().aspectRatio(contentMode: .fit).opacity(0.3)
+            }
+            if let image {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: "photo").foregroundStyle(.white.opacity(0.5))
+            }
+        }
+        .frame(width: Strip.thumb.width, height: Strip.thumb.height)
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .overlay(RoundedRectangle(cornerRadius: 3).stroke(Strip.line, lineWidth: 1))
     }
 
     private func commitName() {
@@ -199,43 +214,57 @@ private struct LayerTile: View {
             Text("The Cue\u{2019}s").tag("")
             ForEach(LayerContext.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0.rawValue) }
         }
-        Picker("Entrance", selection: Binding(get: { layer.highlight?.entrance.map { $0.rawValue } ?? "" }, set: { raw in
-            state.onChange(index, "Change Layer Entrance") { l in
-                var h = l.highlight ?? LayerHighlight()
-                h.entrance = LayerEntrance(rawValue: raw)
-                l.highlight = h.isEmpty ? nil : h
+        // Any mix of effects. Following the cue's, the boxes show the cue's;
+        // ticking one gives the layer its own, starting from those.
+        Menu("Entrance") {
+            Toggle("The Cue\u{2019}s, \(SettingKey.entrance.format(.entrance(state.cueEntrance)))",
+                   isOn: Binding(get: { layer.highlight?.entrance == nil }, set: { on in
+                       guard on else { return }
+                       setEntrance(nil)
+                   }))
+            Divider()
+            ForEach(LayerEntrance.each, id: \.rawValue) { effect in
+                Toggle(effect.name.capitalized, isOn: Binding(get: { entrance.contains(effect) }, set: { on in
+                    var own = entrance
+                    if on { own.insert(effect) } else { own.remove(effect) }
+                    setEntrance(own)
+                }))
             }
-        })) {
-            Text("The Cue\u{2019}s").tag("")
-            ForEach(LayerEntrance.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0.rawValue) }
         }
         Divider()
         Button("Cue Points and Frame\u{2026}") { showDetails = true }
         Button("Replace\u{2026}") { state.onChoose(index) }
-        Button("Move Earlier") { state.onMove(index, index - 1) }.disabled(index == 0)
-        Button("Move Later") { state.onMove(index, index + 1) }.disabled(index == count - 1)
+        Button("Move Up") { state.onMove(index, index - 1) }.disabled(index == 0)
+        Button("Move Down") { state.onMove(index, index + 1) }.disabled(index == count - 1)
         Divider()
         Button("Remove") { state.onRemove(index) }
     }
+
+    /// The entrance this layer makes: its own, or the cue's.
+    private var entrance: LayerEntrance { layer.highlight?.entrance ?? state.cueEntrance }
+
+    private func setEntrance(_ entrance: LayerEntrance?) {
+        state.onChange(index, "Change Layer Entrance") { l in
+            var h = l.highlight ?? LayerHighlight()
+            h.entrance = entrance
+            l.highlight = h.isEmpty ? nil : h
+        }
+    }
 }
 
-private struct AddLayerTile: View {
+private struct AddLayerRow: View {
     let first: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: "plus").font(.system(size: 14, weight: .medium))
-                Text(first ? "Add layers" : "Add").font(.system(size: 10.5))
-            }
-            .foregroundStyle(Strip.dim)
-            .frame(width: Strip.thumb.width, height: Strip.thumb.height)
-            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Strip.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
-            .contentShape(Rectangle())
+            Label(first ? "Add Layers\u{2026}" : "Add\u{2026}", systemImage: "plus")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .help("Choose layers to add, or drop them anywhere here. Each arrives on the next GO. Every layer should be the base\u{2019}s size, with transparency.")
+        .buttonStyle(.borderless)
+        .padding(.vertical, 8)
+        .help("Choose layers to add, or drop them anywhere on the list. Each arrives on the next GO. Every layer should be the base\u{2019}s size, with transparency.")
     }
 }
 

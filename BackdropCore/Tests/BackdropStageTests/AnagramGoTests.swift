@@ -161,6 +161,83 @@ struct AnagramGoTests {
         #expect(c.runner.cue?.id == c.show.cues[0].id)
         #expect(anagrams.moveShown(0) != nil || c.runner.needsTicks)
     }
+
+    /// Edit mode, as the console runs it: the stage hidden, and the cue shown
+    /// in the console's own preview, drawn by `preview`.
+    func editing(_ cues: [Cue], preview: AnagramRenderer) -> ShowController {
+        let cues = cues.map { cue in
+            var cue = cue
+            SettingKey.hold.set(.number(2), in: &cue)
+            SettingKey.transition.set(.style(.snap), in: &cue)
+            return cue
+        }
+        let clock = self.clock
+        let c = ShowController(show: Show(title: "Test", cues: cues), renderers: [.anagram: anagrams, .title: titles],
+                               nextRenderers: [.anagram: preview, .title: TitleRenderer(reduceMotion: { true })], now: { clock.time })
+        c.runner.attach(stage)
+        c.nextRunner.attach(surface(width: 960, height: 540, role: .preview))
+        c.enterEditMode()
+        c.updateNextPreview()
+        return c
+    }
+
+    @Test("In edit mode Run again stands the first GO by, and each GO carries the console's preview on with the stage")
+    func editPreviewTakesEachGO() {
+        let preview = AnagramRenderer(random: SeededRandom(seed: 5))
+        let c = editing([stepped("1"), titleCue("NEXT")], preview: preview)
+        let anagram = c.show.cues[0].id
+        c.rerun()
+        #expect(c.playhead.standby == anagram && c.standingByGoPoint?.number == 1, "the cue stays selected, its first GO standing by")
+        #expect(c.nextRunner.cue?.id == anagram)
+        runUntilIdle(c)
+        #expect(preview.moveShown(0) == nil && anagrams.moveShown(0) == nil, "both wait for the first GO")
+        c.go()
+        runUntilIdle(c)
+        #expect(anagrams.moveShown(0) != nil, "the stage carried on")
+        #expect(preview.moveShown(0) != nil && preview.moveShown(0) == anagrams.moveShown(0), "and so did the preview, rather than waiting for ever")
+        #expect(c.playhead.live == anagram, "a GO carries the cue on, not starts it again")
+    }
+
+    @Test("In edit mode a setting changed while stepping through a cue leaves that cue selected")
+    func editWhileStepping() {
+        for sheet in [[stepped("1")], [stepped("1"), titleCue("NEXT")]] {
+            let preview = AnagramRenderer(random: SeededRandom(seed: 5))
+            let c = editing(sheet, preview: preview)
+            let anagram = c.show.cues[0].id
+            c.rerun()
+            runUntilIdle(c)
+            c.go()
+            runUntilIdle(c)
+            #expect(c.standingByGoPoint?.number == 2, "partway through its steps")
+            c.setSetting(.pause, to: .number(10), for: anagram)
+            #expect(c.playhead.standby == anagram && c.standingByCue?.id == anagram,
+                    "\(sheet.count) cue(s): still selected, not the end of the sheet or the next cue")
+            #expect(c.standingByGoPoint == nil, "the cue itself, shown finished, as an edit leaves it")
+            c.go()
+            #expect(c.playhead.live == anagram && c.standingByGoPoint?.number == 1, "GO runs it again from the start")
+        }
+    }
+
+    @Test("In edit mode a GO leaves a preview that only shows the cue finished, and one on another cue, alone")
+    func editPreviewLeftAlone() {
+        let preview = AnagramRenderer(random: SeededRandom(seed: 5))
+        let c = editing([stepped("1"), titleCue("NEXT")], preview: preview)
+        let anagram = c.show.cues[0].id
+        // GO on the cue row fires it on stage, and it stays selected, so the
+        // preview runs it too.
+        c.go()
+        #expect(c.nextRunner.cue?.id == anagram && c.standingByGoPoint?.number == 1)
+        runUntilIdle(c)
+        // An edit puts the preview back to showing the cue finished: the
+        // next GO carries the stage on and leaves the preview as it is.
+        c.updateCue(anagram, "Change Number") { $0.number = "1.1" }
+        c.updateNextPreview()
+        let finished = preview.lastFrame
+        c.standBy(anagram, step: 0)
+        c.go()
+        runUntilIdle(c)
+        #expect(preview.lastFrame == finished, "nothing to carry on")
+    }
 }
 
 extension AnagramRenderer {

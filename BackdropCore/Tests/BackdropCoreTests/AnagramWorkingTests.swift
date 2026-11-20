@@ -314,7 +314,8 @@ struct AnagramWorkingTests {
         #expect(p.rerun(in: sheet)?.presentation == .run)
         #expect(p.standby == id && p.standbyStep == 0 && p.goPointsTaken == 0)
         p.liveCueRedrawn(in: sheet)
-        #expect(p.goPointsTaken == 2 && p.standby == sheet.cues[1].id, "finished, it waits for nothing")
+        #expect(p.goPointsTaken == 2, "finished, it waits for nothing")
+        #expect(p.standby == id && p.standbyStep == nil, "and stays selected, as the cue being edited, rather than giving way to the next")
 
         var resumed = Playhead(show: sheet)
         _ = resumed.resume(at: id, in: sheet)

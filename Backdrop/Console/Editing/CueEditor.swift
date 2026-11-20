@@ -63,6 +63,9 @@ final class CueEditorPanel: PanelHost<CueEditorView> {
             if layeredStrip.layers != c.layers { layeredStrip.layers = c.layers }
             let layerMs = c.settings.layerMs
             if layeredStrip.cueLayerMs != layerMs { layeredStrip.cueLayerMs = layerMs }
+            if layeredStrip.cueEntrance != c.settings.entrance { layeredStrip.cueEntrance = c.settings.entrance }
+            let backdrop = c.base.isEmpty ? (c.layers.first?.src ?? "") : c.base
+            if layeredStrip.backdrop != backdrop { layeredStrip.backdrop = backdrop }
         }
         rootView = CueEditorView(
             cue: cue,

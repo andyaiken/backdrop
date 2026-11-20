@@ -188,8 +188,9 @@ struct LayeredGoTests {
 struct LayeredSettingsTests {
     @Test("A cue's settings start at the built-in values, and each can be changed")
     func values() {
-        let c = LayeredSettings(baseLevel: 40, entrance: .settle, zoom: 2)
-        #expect(c.layerMs == 800 && c.baseLevel == 40 && c.entrance == .settle && c.zoom == 2)
+        let c = LayeredSettings(baseLevel: 40, entrance: [.magnify, .bloom], zoom: 2)
+        #expect(c.layerMs == 800 && c.baseLevel == 40 && c.entrance == [.magnify, .bloom] && c.zoom == 2)
+        #expect(LayeredSettings().entrance == .outline, "outlined, as before")
         #expect(c.context == .desaturate && c.camera == .still && !c.eachStepOnGO)
         #expect(LayeredSettings(advance: .eachStep).eachStepOnGO)
     }
@@ -214,7 +215,12 @@ struct LayeredSettingsTests {
         #expect(SettingKey.layerTime.format(.number(800)) == "0.8 s")
         #expect(SettingKey.context.format(.context(.desaturate)) == "desaturate")
         #expect(SettingKey.push.choice(at: 1) == .push(.push) && SettingKey.push.choiceIndex(of: .push(.travel)) == 2)
-        #expect(SettingKey.entrance.choiceIndex(of: .entrance(.bloom)) == 3)
+        #expect(SettingKey.entrance.control == .effects(["Outline", "Magnify", "Bloom"]) && SettingKey.entrance.choices().isEmpty)
+        #expect(SettingKey.entrance.isOn(effect: 1, in: .entrance([.magnify])) && !SettingKey.entrance.isOn(effect: 0, in: .entrance([.magnify])))
+        #expect(SettingKey.entrance.turning(effect: 2, on: true, in: .entrance(.outline)) == .entrance([.outline, .bloom]))
+        #expect(SettingKey.entrance.turning(effect: 0, on: false, in: .entrance(.outline)) == .entrance(.fade))
+        #expect(SettingKey.entrance.format(.entrance(.fade)) == "fade" && SettingKey.entrance.format(.entrance([.bloom, .outline])) == "outline + bloom")
+        #expect(SettingKey.entrance.help.contains("Magnify") && SettingKey.entrance.help.contains("Bloom"))
         #expect(SettingKey.advance.choices(for: .layered).map(\.label) == ["By itself", "Each step on GO"])
         #expect(SettingKey.advance.format(.advance(.eachStep), for: .layered) == "each step on GO")
         #expect(SettingKey.advance.help.contains("layered image"))
@@ -233,9 +239,58 @@ struct LayeredSettingsTests {
         SettingKey.strength.set(.number(80), in: &cue)
         SettingKey.length.set(.number(10), in: &cue)
         SettingKey.move.set(.number(2000), in: &cue)
-        SettingKey.entrance.set(.entrance(.bloom), in: &cue)
+        SettingKey.entrance.set(.entrance([.outline, .bloom]), in: &cue)
         let s = content(cue).settings
-        #expect(s.contextLevel == 80 && s.contextTicks == 10 && s.cameraMs == 2000 && s.entrance == .bloom)
+        #expect(s.contextLevel == 80 && s.contextTicks == 10 && s.cameraMs == 2000 && s.entrance == [.outline, .bloom])
+    }
+}
+
+@Suite("Layered image cues: entrances in show.json")
+struct LayeredEntranceCodingTests {
+    func decode(_ entrance: String) throws -> LayerEntrance {
+        let json = #"{"kind":"layered","settings":{"entrance":"# + entrance + "}}"
+        return content(try JSONDecoder().decode(Cue.self, from: Data(json.utf8))).settings.entrance
+    }
+
+    func written(_ entrance: LayerEntrance) throws -> String {
+        String(decoding: try JSONEncoder().encode(entrance), as: UTF8.self)
+    }
+
+    @Test("A single name reads as before, and Settle is Magnify")
+    func legacy() throws {
+        #expect(try decode(#""fade""#) == .fade)
+        #expect(try decode(#""outline""#) == .outline)
+        #expect(try decode(#""settle""#) == .magnify)
+        #expect(try decode(#""bloom""#) == .bloom)
+    }
+
+    @Test("Several effects read and write as a list, in their own order, passing over a name not known")
+    func lists() throws {
+        #expect(try decode(#"["bloom","outline"]"#) == [.outline, .bloom])
+        #expect(try decode(#"["magnify","sparkle"]"#) == .magnify)
+        #expect(try decode("[]") == .fade)
+        #expect(try written([.bloom, .magnify, .outline]) == #"["outline","magnify","bloom"]"#)
+        #expect(try written(.outline) == #""outline""# && written(.fade) == #""fade""#, "one or none stays a name")
+    }
+
+    @Test("A layer's own mix round trips")
+    func layerOwn() throws {
+        var l = layer("hands")
+        l.highlight = LayerHighlight(entrance: [.magnify, .outline])
+        let cue = layered([l])
+        #expect(try JSONDecoder().decode(Cue.self, from: try JSONEncoder().encode(cue)) == cue)
+    }
+
+    @Test("Only a mix, or magnify, raises the version past what a version 12 reader holds")
+    func version() {
+        #expect(Show(title: "T", cues: [layered([layer("a")], settings: LayeredSettings(entrance: .bloom))]).version == 7)
+        #expect(Show(title: "T", cues: [layered([layer("a")], settings: LayeredSettings(entrance: .fade))]).version == 7)
+        #expect(Show(title: "T", cues: [layered([layer("a")], settings: LayeredSettings(entrance: [.outline, .bloom]))]).version == 13)
+        #expect(Show(title: "T", cues: [layered([layer("a")], settings: LayeredSettings(entrance: .magnify))]).version == 13)
+        var own = layer("a")
+        own.highlight = LayerHighlight(entrance: [.outline, .magnify])
+        #expect(Show(title: "T", cues: [layered([own])]).version == 13, "a layer's own counts too")
+        #expect(Show.formatVersion >= 13)
     }
 }
 
