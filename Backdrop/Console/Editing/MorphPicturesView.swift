@@ -55,6 +55,9 @@ struct MorphPicturesView: View {
         .mediaDrop(accepting: { ShowDocument.accepts($0, for: .morph) }) { [state] urls in state.onAdd(urls) }
         .clearsStaleRowDrop($drop)
     }
+
+    /// How the list works, for the tip beside its heading.
+    static let explanation = "Choose pictures to add, or drop them anywhere on the list. Each becomes the next in turn. Between two pictures is the stage from one to the next: its points, and how long it takes. Brass is its own time; the rest take the cue\u{2019}s morph time."
 }
 
 private enum Strip {
@@ -175,7 +178,6 @@ private struct StageRow: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Stage \(index): its points, and how long it takes. Brass is its own time; the rest take the cue\u{2019}s morph time.")
             Spacer(minLength: 0)
         }
         .padding(.leading, Strip.arrowInset)
@@ -199,6 +201,5 @@ private struct AddPictureRow: View {
         }
         .buttonStyle(.borderless)
         .padding(.vertical, 8)
-        .help("Choose pictures to add, or drop them anywhere on the list. Each becomes the next in turn.")
     }
 }

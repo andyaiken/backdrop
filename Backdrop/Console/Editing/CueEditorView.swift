@@ -309,13 +309,7 @@ struct CueEditorView: View {
             Section {
                 AnagramsEditor(focus: $focus, order: fieldOrder, anagrams: c.anagrams, edit: edit, onFinished: onFinished)
             } header: {
-                HStack(spacing: 6) {
-                    Text("Anagrams")
-                    // How to write them, on hover, rather than as text in the form.
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .help(Anagram.formatExplanation)
-                }
+                InfoHeading("Anagrams", info: Anagram.formatExplanation)
             }
         case .image(let c):
             Section(cue.kind.heading) {
@@ -387,8 +381,10 @@ struct CueEditorView: View {
             Section(cue.kind.heading) {
                 textRow("Label", cue, name: "Change Label")
             }
-            Section("Pictures") {
+            Section {
                 MorphPicturesView(state: morphPictures)
+            } header: {
+                InfoHeading("Pictures", info: MorphPicturesView.explanation)
             }
         case .map(let c):
             Section(cue.kind.heading) {
@@ -436,7 +432,7 @@ struct CueEditorView: View {
                         }
                     }
                 }
-                FieldRow(label: "Mirror") {
+                FieldRow(label: "Mirror", info: "Flip the picture left to right, as a mirror does: for a camera that faces the person it films") {
                     Toggle("", isOn: Binding(
                         get: { c.settings.mirror },
                         set: { on in edit("Change Mirror") { cue in
@@ -445,7 +441,6 @@ struct CueEditorView: View {
                     ))
                     .labelsHidden()
                     .focusable(false)
-                    .help("Flip the picture left to right, as a mirror does: for a camera that faces the person it films")
                 }
                 FieldRow(label: "Turn") {
                     Picker("", selection: Binding(
@@ -491,11 +486,13 @@ struct CueEditorView: View {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Base", path: c.base, kind: .image, empty: "No base \u{2014} black", cue: cue)
             }
-            Section("Layers") {
+            Section {
                 LayeredStripView(state: layeredStrip)
                 Text("\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s"), \(c.steps.count) step\(c.steps.count == 1 ? "" : "s"). Every layer is a full-frame picture at the base\u{2019}s size, with transparency.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } header: {
+                InfoHeading("Layers", info: LayeredStripView.explanation)
             }
         case .keypad(let c):
             Section(cue.kind.heading) {
@@ -564,7 +561,7 @@ struct CueEditorView: View {
                     .labelsHidden()
                     .focusable(false)
                 }
-                FieldRow(label: "Typing") {
+                FieldRow(label: "Typing", info: "Show the dots while a message is on its way, and the compose bar while one is typed. Off, each bubble just arrives.") {
                     Toggle("", isOn: Binding(
                         get: { c.settings.showTyping },
                         set: { on in edit("Change Typing") { cue in
@@ -573,7 +570,6 @@ struct CueEditorView: View {
                     ))
                     .labelsHidden()
                     .focusable(false)
-                    .help("Show the dots while a message is on its way, and the compose bar while one is typed. Off, each bubble just arrives.")
                 }
                 FieldRow(label: "Between messages", value: ContinueMode.seconds(c.settings.pauseTicks * CueTiming.standardClockMs) + " s") {
                     Slider(value: Binding(
@@ -631,7 +627,7 @@ struct CueEditorView: View {
                     .focusable(false)
                 }
                 if c.settings.sent {
-                    FieldRow(label: "Status") {
+                    FieldRow(label: "Status", info: "How far the sent message has got: written beneath the bubble, or as ticks inside it in the Green rectangles style") {
                         Picker("", selection: Binding(
                             get: { c.settings.status },
                             set: { status in edit("Change Status") { cue in
@@ -642,10 +638,9 @@ struct CueEditorView: View {
                         }
                         .labelsHidden()
                         .focusable(false)
-                        .help("How far the sent message has got: written beneath the bubble, or as ticks inside it in the Green rectangles style")
                     }
                     if c.settings.status != .none, c.settings.status != .read {
-                        FieldRow(label: "Moves on with GO") {
+                        FieldRow(label: "Moves on with GO", info: "Each GO moves the status on a step, towards read") {
                             Toggle("", isOn: Binding(
                                 get: { c.settings.advances },
                                 set: { on in edit("Change Status On GO") { cue in
@@ -654,7 +649,6 @@ struct CueEditorView: View {
                             ))
                             .labelsHidden()
                             .focusable(false)
-                            .help("Each GO moves the status on a step, towards read")
                         }
                     }
                 }

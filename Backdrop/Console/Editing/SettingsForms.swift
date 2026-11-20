@@ -3,23 +3,65 @@ import BackdropCore
 import BackdropStage
 import SwiftUI
 
-/// A field laid out in two rows: its name on the left and its reading, if it
-/// has one, on the right; then its control across the whole width.
+/// A circled i beside a field's name or a section's heading: what it means,
+/// on hover, rather than as text in the form. The Inspector explains itself
+/// only this way, never by hovering over a control itself.
+struct InfoTip: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .foregroundStyle(.secondary)
+            .help(text)
+    }
+}
+
+/// A section's heading, and an `InfoTip` beside it where it has one.
+struct InfoHeading: View {
+    let title: String
+    var info: String?
+
+    init(_ title: String, info: String? = nil) {
+        self.title = title
+        self.info = info
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            if let info { InfoTip(info) }
+        }
+    }
+}
+
+/// A field laid out in two rows: its name on the left, with an `InfoTip`
+/// where it has an explanation, and its reading, if it has one, on the right;
+/// then its control across the whole width.
 struct FieldRow<Control: View>: View {
     let label: String
     var value: String?
+    var info: String?
+    /// Off dims the field, but not its tip: what a setting would do is still
+    /// there to read while it has no effect.
+    var isEnabled = true
     @ViewBuilder let control: Control
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(label)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(label).disabled(!isEnabled)
+                    if let info { InfoTip(info) }
+                }
                 Spacer(minLength: 12)
                 if let value {
                     Text(value)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .disabled(!isEnabled)
                 }
             }
             // A grouped form reserves a label column beside any control that
@@ -29,6 +71,7 @@ struct FieldRow<Control: View>: View {
                 .labelsHidden()
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .disabled(!isEnabled)
         }
         .padding(.vertical, 2)
     }
@@ -46,11 +89,9 @@ struct SettingRowView: View {
     let onChange: (SettingValue, _ continuous: Bool) -> Void
 
     var body: some View {
-        FieldRow(label: key.label, value: showsReading ? reading : nil) {
+        FieldRow(label: key.label, value: showsReading ? reading : nil, info: key.help, isEnabled: isEnabled) {
             control
         }
-        .disabled(!isEnabled)
-        .help(key.help)
     }
 
     /// A picker shows its own value, so it needs no reading beside it.
@@ -339,15 +380,8 @@ struct CueSettingsSections: View {
                     }
                 }
             } header: {
-                HStack(spacing: 6) {
-                    Text(transitions ? "Transition in" : group.id)
-                    // What timing means, on hover, rather than as text in the form.
-                    if group.id == "Timing" {
-                        Image(systemName: "info.circle")
-                            .foregroundStyle(.secondary)
-                            .help(SettingKey.timingExplanation)
-                    }
-                }
+                InfoHeading(transitions ? "Transition in" : group.id,
+                            info: group.id == "Timing" ? SettingKey.timingExplanation : nil)
             } footer: {
                 if transitions { Text(Self.transitionNote) }
             }

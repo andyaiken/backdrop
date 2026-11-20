@@ -74,6 +74,9 @@ struct LayeredStripView: View {
         if layer.blend != .normal { marks.append(layer.blend.rawValue) }
         return marks.joined(separator: " ")
     }
+
+    /// How the list works, for the tip beside its heading.
+    static let explanation = "Choose layers to add, or drop them anywhere on the list. Each arrives on the next GO. Every layer should be the base\u{2019}s size, with transparency. A layer\u{2019}s name is what the operator and the book call that part."
 }
 
 private enum Strip {
@@ -116,7 +119,6 @@ private struct LayerRow: View {
                     .multilineTextAlignment(.leading)
                     .lineLimit(1)
                     .onSubmit { commitName() }
-                    .help("What the operator and the book call this part")
                 let marks = LayeredStripView.marks(layer)
                 if !marks.isEmpty {
                     Text(marks)
@@ -264,7 +266,6 @@ private struct AddLayerRow: View {
         }
         .buttonStyle(.borderless)
         .padding(.vertical, 8)
-        .help("Choose layers to add, or drop them anywhere on the list. Each arrives on the next GO. Every layer should be the base\u{2019}s size, with transparency.")
     }
 }
 
