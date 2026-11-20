@@ -13,6 +13,9 @@ struct TitleLayout {
     /// Each title character gets a cell this many ems wide, a little wider
     /// than SF Mono's advance, which opens the tracking.
     static let cellEms: CGFloat = 0.72
+    /// On a departures board each cell holds a card, so it is wider: room
+    /// for a card a little wider than its glyph, and a gap to the next.
+    static let boardEms: CGFloat = 0.9
 
     let size: CGSize
 
@@ -44,14 +47,17 @@ struct TitleLayout {
     let axisLine: CGRect
     let axisBaseline: CGFloat
 
-    init(size: CGSize, titleCount: Int, sceneCount: Int, showsScene: Bool, histogram: Bool, textScale: Int, vmin: CGFloat? = nil) {
+    init(size: CGSize, titleCount: Int, sceneCount: Int, showsScene: Bool, histogram: Bool, textScale: Int,
+         cellEms: CGFloat = Self.cellEms, vmin: CGFloat? = nil) {
         self.init(size: size, titleLines: [titleCount], sceneCount: sceneCount, showsScene: showsScene, histogram: histogram,
-                  textScale: textScale, vmin: vmin)
+                  textScale: textScale, cellEms: cellEms, vmin: vmin)
     }
 
-    /// - Parameter titleLines: How many characters each line of the title
-    ///   has.
-    init(size: CGSize, titleLines lengths: [Int], sceneCount: Int, showsScene: Bool, histogram: Bool, textScale: Int, vmin: CGFloat? = nil) {
+    /// - Parameters:
+    ///   - titleLines: How many characters each line of the title has.
+    ///   - cellEms: How wide each title character's cell is, in ems.
+    init(size: CGSize, titleLines lengths: [Int], sceneCount: Int, showsScene: Bool, histogram: Bool, textScale: Int,
+         cellEms: CGFloat = Self.cellEms, vmin: CGFloat? = nil) {
         self.size = size
         let W = size.width, H = size.height
         let vmin = vmin ?? min(W, H) / 100
@@ -64,8 +70,8 @@ struct TitleLayout {
         // for all of them; then scaled by the show's text size. A line is
         // never wider than 90% of the plate inside its padding; past that the
         // cells close up.
-        let fontSize = max(9, min(W * 0.88 / (n * Self.cellEms), H * 0.28, H * 0.62 / (rows * 1.05)) * CGFloat(textScale) / 100)
-        let columnWidth = min((n * fontSize * Self.cellEms).rounded(), (W - 2 * padding) * 0.9)
+        let fontSize = max(9, min(W * 0.88 / (n * cellEms), H * 0.28, H * 0.62 / (rows * 1.05)) * CGFloat(textScale) / 100)
+        let columnWidth = min((n * fontSize * cellEms).rounded(), (W - 2 * padding) * 0.9)
         pitch = columnWidth / n
         titleFont = StageFont.title(size: fontSize)
         let titleLineHeight = fontSize * 1.05

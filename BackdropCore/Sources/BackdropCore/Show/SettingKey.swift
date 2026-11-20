@@ -119,7 +119,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .zoom: "Following the dot, how many stage widths across a map is drawn; holding still, the closest the frame comes. The map's picture should be about this many times the stage's width in pixels, or it softens. For a layered image cue, the closest its frame comes to a part; the layers should be about this many times the stage's width in pixels, and the cue holds that much more in memory."
         case .trail: "How long the red trail behind a map's dot lasts before it fades away. None leaves no trail."
         case .font: "The typeface an anagram is set in. Each letter keeps its own shape as it travels, so a printed hand suits; a joined-up script loses its joins."
-        case .letters: "How each letter finds its way home: cycling through random glyphs and rolling back into place, or spinning on a dial, like a cryptex's, and settling."
+        case .letters: "How each letter finds its way home: cycling through random glyphs and rolling back into place, spinning on a dial, like a cryptex's, and settling, or flipping over on its card of a departures board until it lands."
         case .grid: "How many tiles across the picture is cut into. In quarters, how fine it gets: more tiles, more times a piece splits in four."
         case .flip: "How long each tile takes to show its part of the picture: to turn over, or to sharpen. In quarters, how long the finished picture takes to come up over the pieces."
         case .order: "Which tile goes next: in a wave from the top left, in a random order, or out along a golden spiral, square by Fibonacci square. Quarters, for a reveal that sharpens, has no tiles: the picture is one block, and a piece picked at random splits in four, again and again."
@@ -176,7 +176,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .reveal: .choice(["Just show it", "Sharpen from one colour", "Flip from black"])
         case .advance: .choice(["By itself", "Each anagram on GO", "Each step on GO"])
         case .pause: .slider(SettingRange.pauseTicks, step: 2)
-        case .letters: .choice(["Cycling", "Dials"])
+        case .letters: .choice(["Cycling", "Dials", "Departures board"])
         case .bars: .choice(["Letters", "Digraphs"])
         case .font: .font
         case .morphTime: .slider(SettingRange.morphMs, step: 100)
@@ -244,7 +244,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .reveal: [SettingValue.reveal(.show), .reveal(.sharpen), .reveal(.flip)][safe: index]
         case .advance: [SettingValue.advance(.byItself), .advance(.eachAnagram), .advance(.eachStep)][safe: index]
         case .camera: [SettingValue.camera(.follow), .camera(.still)][safe: index]
-        case .letters: [SettingValue.letters(.cycle), .letters(.dials)][safe: index]
+        case .letters: [SettingValue.letters(.cycle), .letters(.dials), .letters(.departuresBoard)][safe: index]
         case .bars: [SettingValue.bars(.letters), .bars(.digraphs)][safe: index]
         case .context: [SettingValue.context(.none), .context(.dim), .context(.desaturate), .context(.spotlight)][safe: index]
         case .push: [SettingValue.push(.still), .push(.push), .push(.travel)][safe: index]
@@ -301,7 +301,12 @@ public enum SettingKey: String, CaseIterable, Sendable {
             case .sharpen: "sharpen from one colour"
             case .flip: "flip from black"
             }
-        case (_, .letters(let letters)): letters == .cycle ? "cycling" : "dials"
+        case (_, .letters(let letters)):
+            switch letters {
+            case .cycle: "cycling"
+            case .dials: "dials"
+            case .departuresBoard: "departures board"
+            }
         case (_, .bars(let bars)): bars == .letters ? "letters" : "digraphs"
         case (_, .font(let family)): family.isEmpty ? Self.stageFont : family
         case (_, .style(let style)):

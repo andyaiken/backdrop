@@ -90,7 +90,7 @@ struct HeaderBar: View {
                     }
                 .fixedSize()
                 .focusable(false)
-                .help("Adds a cue after the one standing by")
+                .help("Adds a cue after the one marked Next")
             }
 
             if state.editing {
@@ -129,7 +129,7 @@ struct HeaderBar: View {
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.bar)
+        .background(Color(nsColor: Desk.bar))
         .overlay(alignment: .bottom) { Divider() }
     }
 

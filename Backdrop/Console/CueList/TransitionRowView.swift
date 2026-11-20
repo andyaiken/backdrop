@@ -59,10 +59,10 @@ final class TransitionRowView: NSView {
             (isSelected ? Desk.selected : Desk.hover).setFill()
             NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4).fill()
         }
-        // Selected as a standby cue is: the brass bar at the left, brass text.
+        // Selected as a standby cue is: the brass tab at the left, brass
+        // text. The row is too short for a word on the tab.
         if isSelected {
-            Desk.brass.setFill()
-            NSRect(x: 0, y: 2, width: 2, height: bounds.height - 4).fill()
+            Desk.drawTab(nil, fill: Desk.brass, ink: .white, in: bounds.insetBy(dx: 0.5, dy: 0.5), radius: 4)
         }
         let colour = isChanged || isSelected ? Desk.brass : Desk.dim
         NSAttributedString(string: "\u{2193} " + note, attributes: [.font: Desk.sans(10.5), .foregroundColor: colour])

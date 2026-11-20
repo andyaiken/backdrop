@@ -2,8 +2,9 @@ import AppKit
 import BackdropCore
 
 /// One row: number, a glyph for the kind, the name, and beneath it the
-/// subtitle and the cue point. The live cue sits on a raised background; the
-/// standby cue has a brass number and a brass bar. In edit mode every cue but
+/// subtitle and the cue point. The live cue sits on a raised background with
+/// a grey LIVE tab at its left; the standby cue has a tint, a brass number
+/// and a brass NEXT tab. In edit mode every cue but
 /// the first has a row above it for the transition in, `TransitionRowView`.
 final class CueRowView: NSView {
     let cue: Cue
@@ -118,6 +119,11 @@ final class CueRowView: NSView {
     /// The room the edit-mode controls take at the right.
     private var controlsWidth: CGFloat { isEditing ? 48 : 0 }
 
+    /// How far below the top of its rectangle AppKit draws a font's
+    /// baseline: the ascender, rounded to a whole point.
+    private static let lines = NSLayoutManager()
+    private static func baseline(_ font: NSFont) -> CGFloat { lines.defaultBaselineOffset(for: font) }
+
     /// A system symbol, drawn the right way up in this top-down view.
     private func drawSymbol(_ name: String, _ colour: NSColor, centredIn rect: NSRect, size: CGFloat = 11) {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
@@ -151,14 +157,18 @@ final class CueRowView: NSView {
             Desk.lineBright.setStroke()
             path.stroke()
         }
-        // Standing by is a tint and a bar; the pointer over a row is a lighter tint.
+        // Standing by is a tint and a tab; the pointer over a row is a lighter tint.
         if isStandby || (isHovered && !isTargeted) {
             (isStandby ? Desk.selected : Desk.hover).setFill()
             NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
         }
+        // A tab at the left names the row. The live cue stood by again shows
+        // NEXT, since that's what Space will do; its raised background still
+        // says it's live.
         if isStandby {
-            Desk.brass.setFill()
-            NSRect(x: 0, y: 6, width: 2, height: bounds.height - 12).fill()
+            Desk.drawTab("NEXT", fill: Desk.brass, ink: .white, in: box, radius: 4)
+        } else if isLive {
+            Desk.drawTab("LIVE", fill: Desk.dim, ink: Desk.colour, in: box, radius: 3)
         }
 
         func draw(_ text: String, _ font: NSFont, _ colour: NSColor, x: CGFloat, y: CGFloat, width: CGFloat, align: NSTextAlignment = .left, kern: CGFloat = 0) {
@@ -170,11 +180,20 @@ final class CueRowView: NSView {
             ]).draw(in: NSRect(x: x, y: y, width: width, height: 18))
         }
 
-        var y: CGFloat = 8
+        // The cue's own lines are centred down the row as a block, on their
+        // ink: from the first line's capitals, or a blank's swatch, to the
+        // last line's baseline. That is how the number and the marks beside
+        // them are centred, so the two sit level.
+        let titleFont = Desk.mono(13), smallFont = Desk.sans(11.5)
+        let isBlank: Bool = if case .blank = cue.content { true } else { false }
+        let below = (subtitle.isEmpty ? 0 : 1) + (cue.line.isEmpty ? 0 : 1)
+        let inkTop = isBlank ? 2.5 : Self.baseline(titleFont) - titleFont.capHeight
+        let inkBottom = below == 0 ? (isBlank ? 15.5 : Self.baseline(titleFont)) : 18 + CGFloat(below - 1) * 17 + Self.baseline(smallFont)
+        var y = (middleY - (inkTop + inkBottom) / 2).rounded()
         // A figure or a mark is centred by its own height, not its line's: a
         // line has room below the baseline for descenders that digits never
         // use, which would leave them sitting high beside the icons.
-        func centredY(_ font: NSFont) -> CGFloat { middleY + font.capHeight / 2 - font.ascender }
+        func centredY(_ font: NSFont) -> CGFloat { middleY + font.capHeight / 2 - Self.baseline(font) }
         let numberFont = Desk.mono(12)
         draw(cue.number, numberFont, isStandby ? Desk.brass : Desk.dim, x: 8, y: centredY(numberFont), width: 40, align: .right)
         drawSymbol(cue.kind.symbol, Desk.dim, centredIn: NSRect(x: 56, y: middleY - 8, width: 14, height: 14))
@@ -196,7 +215,7 @@ final class CueRowView: NSView {
             Desk.lineBright.setStroke()
             swatch.stroke()
         } else {
-            draw(cue.text.isEmpty ? "\u{2014}" : cue.text.replacingOccurrences(of: "\n", with: " \u{23CE} "), Desk.mono(13), Desk.text, x: textX, y: y, width: textWidth, kern: 0.65)
+            draw(cue.text.isEmpty ? "\u{2014}" : cue.text.replacingOccurrences(of: "\n", with: " \u{23CE} "), titleFont, Desk.text, x: textX, y: y, width: textWidth, kern: 0.65)
         }
         var markX = bounds.width - 22 - controlsWidth
         if let symbol {
@@ -209,11 +228,11 @@ final class CueRowView: NSView {
         }
         y += 18
         if !subtitle.isEmpty {
-            draw(subtitle, Desk.sans(11.5), Desk.dim, x: textX, y: y, width: textWidth)
+            draw(subtitle, smallFont, Desk.dim, x: textX, y: y, width: textWidth)
             y += 17
         }
         if !cue.line.isEmpty {
-            let italic = NSFontManager.shared.convert(Desk.sans(11.5), toHaveTrait: .italicFontMask)
+            let italic = NSFontManager.shared.convert(smallFont, toHaveTrait: .italicFontMask)
             draw(cue.line, italic, Desk.dim, x: textX, y: y, width: textWidth)
         }
     }

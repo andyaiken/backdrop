@@ -38,6 +38,12 @@ final class TextLayer: StillLayer {
         didSet { if runs != oldValue { setNeedsDisplay() } }
     }
 
+    /// The cards of a departures board, drawn under the runs, for a
+    /// decryption whose letters are on one.
+    var cards: [FlapCard] = [] {
+        didSet { if cards != oldValue { setNeedsDisplay() } }
+    }
+
     /// Distance of the baseline above the layer's bottom edge.
     var baseline: CGFloat = 0 {
         didSet { if baseline != oldValue { setNeedsDisplay() } }
@@ -52,6 +58,7 @@ final class TextLayer: StillLayer {
         super.init(layer: layer)
         if let other = layer as? TextLayer {
             runs = other.runs
+            cards = other.cards
             baseline = other.baseline
         }
     }
@@ -62,6 +69,9 @@ final class TextLayer: StillLayer {
 
     override func draw(in ctx: CGContext) {
         ctx.textMatrix = .identity
+        for card in cards {
+            card.draw(in: ctx, baseline: baseline, height: bounds.height)
+        }
         for run in runs {
             let attributes: [NSAttributedString.Key: Any] = [
                 NSAttributedString.Key(kCTFontAttributeName as String): run.font,

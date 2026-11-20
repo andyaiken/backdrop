@@ -83,11 +83,17 @@ struct SettingKeyTests {
         #expect(SettingKey.holdLength(holdTicks: 0, clockMs: 44) == nil, "no hold, nothing to time")
     }
 
-    @Test("Letters: cycling or dials, set on any decryption cue")
+    @Test("Letters: cycling, dials or a departures board, set on any decryption cue")
     func letters() throws {
         #expect(TitleSettings().letters == .cycle)
         #expect(SettingKey.letters.format(.letters(.dials)) == "dials")
         #expect(SettingKey.letters.choice(at: 1) == .letters(.dials) && SettingKey.letters.choiceIndex(of: .letters(.dials)) == 1)
+        #expect(SettingKey.letters.format(.letters(.departuresBoard)) == "departures board")
+        #expect(SettingKey.letters.choices().map(\.label) == ["Cycling", "Dials", "Departures board"])
+        var board = Cue(content: .title(TitleContent(text: "ROSSLYN")))
+        SettingKey.letters.set(.letters(.departuresBoard), in: &board)
+        let saved = try JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(board))
+        #expect(SettingKey.letters.value(in: saved) == .letters(.departuresBoard), "kept in a saved show")
         var cue = Cue(content: .title(TitleContent(text: "ROSSLYN")))
         SettingKey.letters.set(.letters(.dials), in: &cue)
         guard case .title(let content) = cue.content else { return }

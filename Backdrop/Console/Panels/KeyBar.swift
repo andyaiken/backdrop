@@ -15,8 +15,8 @@ final class KeyBar: PanelHost<KeyBarView> {
 
 struct KeyBarView: View {
     private static let keys: [(key: String, meaning: String)] = [
-        ("Space", "Fire the standby cue"),
-        ("\u{2190} \u{2192}", "Stand by previous, next"),
+        ("Space", "Fire the next cue"),
+        ("\u{2190} \u{2192}", "Change the next cue"),
         ("0\u{2013}9 \u{21A9}", "Go to a cue number"),
         ("R", "Run again"),
         ("B", "Blackout"),
@@ -39,7 +39,7 @@ struct KeyBarView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.bar)
+        .background(Color(nsColor: Desk.bar))
         .overlay(alignment: .top) { Divider() }
     }
 }

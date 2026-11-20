@@ -212,6 +212,31 @@ struct TitleRendererTests {
         render(s).save("title-dials-settled")
     }
 
+    @Test("On a departures board every letter is a card, flipping until it lands")
+    func departuresBoard() throws {
+        let renderer = TitleRenderer(random: SeededRandom(seed: 5), reduceMotion: { true })
+        let s = surface()
+        renderer.mount(on: s)
+        renderer.setVisible(true, on: s)
+        renderer.prepare(titleCue("SOFIA", sub: "THE CRYPTEX", key: "APPLE", settings: TitleSettings(letters: .departuresBoard)),
+                         show: ShowSettings())
+        let t = try #require(tree(renderer, on: s))
+        let layout = try #require(t.layout)
+        #expect(abs(layout.pitch / CTFontGetSize(layout.titleFont) - TitleLayout.boardEms) < 0.15, "wider cells, to hold the cards")
+        #expect(t.title.mask == nil, "no dial's window")
+        _ = renderer.frame(-10)
+        #expect(t.title.runs.isEmpty && t.title.cards.count == 5, "the cards carry the glyphs")
+        #expect(t.title.cards.allSatisfy { $0.phase == 0 && $0.from == $0.to }, "at rest on the ciphertext")
+        #expect(t.scene.cards.count == 11 && t.scene.runs.isEmpty, "the scene line is on cards too")
+        _ = renderer.frame(12)
+        #expect(t.title.cards.contains { $0.phase > 0 && $0.phase < 1 && $0.from != $0.to }, "flaps falling")
+        render(s).save("title-board-flipping")
+        _ = renderer.frame(1_000)
+        #expect(t.title.cards.map(\.from).joined() == "SOFIA" && t.title.cards.allSatisfy { $0.phase == 0 })
+        #expect(t.scene.cards.map(\.from).joined() == "THE CRYPTEX", "a settled space is a blank card")
+        render(s).save("title-board-settled")
+    }
+
     @Test("A long decryption wraps onto two lines, and digraph bars count pairs against English")
     func longWithDigraphs() throws {
         let renderer = TitleRenderer(random: SeededRandom(seed: 6), reduceMotion: { true })

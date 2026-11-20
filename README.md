@@ -44,15 +44,15 @@ Every target is signed as [Signing.xcconfig](Config/Signing.xcconfig) says: auto
 
 On first launch Backdrop opens a new, empty show. To try it:
 
-1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview edits the cue standing by: what every cue has at the top, then what this kind of cue shows, then the settings it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
+1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview edits the cue marked Next: what every cue has at the top, then what this kind of cue shows, then the settings it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
 2. Choose Show › Enter Show Mode, then Show › Open Projector.
-3. Press Space to fire the standby cue.
+3. Press Space to fire the next cue.
 
 | Key | In show mode |
 | --- | --- |
-| Space | Fire the standby cue, or go to the step of a cue that stands by. No other key fires a cue; only show control, below, can fire one from another machine |
-| → ↓ PageDown, ← ↑ PageUp | Stand by the next or previous row: a cue, or one of the GOs a cue waits for |
-| 0–9 and `.`, then Return | Stand by a cue by number |
+| Space | Fire the next cue, or go to the step that is next. No other key fires a cue; only show control, below, can fire one from another machine |
+| → ↓ PageDown, ← ↑ PageUp | Make the row below or above next: a cue, or one of the GOs a cue waits for |
+| 0–9 and `.`, then Return | Make a cue next by its number |
 | R | Run the live cue again |
 | B | Blackout |
 
@@ -64,7 +64,7 @@ Pictures and clips come in from wherever they are:
 
 - **Dragged onto the cue list,** from Finder, Photos, Safari, Mail or another app. They become image and video cues where they are dropped, named for their files and numbered between their neighbours. Several at once go in order of their names, as one undo step. An empty show takes them too, to start the sheet.
 - **Dragged onto a cue.** A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue. So does one dropped on the Inspector's picture well, or on its list of a morph's pictures or a layered image's layers, where it goes at the end.
-- **Edit › Import from iPhone or iPad,** with Continuity Camera. A photo goes into the cue standing by if that is an image cue still waiting for its picture, and otherwise becomes a new image cue after it.
+- **Edit › Import from iPhone or iPad,** with Continuity Camera. A photo goes into the next cue if that is an image cue still waiting for its picture, and otherwise becomes a new image cue after it.
 - **Choose…** in the Inspector, whose panel also reaches the Photos library, under Media in its sidebar.
 
 Photos, Safari and Mail don't hand over a file until the drop, so what they send is written into a temporary folder first. Backdrop copies it into the show when the show is saved, as it does a file from Finder.
@@ -80,21 +80,21 @@ Another machine in the booth can fire Backdrop's cues, so one GO in QLab, or on 
 - **MIDI Show Control (MSC).** Backdrop listens on every MIDI source: interfaces, USB, other apps such as QLab, and Network MIDI sessions, which are turned on in Audio MIDI Setup › MIDI Network Setup.
   - It answers to its own device ID (1 unless set otherwise) and to All Devices.
   - It only answers the video command formats and All Types, so a lighting desk's MSC for its own cue 12 doesn't fire projection cue 12.
-  - GO fires the cue standing by, or the cue it names. LOAD stands a cue by. ALL OFF blacks out, and RESTORE brings the picture back.
+  - GO fires the next cue, or the cue it names. LOAD makes a cue next. ALL OFF blacks out, and RESTORE brings the picture back.
   - MSC cue numbers can only contain digits and a decimal point, so a cue numbered P12 can't be reached this way.
 - **OSC, over UDP.** Backdrop listens on port 53100 unless set otherwise, which is clear of QLab's own 53000 and 53001. Settings shows the address to send to. If another app already has the port, the console warns.
 
   | Address | Does |
   | --- | --- |
-  | `/backdrop/go` | Fires the cue standing by |
+  | `/backdrop/go` | Fires the next cue |
   | `/backdrop/go/12` | Fires cue 12 |
-  | `/backdrop/standby/12` | Stands cue 12 by |
+  | `/backdrop/standby/12` | Makes cue 12 next |
   | `/backdrop/blackout/on` | Blacks out |
   | `/backdrop/blackout/off` | Brings the picture back |
 
   The cue number can also be sent as the message's argument, as in `/backdrop/go 12`.
 
-A GO for a number that isn't in the sheet fires nothing. It doesn't fire whatever happens to be standing by.
+A GO for a number that isn't in the sheet fires nothing. It doesn't fire whatever happens to be next.
 
 In QLab, either:
 
@@ -112,11 +112,11 @@ Backdrop offers three actions to Shortcuts, Spotlight and Siri. A Stream Deck ca
 | Action | Does |
 | --- | --- |
 | Open Show | Opens a show, in show mode, ready for GO |
-| Stand By Cue | Stands a cue by. It fires nothing |
+| Set Next Cue | Makes a cue next. It fires nothing |
 | Blackout | Turns blackout on or off, or whichever it isn't |
 
-- **Stand By Cue and Blackout only act in show mode,** like show control. The status line says what each did, and the shortcut reports the same.
-- **A cue is chosen by its number,** so a shortcut for cue 12 stands by cue 12 of whichever show is open.
+- **Set Next Cue and Blackout only act in show mode,** like show control. The status line says what each did, and the shortcut reports the same.
+- **A cue is chosen by its number,** so a shortcut for cue 12 makes cue 12 next in whichever show is open.
 - **There is no GO action.** A shortcut mistyped into Spotlight shouldn't be able to fire a cue mid-show. Space and show control are the ways to fire one.
 
 Shows go into Spotlight when they are opened and saved, under their titles and with the words on their cues. Searching for a line in a show finds the show, and choosing it opens it.
@@ -273,7 +273,7 @@ This runs the Shortcuts actions and their cue lists against a show held in memor
 
 ## The app icon
 
-`Backdrop/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows a projection screen of tiles caught in an image cue's diagonal sweep, upstage of a perspective floor: the tiles that have turned are bone, the diagonal that is turning is brass, and the rest are still slate. These are the console's own colours.
+`Backdrop/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows one card of a split-flap board with a B on it, as title cues and the wordmark decrypt letter by letter. The card is split across the middle on two brass hinge pins. The B's top half is bone, and its lower half sits a shade back, in the shadow of the flap above. These are the console's own colours, on its navy.
 
 Each layer is an SVG in `Assets/`. Open the document in Icon Composer, which comes with Xcode, to change it. To render it from the command line:
 

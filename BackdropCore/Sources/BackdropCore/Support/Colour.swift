@@ -50,7 +50,8 @@ extension RGB: Codable {
     }
 }
 
-/// The two colours a title moves between, and the console's accent.
+/// The two colours a title moves between, the cards it can stand on, and
+/// the console's accent.
 public enum Palette {
     /// Ciphertext, and the colour unflipped tiles are pulled toward.
     public static let slate = RGB(0x56, 0x63, 0x78)
@@ -58,6 +59,9 @@ public enum Palette {
     public static let bone = RGB(0xF2, 0xEB, 0xDD)
     /// The ghost bars of expected English frequency, and the console's accent.
     public static let brass = RGB(0xC8, 0xA2, 0x4A)
+    /// A card of a departures board: a step up from the black stage, so the cards stand
+    /// out from it without crowding the slate of the ciphertext on them.
+    public static let card = RGB(0x24, 0x2A, 0x35)
 }
 
 /// Reads the CSS colours a hand-edited show.json may hold into `RGB`. Hex

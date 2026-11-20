@@ -192,7 +192,7 @@ struct CueEditorView: View {
                 CueSettingsSections(transitions: false, cue: cue, onChange: onSetting)
             } else {
                 Section {
-                    Text("Nothing is standing by. Add a cue with Add Cue at the top, or click one in the list to edit it.")
+                    Text("Nothing is up next. Add a cue with Add Cue at the top, or click one in the list to edit it.")
                 }
             }
         }

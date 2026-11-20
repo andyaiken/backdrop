@@ -17,7 +17,7 @@ public enum RemoteCommand: Equatable, Sendable {
         switch self {
         case .go(nil): "GO"
         case .go(let cue?): "GO for cue \(cue)"
-        case .standBy(let cue): "standby for cue \(cue)"
+        case .standBy(let cue): "a request to make cue \(cue) next"
         case .blackout(true): "blackout"
         case .blackout(false): "blackout off"
         }

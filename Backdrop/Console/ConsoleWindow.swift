@@ -28,8 +28,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let gotoField = NSTextField(string: "")
     private let status = Desk.label("", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
     private let divider = PanelView(fill: Desk.line)
+    /// The tints behind the cue list and the Inspector, either side of the
+    /// previews.
+    private let listColumn = PanelView(fill: Desk.column)
+    private let inspectorColumn = PanelView(fill: Desk.column)
     private let warning = WarningBox()
-    private let previewHeading = Desk.label("On screen", font: Desk.sans(12.5), colour: Desk.dim)
     private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: Desk.previewRadius)
     /// The Inspector's outline, around its forms, so it reads as a
     /// place even with nothing in it. It has no fill: the desk shows through.
@@ -252,8 +255,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         inspectorDivider.onFinished = { [weak self] in
             if let self { UserDefaults.standard.set(Double(self.inspectorWidth.clamped(to: Self.inspectorRange)), forKey: "ConsoleInspectorWidth") }
         }
-        for view in [header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewHeading, previewFrame, nextHeading, nextFrame, runAgainButton, wordmark, inspectorFrame, editor, cueTransitions, showSettingsPanel, inspectorEmpty,
+        for view in [listColumn, inspectorColumn, header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
+                     warning, previewFrame, nextHeading, nextFrame, runAgainButton, wordmark, inspectorFrame, editor, cueTransitions, showSettingsPanel, inspectorEmpty,
                      keybar, cueListEmpty, listDivider, inspectorDivider] as [NSView] {
             root.addSubview(view)
         }
@@ -335,15 +338,9 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let live = playhead.live.flatMap { show[$0] }
         let next = playhead.standby.flatMap { show[$0] }
         controller.updateNextPreview()
-        previewHeading.stringValue = live.map { "On screen: cue \($0.number)" } ?? "On screen"
-        if controller.mode == .edit {
-            nextHeading.stringValue = next.map { "Cue \($0.number)" } ?? "No cue selected"
-        } else {
-            nextHeading.stringValue = next.map { cue in
-                let prompt = cue.line.trimmingCharacters(in: .whitespacesAndNewlines)
-                return "Up next: cue \(cue.number)" + (prompt.isEmpty ? "" : " \u{2014} \(prompt)")
-            } ?? "Up next"
-        }
+        // Only edit mode captions its preview. In show mode the Inspector
+        // beside each preview says what it is.
+        nextHeading.stringValue = next.map { "Cue \($0.number)" } ?? "No cue selected"
         runAgainButton.isEnabled = next != nil || live != nil
         // A step of a cue may stand by rather than the cue itself: GO carries
         // the live cue on or back to it, or fires another cue straight at it.
@@ -425,6 +422,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let listTop = cuesHeading.frame.maxY + 9
         cueList.frame = NSRect(x: 6, y: listTop, width: leftWidth - 12, height: max(0, gotoY - 12 - listTop))
         divider.frame = NSRect(x: leftWidth, y: top - 1, width: 1, height: bottom - top + 1)
+        listColumn.frame = NSRect(x: 0, y: top, width: leftWidth, height: max(0, bottom - top))
 
         // Right: warnings, the previews, and in edit mode the Inspector.
         let x = leftWidth + 1 + 16, width = b.width - x - 16
@@ -457,6 +455,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         let lineX = editorX - gap / 2
         inspectorFrame.frame = NSRect(x: lineX, y: top - 1, width: 1, height: bottom - top + 1)
         let column = NSRect(x: lineX + 1, y: top, width: max(0, b.width - lineX - 1), height: max(0, bottom - top))
+        inspectorColumn.frame = column
         inspectorDivider.frame = NSRect(x: editorX - gap / 2 - 4, y: regionTop, width: 9, height: region.height)
         if editing {
             let inner = column.insetBy(dx: Self.inspectorPadding, dy: Self.inspectorPadding)
@@ -464,10 +463,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             editor.frame = inner
             cueTransitions.frame = inner
             showSettingsPanel.frame = inner
-        } else {
-            // The panel pads itself.
-            standby.frame = NSRect(x: region.minX, y: region.minY, width: region.width,
-                                   height: min(standby.height(width: region.width), region.height))
         }
         // The warning belongs to the previews' column; the Inspector runs full height beside it.
         var y = regionTop
@@ -479,6 +474,18 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
         placePreview(x: x, y: y, width: previewWidth, available: bottom - 16 - y - headingHeight,
                      headingHeight: headingHeight)
+        if !editing {
+            // Each half of the panel centred on its preview: what is on
+            // screen beside the middle of the live picture, what is next
+            // beside the middle of the next one, and the rule between them
+            // in the space between the two. The panel pads itself across.
+            standby.frame = region
+            standby.marks = StandbyPanel.Marks(
+                onScreen: previewFrame.frame.midY - region.minY,
+                rule: (previewFrame.frame.maxY + nextFrame.frame.minY) / 2 - region.minY,
+                upNext: nextFrame.frame.midY - region.minY
+            )
+        }
     }
 
     /// The space between the previews and the Inspector, where its divider stands.
@@ -502,7 +509,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         if controller.mode == .edit {
             // The selected cue alone, as large as the space allows, with a
             // button under it to run it again.
-            previewHeading.isHidden = true
             previewFrame.isHidden = true
             // With no cue selected the wordmark takes the place instead.
             let empty = controller.standingByCue == nil
@@ -530,28 +536,28 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
                                           width: size.width, height: buttonHeight)
             return
         }
-        previewHeading.isHidden = false
+        // No captions: the Inspector beside each preview says what it is.
         previewFrame.isHidden = false
         runAgainButton.isHidden = true
         wordmark.isHidden = true
-        nextHeading.isHidden = false
+        nextHeading.isHidden = true
         nextFrame.isHidden = false
         // The live preview, and under it the up-next preview, smaller, both
-        // centred across the space and together centred down it.
+        // centred across the space. Down it, whatever room they leave is
+        // shared evenly above, between and below them, never less than the
+        // gap.
         let ratio: CGFloat = 0.6
-        let room = max(0, available - headingHeight - gap)
+        let full = available + headingHeight
+        let room = max(0, full - 3 * gap)
         let w = min(width, (room * previewAspect / (1 + ratio)).rounded(.down))
         let h = (w / previewAspect).rounded()
         let nw = (w * ratio).rounded(), nh = (nw / previewAspect).rounded()
-        let total = headingHeight + h + gap + headingHeight + nh
-        let top = y + max(0, ((available + headingHeight - total) / 2).rounded())
+        let space = max(gap, ((full - h - nh) / 3).rounded(.down))
         let left = x + ((width - w) / 2).rounded()
-        previewHeading.frame = NSRect(x: left, y: top, width: w, height: 18)
-        previewFrame.frame = NSRect(x: left, y: top + headingHeight, width: w, height: h)
+        previewFrame.frame = NSRect(x: left, y: y + space, width: w, height: h)
         preview.frame = previewFrame.bounds.insetBy(dx: 1, dy: 1)
-        let nextLeft = x + ((width - nw) / 2).rounded(), nextTop = previewFrame.frame.maxY + gap
-        nextHeading.frame = NSRect(x: nextLeft, y: nextTop, width: nw, height: 18)
-        nextFrame.frame = NSRect(x: nextLeft, y: nextTop + headingHeight, width: nw, height: nh)
+        let nextLeft = x + ((width - nw) / 2).rounded()
+        nextFrame.frame = NSRect(x: nextLeft, y: previewFrame.frame.maxY + space, width: nw, height: nh)
         nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
     }
 

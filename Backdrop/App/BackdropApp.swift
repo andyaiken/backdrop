@@ -142,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         guard let cue else { return }
         let alert = NSAlert()
         alert.messageText = "Backdrop stopped unexpectedly during the show."
-        alert.informativeText = "The last cue fired was cue \(cue.number). Resuming puts it straight back on the projector, finished, and stands by the next."
+        alert.informativeText = "The last cue fired was cue \(cue.number). Resuming puts it straight back on the projector, finished, with the cue after it up next."
         alert.addButton(withTitle: "Resume at Cue \(cue.number)")
         alert.addButton(withTitle: "Start from the Top")
         alert.beginSheetModal(for: window) { response in

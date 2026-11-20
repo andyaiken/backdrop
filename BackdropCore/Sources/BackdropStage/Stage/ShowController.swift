@@ -279,8 +279,8 @@ public final class ShowController {
             }
         case .standBy(let number):
             say(playhead.standBy(number: number, in: show)
-                ? "Standby for cue \(number) arrived by \(source)."
-                : "Standby for cue \(number) arrived by \(source), but no cue is numbered \(number).")
+                ? "Cue \(number) made next by \(source)."
+                : "Asked by \(source) to make cue \(number) next, but no cue is numbered \(number).")
         case .blackout(let on):
             if playhead.blackout != on {
                 playhead.blackout = on

@@ -6,6 +6,10 @@ public enum TitleLetters: String, Codable, Sendable, CaseIterable {
     /// Each on a dial, as a cryptex's letters are: it spins a full turn and
     /// its shift, slowing to settle on the letter.
     case dials
+    /// Each on a card of a departures board, a split-flap board: it flips
+    /// forwards round the ring, slowing for its last few flaps, until its
+    /// letter lands.
+    case departuresBoard
 }
 
 /// What a decryption's histogram counts.
@@ -81,6 +85,9 @@ public struct TitleReveal: Sendable {
         case .dials:
             title = titlePlan.dials(f)
             scene = sceneLine ? scenePlan.dials(f) : []
+        case .departuresBoard:
+            title = titlePlan.board(f)
+            scene = sceneLine ? scenePlan.board(f) : []
         }
 
         var counts = [Int](repeating: 0, count: 26)

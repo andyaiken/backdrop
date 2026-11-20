@@ -3,7 +3,7 @@ import BackdropCore
 
 /// One GO a cue waits for, under its cue: "GO 2 · Dracula? No." It has no
 /// number of its own. GOs already reached are dimmed and ticked; the one
-/// standing by has the brass bar. A click stands it by. It is drawn from
+/// standing by has the brass tab. A click stands it by. It is drawn from
 /// its cue's content, so it can't be dragged or deleted.
 final class SubCueRowView: NSView {
     let cue: UUID
@@ -33,9 +33,10 @@ final class SubCueRowView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
+        // The cue row's tab, on a row too short for its word.
         if isStandby {
-            Desk.brass.setFill()
-            NSRect(x: 0, y: 3, width: 2, height: bounds.height - 6).fill()
+            Desk.drawTab(nil, fill: Desk.brass, ink: .white,
+                         in: NSRect(x: 0, y: 3, width: bounds.width, height: bounds.height - 6), radius: 3)
         }
         func draw(_ text: String, _ font: NSFont, _ colour: NSColor, x: CGFloat, width: CGFloat, align: NSTextAlignment = .left) {
             let style = NSMutableParagraphStyle()

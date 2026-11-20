@@ -94,7 +94,7 @@ struct PreferencesView: View {
             } header: {
                 Text("Show control")
             } footer: {
-                Text("GO fires the cue standing by, or the cue it names. LOAD stands a cue by. ALL OFF blacks out, and RESTORE brings the picture back. Backdrop answers to its own device ID and to All Devices, in the video command formats and All Types.")
+                Text("GO fires the next cue, or the cue it names. LOAD makes a cue next. ALL OFF blacks out, and RESTORE brings the picture back. Backdrop answers to its own device ID and to All Devices, in the video command formats and All Types.")
             }
 
             Section {
@@ -129,9 +129,9 @@ struct PreferencesView: View {
     }
 
     private static let oscAddresses: [(address: String, meaning: String)] = [
-        ("/backdrop/go", "fires the cue standing by"),
+        ("/backdrop/go", "fires the next cue"),
         ("/backdrop/go/12", "fires cue 12"),
-        ("/backdrop/standby/12", "stands cue 12 by"),
+        ("/backdrop/standby/12", "makes cue 12 next"),
         ("/backdrop/blackout/on", "blacks out"),
         ("/backdrop/blackout/off", "brings the picture back"),
     ]

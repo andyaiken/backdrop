@@ -65,14 +65,14 @@ enum IntentsCheck {
         check(((try? await query.entities(matching: "3")) ?? []).map(\.id) == ["3"], "and by its number")
         check(((try? await query.entities(for: ["1", "9"])) ?? []).map(\.id) == ["1"], "a saved cue number finds that cue, and one not in the show finds nothing")
 
-        // Stand By Cue.
+        // Set Next Cue.
         // A parameter is set through its wrapper, so the intent itself needn't be mutable.
         let standBy = StandByCueIntent()
         standBy.cue = all[2]
         _ = try? await standBy.perform()
-        check(controller.playhead.standby.flatMap { controller.show[$0]?.number } == "3", "Stand By Cue stands cue 3 by")
+        check(controller.playhead.standby.flatMap { controller.show[$0]?.number } == "3", "Set Next Cue makes cue 3 next")
         check(controller.playhead.live == nil, "and fires nothing")
-        check(controller.message == "Standby for cue 3 arrived by a shortcut.", "and the status line says so: \(controller.message ?? "nothing")")
+        check(controller.message == "Cue 3 made next by a shortcut.", "and the status line says so: \(controller.message ?? "nothing")")
 
         // Blackout, each way.
         let blackout = BlackoutIntent()

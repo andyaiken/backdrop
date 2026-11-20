@@ -25,11 +25,16 @@ public struct GlyphState: Equatable, Sendable {
     /// halfway between M and N. `glyph` is the nearest. Nil off a dial, and
     /// for characters outside the ring.
     public var dial: Double?
+    /// On a departures board, where its card stands on the ring, fractions and all:
+    /// 12.25 is a quarter of the way through the flip from M to N. `glyph`
+    /// is the nearest. Nil off a card, and for characters outside the ring.
+    public var flap: Double?
 
-    init(glyph: Character, progress: Double, dial: Double? = nil) {
+    init(glyph: Character, progress: Double, dial: Double? = nil, flap: Double? = nil) {
         self.glyph = glyph
         self.progress = progress
         self.dial = dial
+        self.flap = flap
     }
 
     public var isSettled: Bool { progress >= 1 }
@@ -102,6 +107,37 @@ public struct TravelPlan: Equatable, Sendable {
                 glyph: home ? c.plain : (nearest == " " ? Cipher.spaceMark : nearest),
                 progress: x,
                 dial: home ? Double(Cipher.ringPosition(c.plain) ?? 0) : dial
+            )
+        }
+    }
+
+    /// Every character on its card of a departures board on frame `f`. A
+    /// card only flips forwards, as a split-flap board's do, from its
+    /// ciphertext on round the ring to its letter, and a whole turn when the
+    /// two are the same. It flips fast at first and slows for the last few
+    /// flaps, so the letter is seen to land, over the same frames the
+    /// character would otherwise take. Nothing random: a card shows every
+    /// glyph between.
+    public func board(_ f: Int) -> [GlyphState] {
+        let n = Cipher.ring.count
+        return characters.map { c in
+            guard c.moves, let from = Cipher.ringPosition(c.cipher), let to = Cipher.ringPosition(c.plain) else {
+                return GlyphState(glyph: c.plain, progress: 1)
+            }
+            let t = f - c.start
+            let home = t >= c.total
+            let x = min(max(Double(t) / Double(c.total), 0), 1)
+            let ahead = (to - from + n) % n
+            // Eased out, quadratically: less headlong than a dial, since every
+            // flap is a whole card turning over.
+            let left = 1 - x
+            let flipped = Double(ahead == 0 ? n : ahead) * (1 - left * left)
+            let position = home ? Double(to) : (Double(from) + flipped).truncatingRemainder(dividingBy: Double(n))
+            let nearest = Cipher.ring[Int(position.rounded()) % n]
+            return GlyphState(
+                glyph: home ? c.plain : (nearest == " " ? Cipher.spaceMark : nearest),
+                progress: x,
+                flap: position
             )
         }
     }

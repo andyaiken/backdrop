@@ -146,7 +146,8 @@ public final class TitleRenderer: CueRenderer {
             sceneCount: reveal?.scenePlan.characters.count ?? 0,
             showsScene: reveal?.showsScene ?? false,
             histogram: reveal?.histogram ?? true,
-            textScale: textScale
+            textScale: textScale,
+            cellEms: reveal?.letters == .departuresBoard ? TitleLayout.boardEms : TitleLayout.cellEms
         )
         tree.layout = layout
 
@@ -211,16 +212,27 @@ public final class TitleRenderer: CueRenderer {
         guard let layout = tree.layout else { return }
 
         // Each line of the title in its own layer; the space a long title
-        // wraps at is drawn on neither.
+        // wraps at is drawn on neither. On a departures board every
+        // character is a card, and the cards carry the glyphs.
+        let board = reveal?.letters == .departuresBoard
         let lines = reveal?.titleLines ?? [0..<frame.title.count]
         for (layer, range) in zip(tree.titleLines, lines) {
-            layer.runs = range.clamped(to: frame.title.indices).enumerated().flatMap { column, i in
+            let columns = range.clamped(to: frame.title.indices).enumerated()
+            layer.cards = board ? columns.map { column, i in
+                Self.card(for: frame.title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch)
+            } : []
+            layer.runs = board ? [] : columns.flatMap { column, i in
                 Self.runs(for: frame.title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch,
                           row: layout.titleLine.height)
             }
         }
         // The scene line is drawn at 70% opacity, a step behind the place.
-        tree.scene.runs = frame.scene.enumerated().flatMap { i, g in
+        // Its cards are small, so they go without hinge pins.
+        tree.scene.cards = board ? frame.scene.enumerated().map { i, g in
+            Self.card(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: layout.scenePitch,
+                      pins: false)
+        } : []
+        tree.scene.runs = board ? [] : frame.scene.enumerated().flatMap { i, g in
             Self.runs(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: nil,
                       row: layout.sceneLine.height)
         }
@@ -262,6 +274,26 @@ public final class TitleRenderer: CueRenderer {
             let text = g.isSettled && abs(offset) < 0.5 ? String(g.glyph) : String(glyph == " " ? Cipher.spaceMark : glyph)
             return TextRun(text: text, font: font, colour: g.colour.cgColor(alpha: alpha * weight), x: x, cell: cell, dy: -offset * row)
         }
+    }
+
+    /// One character on its card of a departures board: at rest, or partway
+    /// through the flip from one glyph round the ring to the next. An
+    /// unsettled space shows its open box, as it does off a board.
+    static func card(for g: GlyphState, font: CTFont, alpha: CGFloat, x: CGFloat, cell: CGFloat, pins: Bool = true) -> FlapCard {
+        let colour = g.colour.cgColor(alpha: alpha)
+        guard let flap = g.flap, !g.isSettled else {
+            return FlapCard(String(g.glyph), font: font, colour: colour, x: x, cell: cell, pins: pins)
+        }
+        let n = Cipher.ring.count
+        let base = Int(flap.rounded(.down))
+        func glyph(_ i: Int) -> String {
+            let c = Cipher.ring[((i % n) + n) % n]
+            return String(c == " " ? Cipher.spaceMark : c)
+        }
+        let phase = CGFloat(flap - Double(base))
+        guard phase > 0 else { return FlapCard(glyph(base), font: font, colour: colour, x: x, cell: cell, pins: pins) }
+        return FlapCard(from: glyph(base), to: glyph(base + 1), phase: phase, font: font, colour: colour, x: x, cell: cell,
+                        pins: pins)
     }
 
     /// Three label-and-value pairs, centred as a row: labels in slate, values

@@ -56,21 +56,21 @@ struct OpenShowIntent: OpenIntent {
 /// Stands a cue by, ready for GO. It fires nothing: GO stays with the
 /// operator, or with show control.
 struct StandByCueIntent: AppIntent {
-    static let title: LocalizedStringResource = "Stand By Cue"
-    static let description = IntentDescription("Stands a cue by in the show open in Backdrop, ready for GO. It fires nothing, and only acts in show mode.")
+    static let title: LocalizedStringResource = "Set Next Cue"
+    static let description = IntentDescription("Makes a cue next in the show open in Backdrop, ready for GO. It fires nothing, and only acts in show mode.")
 
     @Parameter(title: "Cue")
     var cue: CueEntity
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Stand by \(\.$cue)")
+        Summary("Make \(\.$cue) next")
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let controller = try showInShowMode()
         controller.perform(.standBy(cue: cue.id), from: byShortcut)
-        return .result(dialog: "\(controller.message ?? "Cue \(cue.id) is standing by.")")
+        return .result(dialog: "\(controller.message ?? "Cue \(cue.id) is next.")")
     }
 }
 
@@ -121,9 +121,9 @@ struct BackdropShortcuts: AppShortcutsProvider {
             "Open a show in \(.applicationName)",
         ], shortTitle: "Open Show", systemImageName: "theatermasks")
         AppShortcut(intent: StandByCueIntent(), phrases: [
-            "Stand by \(\.$cue) in \(.applicationName)",
-            "Stand by a cue in \(.applicationName)",
-        ], shortTitle: "Stand By Cue", systemImageName: "forward.end")
+            "Make \(\.$cue) next in \(.applicationName)",
+            "Set the next cue in \(.applicationName)",
+        ], shortTitle: "Set Next Cue", systemImageName: "forward.end")
         AppShortcut(intent: BlackoutIntent(), phrases: [
             "Blackout in \(.applicationName)",
             "Black out the projector in \(.applicationName)",

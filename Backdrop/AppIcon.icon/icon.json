@@ -6,18 +6,18 @@
     {
       "layers": [
         {
-          "name": "Turned",
-          "image-name": "Turned.svg",
+          "name": "Pins",
+          "image-name": "Pins.svg",
           "glass": true
         },
         {
-          "name": "Turning",
-          "image-name": "Turning.svg",
+          "name": "Top",
+          "image-name": "Top.svg",
           "glass": true
         },
         {
-          "name": "Waiting",
-          "image-name": "Waiting.svg",
+          "name": "Bottom",
+          "image-name": "Bottom.svg",
           "glass": true
         }
       ],
@@ -33,8 +33,8 @@
     {
       "layers": [
         {
-          "name": "Floor",
-          "image-name": "Floor.svg",
+          "name": "Card",
+          "image-name": "Card.svg",
           "glass": true
         }
       ],

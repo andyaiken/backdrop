@@ -66,10 +66,10 @@ struct RemoteCommandTests {
         c.perform(.standBy(cue: "2"), from: "QLab")
         #expect(c.playhead.live == nil)
         #expect(number(c, c.playhead.standby) == "2")
-        #expect(c.message == "Standby for cue 2 arrived by QLab.")
+        #expect(c.message == "Cue 2 made next by QLab.")
         c.perform(.standBy(cue: "9"), from: "QLab")
         #expect(number(c, c.playhead.standby) == "2")
-        #expect(c.message == "Standby for cue 9 arrived by QLab, but no cue is numbered 9.")
+        #expect(c.message == "Asked by QLab to make cue 9 next, but no cue is numbered 9.")
     }
 
     @Test("Blackout on and off, whatever it was before")
