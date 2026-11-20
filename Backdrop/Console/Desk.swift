@@ -22,6 +22,8 @@ enum Desk {
     /// own tints, so they follow the accent colour and light or dark mode.
     static let hover = NSColor.quaternaryLabelColor
     static let selected = NSColor.controlAccentColor.withAlphaComponent(0.14)
+    /// The corners of the previews.
+    static let previewRadius: CGFloat = 10
 
     static func rgb(_ r: Int, _ g: Int, _ b: Int) -> NSColor {
         NSColor(srgbRed: CGFloat(r) / 255, green: CGFloat(g) / 255, blue: CGFloat(b) / 255, alpha: 1)
@@ -68,6 +70,7 @@ class PanelView: NSView {
         wantsLayer = true
         layer?.borderWidth = border == nil ? 0 : 1
         layer?.cornerRadius = radius
+        layer?.cornerCurve = .continuous
         applyColours()
     }
 

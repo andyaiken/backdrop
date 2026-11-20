@@ -30,7 +30,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     private let divider = PanelView(fill: Desk.line)
     private let warning = WarningBox()
     private let previewHeading = Desk.label("On screen", font: Desk.sans(12.5), colour: Desk.dim)
-    private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: 2)
+    private let previewFrame = PanelView(fill: .black, border: Desk.lineBright, radius: Desk.previewRadius)
     /// The Inspector's outline, around its forms, so it reads as a
     /// place even with nothing in it. It has no fill: the desk shows through.
     private let inspectorFrame = PanelView(fill: Desk.line)
@@ -42,7 +42,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         return b
     }()
     private let nextHeading = Desk.label("Up next", font: Desk.sans(12.5), colour: Desk.dim)
-    private let nextFrame = PanelView(fill: .black, border: Desk.line, radius: 2)
+    private let nextFrame = PanelView(fill: .black, border: Desk.line, radius: Desk.previewRadius)
     private(set) var editor = CueEditorPanel()
     private let cueTransitions = CueSettingsPanel()
     private let showSettingsPanel = ShowSettingsPanel()
@@ -141,6 +141,12 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         root.controller = controller
         root.onLayout = { [weak self] in self?.layoutContent() }
         root.paintDesk()
+        // The pictures sit 1pt inside their frames' borders, so their corners
+        // are rounded 1pt less to run alongside them.
+        for surface in [preview.surface, nextPreview.surface] {
+            surface.cornerRadius = Desk.previewRadius - 1
+            surface.cornerCurve = .continuous
+        }
         preview.controller = controller
         controller.runner.attach(preview.surface)
         previewFrame.addSubview(preview)
