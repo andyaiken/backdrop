@@ -28,12 +28,19 @@ Debug builds use [Backdrop-Debug.entitlements](Config/Backdrop-Debug.entitlement
 Open `Backdrop.xcodeproj` and run the Backdrop scheme (⌘R). From the command line:
 
 ```bash
-xcodebuild -project Backdrop.xcodeproj -scheme Backdrop -derivedDataPath DerivedData build
+xcodebuild -project Backdrop.xcodeproj -scheme Backdrop -derivedDataPath DerivedData -allowProvisioningUpdates build
 ```
 
 ```bash
 open DerivedData/Build/Products/Debug/Backdrop.app
 ```
+
+### Signing on another Mac
+
+Every target is signed as [Signing.xcconfig](Config/Signing.xcconfig) says: automatically, with an Apple Development certificate from the team. The certificate's private key never leaves the Mac that made it, so a certificate made on one Mac can't sign on another. Each Mac needs its own:
+
+- Sign in to the team in Xcode › Settings › Accounts. Then build once in Xcode, and Xcode makes a certificate for this Mac. `xcodebuild` makes one too, but only with `-allowProvisioningUpdates`, as above.
+- A Mac that can't sign for the team can sign to run locally. Put `CODE_SIGN_IDENTITY = -` and `DEVELOPMENT_TEAM =` on two lines in `Config/Signing.local.xcconfig`, which git ignores. That build runs only on the Mac that built it, and asks for the camera again after each rebuild.
 
 On first launch Backdrop opens a new, empty show. To try it:
 

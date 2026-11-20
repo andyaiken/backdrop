@@ -5,3 +5,6 @@
 .swiftpm/
 DerivedData/
 xcuserdata/
+
+# Signing overrides for one Mac (see Config/Signing.xcconfig)
+Config/Signing.local.xcconfig

@@ -1,0 +1,24 @@
+// How Backdrop and its Quick Look extensions are signed, for every target and
+// configuration. Nothing else in the project sets these, so a Mac can change
+// them in Signing.local.xcconfig without touching the project.
+//
+// The default is automatic signing with an Apple Development certificate from
+// the team. Each Mac needs a certificate of its own: its private key stays in
+// the keychain of the Mac that made it. A Mac signed in to the team in Xcode
+// (Settings › Accounts) gets one the first time it builds in Xcode, or with
+// xcodebuild -allowProvisioningUpdates.
+//
+// A Mac that can't sign for the team can sign to run locally instead. Create
+// Signing.local.xcconfig in this folder (git ignores it) containing:
+//
+//     CODE_SIGN_IDENTITY = -
+//     DEVELOPMENT_TEAM =
+//
+// That build runs on that Mac only, and it asks for the camera again after
+// every rebuild.
+
+DEVELOPMENT_TEAM = 3G846V4G68
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+
+#include? "Signing.local.xcconfig"
