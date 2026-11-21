@@ -10,6 +10,11 @@ public enum TitleLetters: String, Codable, Sendable, CaseIterable {
     /// forwards round the ring, slowing for its last few flaps, until its
     /// letter lands.
     case departuresBoard
+    /// Each in its place: the ciphertext fading straight out as the letter
+    /// fades in.
+    case fade
+    /// Each in its place: the ciphertext glyph's shape becoming the letter's.
+    case morph
 }
 
 /// What a decryption's histogram counts.
@@ -75,6 +80,13 @@ public struct TitleReveal: Sendable {
         self.init(text: cue.text, scene: cue.sub, key: cue.key, settings: settings, random: &random)
     }
 
+    /// Morphing letters between frames, fractions and all: they change shape
+    /// on every refresh, where everything else on the cue waits for the
+    /// next frame. Nothing random, so the same everywhere it is painted.
+    public func morphs(at position: Double) -> (title: [GlyphState], scene: [GlyphState]) {
+        (titlePlan.blends(at: position), sceneLine ? scenePlan.blends(at: position) : [])
+    }
+
     /// Everything the cue paints on frame `f`.
     public func frame(_ f: Int, random: inout some UnitRandom) -> TitleFrame {
         let title: [GlyphState], scene: [GlyphState]
@@ -88,6 +100,9 @@ public struct TitleReveal: Sendable {
         case .departuresBoard:
             title = titlePlan.board(f)
             scene = sceneLine ? scenePlan.board(f) : []
+        case .fade, .morph:
+            title = titlePlan.blends(f)
+            scene = sceneLine ? scenePlan.blends(f) : []
         }
 
         var counts = [Int](repeating: 0, count: 26)

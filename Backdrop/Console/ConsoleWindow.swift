@@ -19,8 +19,10 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     private let root = ConsoleRootView()
     private let header = HeaderView()
-    /// Edit mode, nothing selected: the wordmark fills the preview's place.
+    /// Edit mode, nothing selected: the wordmark, on a screen of its own in
+    /// the preview's place.
     private let wordmark = WordmarkView()
+    private let wordmarkFrame = PanelView(fill: .black, border: Desk.line, radius: Desk.previewRadius)
     private let standby = StandbyPanel()
     private let cuesHeading = Desk.label("Cues", font: Desk.sans(12.5, .semibold), colour: Desk.text)
     let cueList = CueListView()
@@ -157,6 +159,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         nextPreview.runner = controller.nextRunner
         controller.nextRunner.attach(nextPreview.surface)
         nextFrame.addSubview(nextPreview)
+        wordmarkFrame.addSubview(wordmark)
 
         runAgainButton.target = self
         runAgainButton.action = #selector(runAgainPressed)
@@ -256,7 +259,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             if let self { UserDefaults.standard.set(Double(self.inspectorWidth.clamped(to: Self.inspectorRange)), forKey: "ConsoleInspectorWidth") }
         }
         for view in [listColumn, inspectorColumn, header, standby, cuesHeading, cueList, gotoLabel, gotoField, status, divider,
-                     warning, previewFrame, nextHeading, nextFrame, runAgainButton, wordmark, inspectorFrame, editor, cueTransitions, showSettingsPanel, inspectorEmpty,
+                     warning, previewFrame, nextHeading, nextFrame, runAgainButton, wordmarkFrame, inspectorFrame, editor, cueTransitions, showSettingsPanel, inspectorEmpty,
                      keybar, cueListEmpty, listDivider, inspectorDivider] as [NSView] {
             root.addSubview(view)
         }
@@ -298,8 +301,8 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
     }
 
     #if DEBUG
-    func holdWordmark(atFrame frame: Int) {
-        wordmark.holdWordmark(atFrame: frame)
+    func holdWordmark(atFrame frame: Int, letters: TitleLetters? = nil) {
+        wordmark.holdWordmark(atFrame: frame, letters: letters)
     }
     #endif
 
@@ -510,17 +513,11 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             // The selected cue alone, as large as the space allows, with a
             // button under it to run it again.
             previewFrame.isHidden = true
-            // With no cue selected the wordmark takes the place instead.
             let empty = controller.standingByCue == nil
-            wordmark.isHidden = !empty
+            wordmarkFrame.isHidden = !empty
             nextHeading.isHidden = empty
             nextFrame.isHidden = empty
             runAgainButton.isHidden = empty
-            if empty {
-                let inset: CGFloat = 24
-                wordmark.frame = NSRect(x: x + inset, y: y, width: max(0, width - inset * 2), height: max(0, available))
-                return
-            }
             let buttonHeight: CGFloat = 32
             let room = max(0, available - headingHeight - gap - buttonHeight)
             let w = min(width, (room * previewAspect).rounded(.down))
@@ -528,8 +525,16 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
             let total = headingHeight + h + gap + buttonHeight
             let top = y + max(0, ((available + headingHeight - total) / 2).rounded())
             let left = x + ((width - w) / 2).rounded()
+            let screen = NSRect(x: left, y: top + headingHeight, width: w, height: h)
+            if empty {
+                // With no cue selected the wordmark plays on the screen the
+                // cue would, so picking one doesn't move it.
+                wordmarkFrame.frame = screen
+                wordmark.frame = wordmarkFrame.bounds.insetBy(dx: 1, dy: 1)
+                return
+            }
             nextHeading.frame = NSRect(x: left, y: top, width: w, height: 18)
-            nextFrame.frame = NSRect(x: left, y: top + headingHeight, width: w, height: h)
+            nextFrame.frame = screen
             nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
             let size = runAgainButton.fittingSize
             runAgainButton.frame = NSRect(x: x + ((width - size.width) / 2).rounded(), y: nextFrame.frame.maxY + gap,
@@ -539,7 +544,7 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate, NSTex
         // No captions: the Inspector beside each preview says what it is.
         previewFrame.isHidden = false
         runAgainButton.isHidden = true
-        wordmark.isHidden = true
+        wordmarkFrame.isHidden = true
         nextHeading.isHidden = true
         nextFrame.isHidden = false
         // The live preview, and under it the up-next preview, smaller, both

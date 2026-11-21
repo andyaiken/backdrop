@@ -24,9 +24,23 @@ struct TextRun: Equatable {
     /// Raised this far above the baseline, or below it when negative, as a
     /// letter on a dial is while it turns.
     var dy: CGFloat = 0
+    /// Drawn instead of the text: a shape in em units, `GlyphMorph.unitsPerEm`
+    /// to the em, from where the glyph's origin would be, as a letter
+    /// partway through a morph is. The text stays, for what it stands for.
+    var shape: CGPath?
 
     static func == (a: TextRun, b: TextRun) -> Bool {
         a.text == b.text && CFEqual(a.font, b.font) && a.colour == b.colour && a.x == b.x && a.cell == b.cell && a.dy == b.dy
+            && sameShape(a.shape, b.shape)
+    }
+
+    /// Both none, or the same elements, point for point.
+    private static func sameShape(_ a: CGPath?, _ b: CGPath?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): true
+        case let (a?, b?): CFEqual(a, b)
+        default: false
+        }
     }
 }
 
@@ -73,6 +87,21 @@ final class TextLayer: StillLayer {
             card.draw(in: ctx, baseline: baseline, height: bounds.height)
         }
         for run in runs {
+            if let shape = run.shape {
+                // Placed as the glyph would be: in a cell, centred by the
+                // type's one advance.
+                var x = run.x
+                if let cell = run.cell { x += (cell - StageFont.advance(of: run.font)) / 2 }
+                let scale = CTFontGetSize(run.font) / GlyphMorph.unitsPerEm
+                ctx.saveGState()
+                ctx.translateBy(x: x, y: baseline + run.dy)
+                ctx.scaleBy(x: scale, y: scale)
+                ctx.addPath(shape)
+                ctx.setFillColor(run.colour)
+                ctx.fillPath(using: .winding)
+                ctx.restoreGState()
+                continue
+            }
             let attributes: [NSAttributedString.Key: Any] = [
                 NSAttributedString.Key(kCTFontAttributeName as String): run.font,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): run.colour,

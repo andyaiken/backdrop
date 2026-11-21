@@ -8,7 +8,7 @@ import QuartzCore
 /// The model works out each frame once (`TitleReveal`); this paints it on
 /// every surface.
 @MainActor
-public final class TitleRenderer: CueRenderer {
+public final class TitleRenderer: PaintsBetweenFrames {
     public let isInstant = false
 
     /// How long a histogram bar takes to reach its new height.
@@ -25,6 +25,8 @@ public final class TitleRenderer: CueRenderer {
     /// The first paint of a cue lands without animation, so the bars appear
     /// at their opening heights instead of travelling there.
     private var fresh = true
+    /// The frame last painted, and whether the cue had settled by it.
+    private var painted: (frame: Int, settled: Bool)?
     private var trees: [ObjectIdentifier: Tree] = [:]
 
     /// - Parameters:
@@ -98,6 +100,7 @@ public final class TitleRenderer: CueRenderer {
     public func clear(_ surface: SurfaceLayer) {
         reveal = nil
         current = nil
+        painted = nil
         guard let tree = trees[ObjectIdentifier(surface)] else { return }
         tree.titleLines.forEach { $0.runs = [] }
         tree.scene.runs = []
@@ -113,8 +116,33 @@ public final class TitleRenderer: CueRenderer {
         reveal = TitleReveal(cue: content, settings: content.settings, random: &random)
         textScale = show.textScale
         current = nil
+        painted = nil
         fresh = true
+        if content.settings.letters == .morph { Self.readyMorphs(content) }
         for tree in trees.values { fit(tree.surface) }
+    }
+
+    /// Works out a morphing cue's shapes before it fires, so its first
+    /// frames don't wait for them.
+    public func preload(_ cue: Cue, show: ShowSettings) {
+        guard case .title(let content) = cue.content, content.settings.letters == .morph else { return }
+        Self.readyMorphs(content)
+    }
+
+    /// Every glyph a morphing cue's letters go from and to, readied in the
+    /// face it is drawn in. Which glyph each starts from depends only on the
+    /// text and the key, never on the dice.
+    private static func readyMorphs(_ content: TitleContent) {
+        var random = SystemUnitRandom()
+        func pairs(_ text: String) -> [(Character, Character)] {
+            TravelPlan(text: text, key: content.key, wave: 0, random: &random).characters.filter(\.moves).map {
+                ($0.cipher == " " ? Cipher.spaceMark : $0.cipher, $0.plain)
+            }
+        }
+        GlyphMorph.face(of: StageFont.title(size: GlyphMorph.unitsPerEm)).prepare(pairs(content.text))
+        if content.settings.sceneLine && !content.sub.isEmpty {
+            GlyphMorph.face(of: StageFont.text(size: GlyphMorph.unitsPerEm)).prepare(pairs(content.sub))
+        }
     }
 
     /// Text size is show-wide and only layout, so a title on stage refits
@@ -132,7 +160,23 @@ public final class TitleRenderer: CueRenderer {
         let animated = !fresh && !reduceMotion()
         for tree in trees.values { paint(frame, on: tree, animated: animated) }
         fresh = false
+        painted = (f, frame.isSettled)
         return frame.isSettled
+    }
+
+    /// Morphing letters change shape on every refresh. Everything else on a
+    /// decryption, and every other way its letters go, changes a frame at a
+    /// time, and cycling rolls its dice once a frame, so a frame is painted
+    /// once however many refreshes land on it.
+    public func paint(at position: Double) -> Bool {
+        let f = Int(position.rounded(.down))
+        if painted?.frame != f { _ = frame(f) }
+        let settled = painted?.settled ?? true
+        if let reveal, reveal.letters == .morph, !settled {
+            let letters = reveal.morphs(at: position)
+            for tree in trees.values { paintLetters(title: letters.title, scene: letters.scene, on: tree) }
+        }
+        return settled
     }
 
     public func fit(_ surface: SurfaceLayer) {
@@ -210,37 +254,41 @@ public final class TitleRenderer: CueRenderer {
 
     private func paint(_ frame: TitleFrame, on tree: Tree, animated: Bool) {
         guard let layout = tree.layout else { return }
-
-        // Each line of the title in its own layer; the space a long title
-        // wraps at is drawn on neither. On a departures board every
-        // character is a card, and the cards carry the glyphs.
-        let board = reveal?.letters == .departuresBoard
-        let lines = reveal?.titleLines ?? [0..<frame.title.count]
-        for (layer, range) in zip(tree.titleLines, lines) {
-            let columns = range.clamped(to: frame.title.indices).enumerated()
-            layer.cards = board ? columns.map { column, i in
-                Self.card(for: frame.title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch)
-            } : []
-            layer.runs = board ? [] : columns.flatMap { column, i in
-                Self.runs(for: frame.title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch,
-                          row: layout.titleLine.height)
-            }
-        }
-        // The scene line is drawn at 70% opacity, a step behind the place.
-        // Its cards are small, so they go without hinge pins.
-        tree.scene.cards = board ? frame.scene.enumerated().map { i, g in
-            Self.card(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: layout.scenePitch,
-                      pins: false)
-        } : []
-        tree.scene.runs = board ? [] : frame.scene.enumerated().flatMap { i, g in
-            Self.runs(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: nil,
-                      row: layout.sceneLine.height)
-        }
-
+        paintLetters(title: frame.title, scene: frame.scene, on: tree)
         guard reveal?.histogram ?? true else { return }
         tree.readouts.runs = readoutRuns(frame, layout: layout)
         for (bar, height) in zip(tree.bars, frame.barHeights) {
             setHeight(of: bar, to: layout.bars.height * height / 100, animated: animated)
+        }
+    }
+
+    /// The title and scene line's letters, as they stand.
+    private func paintLetters(title: [GlyphState], scene: [GlyphState], on tree: Tree) {
+        guard let layout = tree.layout else { return }
+        // Each line of the title in its own layer; the space a long title
+        // wraps at is drawn on neither. On a departures board every
+        // character is a card, and the cards carry the glyphs.
+        let board = reveal?.letters == .departuresBoard, morphs = reveal?.letters == .morph
+        let lines = reveal?.titleLines ?? [0..<title.count]
+        for (layer, range) in zip(tree.titleLines, lines) {
+            let columns = range.clamped(to: title.indices).enumerated()
+            layer.cards = board ? columns.map { column, i in
+                Self.card(for: title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch)
+            } : []
+            layer.runs = board ? [] : columns.flatMap { column, i in
+                Self.runs(for: title[i], font: layout.titleFont, alpha: 1, x: layout.titleCell(column), cell: layout.pitch,
+                          row: layout.titleLine.height, morphs: morphs)
+            }
+        }
+        // The scene line is drawn at 70% opacity, a step behind the place.
+        // Its cards are small, so they go without hinge pins.
+        tree.scene.cards = board ? scene.enumerated().map { i, g in
+            Self.card(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: layout.scenePitch,
+                      pins: false)
+        } : []
+        tree.scene.runs = board ? [] : scene.enumerated().flatMap { i, g in
+            Self.runs(for: g, font: layout.sceneFont, alpha: 0.7, x: CGFloat(i) * layout.scenePitch, cell: nil,
+                      row: layout.sceneLine.height, morphs: morphs)
         }
     }
 
@@ -258,7 +306,26 @@ public final class TitleRenderer: CueRenderer {
     /// One character: its glyph, or, on a dial, the glyphs in its window, a
     /// line apart, so one rolls out as the next rolls in, a little dimmer
     /// the further from the middle. A dial at rest shows only its own.
-    static func runs(for g: GlyphState, font: CTFont, alpha: CGFloat, x: CGFloat, cell: CGFloat?, row: CGFloat) -> [TextRun] {
+    /// Fading, the two glyphs in the one place, one going as the other comes.
+    /// Morphing, one shape partway from the one glyph to the other, once it
+    /// has started on its way.
+    static func runs(for g: GlyphState, font: CTFont, alpha: CGFloat, x: CGFloat, cell: CGFloat?, row: CGFloat,
+                     morphs: Bool = false) -> [TextRun] {
+        if let blend = g.blend, blend.from != blend.to {
+            if morphs {
+                if blend.amount > 0 {
+                    let shape = GlyphMorph.face(of: font).shape(from: blend.from, to: blend.to, amount: blend.amount)
+                    return [TextRun(text: String(g.glyph), font: font, colour: g.colour.cgColor(alpha: alpha), x: x, cell: cell,
+                                    shape: shape)]
+                }
+            } else {
+                let amount = CGFloat(blend.amount)
+                return [(blend.from, 1 - amount), (blend.to, amount)].compactMap { glyph, weight in
+                    guard weight > 0 else { return nil }
+                    return TextRun(text: String(glyph), font: font, colour: g.colour.cgColor(alpha: alpha * weight), x: x, cell: cell)
+                }
+            }
+        }
         guard let dial = g.dial else {
             return [TextRun(text: String(g.glyph), font: font, colour: g.colour.cgColor(alpha: alpha), x: x, cell: cell)]
         }

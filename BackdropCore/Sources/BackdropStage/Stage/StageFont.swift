@@ -67,7 +67,7 @@ public enum StageFont {
     }
 
     /// The advance shared by every glyph of a monospaced font.
-    static func advance(of font: CTFont) -> CGFloat {
+    nonisolated static func advance(of font: CTFont) -> CGFloat {
         var units = Array("M".utf16)
         var glyph = CGGlyph(0)
         var advance = CGSize.zero

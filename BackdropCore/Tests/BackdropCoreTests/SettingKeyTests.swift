@@ -83,13 +83,18 @@ struct SettingKeyTests {
         #expect(SettingKey.holdLength(holdTicks: 0, clockMs: 44) == nil, "no hold, nothing to time")
     }
 
-    @Test("Letters: cycling, dials or a departures board, set on any decryption cue")
+    @Test("Letters: cycling, dials, a departures board, a fade or a morph, set on any decryption cue")
     func letters() throws {
         #expect(TitleSettings().letters == .cycle)
         #expect(SettingKey.letters.format(.letters(.dials)) == "dials")
         #expect(SettingKey.letters.choice(at: 1) == .letters(.dials) && SettingKey.letters.choiceIndex(of: .letters(.dials)) == 1)
         #expect(SettingKey.letters.format(.letters(.departuresBoard)) == "departures board")
-        #expect(SettingKey.letters.choices().map(\.label) == ["Cycling", "Dials", "Departures board"])
+        #expect(SettingKey.letters.format(.letters(.fade)) == "fade")
+        #expect(SettingKey.letters.choice(at: 3) == .letters(.fade) && SettingKey.letters.choiceIndex(of: .letters(.fade)) == 3)
+        #expect(SettingKey.letters.format(.letters(.morph)) == "morph")
+        #expect(SettingKey.letters.choice(at: 4) == .letters(.morph) && SettingKey.letters.choiceIndex(of: .letters(.morph)) == 4)
+        #expect(SettingKey.letters.choices().map(\.label) == ["Cycling", "Dials", "Departures board", "Fade", "Morph"])
+        #expect(TitleLetters.allCases.allSatisfy { SettingKey.letters.choiceIndex(of: .letters($0)) != nil }, "every way in the menu")
         var board = Cue(content: .title(TitleContent(text: "ROSSLYN")))
         SettingKey.letters.set(.letters(.departuresBoard), in: &board)
         let saved = try JSONDecoder().decode(Cue.self, from: JSONEncoder().encode(board))

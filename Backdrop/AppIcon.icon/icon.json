@@ -6,18 +6,8 @@
     {
       "layers": [
         {
-          "name": "Pins",
-          "image-name": "Pins.svg",
-          "glass": true
-        },
-        {
-          "name": "Top",
-          "image-name": "Top.svg",
-          "glass": true
-        },
-        {
-          "name": "Bottom",
-          "image-name": "Bottom.svg",
+          "name": "Scene",
+          "image-name": "Scene.svg",
           "glass": true
         }
       ],
@@ -33,9 +23,36 @@
     {
       "layers": [
         {
-          "name": "Card",
-          "image-name": "Card.svg",
+          "name": "Cloth",
+          "image-name": "Cloth.svg",
           "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    },
+    {
+      "layers": [
+        {
+          "name": "Spill",
+          "image-name": "Spill.svg",
+          "glass": false
+        },
+        {
+          "name": "Floor",
+          "image-name": "Floor.svg",
+          "glass": true
+        },
+        {
+          "name": "Walls",
+          "image-name": "Walls.svg",
+          "glass": false
         }
       ],
       "shadow": {

@@ -237,6 +237,76 @@ struct TitleRendererTests {
         render(s).save("title-board-settled")
     }
 
+    @Test("Fading letters show the ciphertext and the letter in one place, one going as the other comes")
+    func fade() throws {
+        let renderer = TitleRenderer(random: SeededRandom(seed: 5), reduceMotion: { true })
+        let s = surface()
+        renderer.mount(on: s)
+        renderer.setVisible(true, on: s)
+        renderer.prepare(titleCue("SOFIA", sub: "THE CRYPTEX", key: "APPLE", settings: TitleSettings(letters: .fade)),
+                         show: ShowSettings())
+        let t = try #require(tree(renderer, on: s))
+        let layout = try #require(t.layout)
+        #expect(abs(layout.pitch / CTFontGetSize(layout.titleFont) - TitleLayout.cellEms) < 0.15, "a line's own cells, no cards")
+        #expect(t.title.mask == nil && t.title.cards.isEmpty, "no dial's window, no cards")
+        _ = renderer.frame(-10)
+        #expect(text(of: t.title.runs).count == 5 && t.title.runs.allSatisfy { $0.colour.alpha == 1 }, "the ciphertext alone")
+        _ = renderer.frame(12)
+        let pairs = Dictionary(grouping: t.title.runs, by: \.x).values.filter { $0.count == 2 }
+        #expect(!pairs.isEmpty, "two glyphs in one place")
+        for pair in pairs {
+            #expect(abs(pair[0].colour.alpha + pair[1].colour.alpha - 1) < 1e-6, "one going as the other comes")
+            #expect(pair.allSatisfy { $0.dy == 0 }, "in place, not rolling")
+        }
+        render(s).save("title-fade-fading")
+        _ = renderer.frame(1_000)
+        #expect(text(of: t.title.runs) == "SOFIA" && t.title.runs.allSatisfy { $0.colour.alpha == 1 })
+        render(s).save("title-fade-settled")
+    }
+
+    @Test("Morphing letters change shape on their way home, between frames too, and settle as text")
+    func morph() throws {
+        let renderer = TitleRenderer(random: SeededRandom(seed: 5), reduceMotion: { true })
+        let s = surface()
+        renderer.mount(on: s)
+        renderer.setVisible(true, on: s)
+        renderer.prepare(titleCue("SOFIA", sub: "THE CRYPTEX", key: "APPLE", settings: TitleSettings(letters: .morph)),
+                         show: ShowSettings())
+        let t = try #require(tree(renderer, on: s))
+        #expect(t.title.mask == nil && t.title.cards.isEmpty, "no dial's window, no cards")
+        _ = renderer.paint(at: -10)
+        #expect(text(of: t.title.runs).count == 5 && t.title.runs.allSatisfy { $0.shape == nil }, "the ciphertext, as text")
+        _ = renderer.paint(at: 12)
+        let onTheFrame = t.title.runs
+        #expect(onTheFrame.contains { $0.shape != nil }, "letters partway, as shapes")
+        #expect(onTheFrame.count == 5, "one shape to a letter, not two glyphs")
+        render(s).save("title-morph-morphing")
+        _ = renderer.paint(at: 12.5)
+        #expect(t.title.runs != onTheFrame, "on the move between frames")
+        _ = renderer.paint(at: 1_000)
+        #expect(text(of: t.title.runs) == "SOFIA" && t.title.runs.allSatisfy { $0.shape == nil })
+        #expect(t.scene.runs.allSatisfy { $0.shape == nil })
+        render(s).save("title-morph-settled")
+    }
+
+    @Test("Every other way, a frame is painted once however many refreshes land on it")
+    func oneFrameOnce() throws {
+        let renderer = TitleRenderer(random: SeededRandom(seed: 5), reduceMotion: { true })
+        let s = surface()
+        renderer.mount(on: s)
+        renderer.setVisible(true, on: s)
+        renderer.prepare(titleCue("SOFIA", key: "APPLE", settings: TitleSettings(letters: .cycle)), show: ShowSettings())
+        let t = try #require(tree(renderer, on: s))
+        // Early on, cycling letters show a random glyph a frame.
+        _ = renderer.paint(at: 2.1)
+        let first = t.title.runs
+        for position in [2.3, 2.6, 2.95] {
+            _ = renderer.paint(at: position)
+            #expect(t.title.runs == first, "no new dice at \(position)")
+        }
+        #expect(renderer.paint(at: 1_000) && renderer.paint(at: 1_000.5), "settled, and still settled")
+    }
+
     @Test("A long decryption wraps onto two lines, and digraph bars count pairs against English")
     func longWithDigraphs() throws {
         let renderer = TitleRenderer(random: SeededRandom(seed: 6), reduceMotion: { true })

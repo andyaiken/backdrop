@@ -45,11 +45,6 @@ enum Snapshots {
         controller.go()
         for i in 1...720 { controller.tick(at: start + Double(i) / 60) }
         save(console, "console-show", to: directory)
-        // The wordmark partway through decrypting, as when the window opens,
-        // then home again.
-        console.holdWordmark(atFrame: 14)
-        save(console, "console-wordmark", to: directory)
-        console.holdWordmark(atFrame: 1000)
 
         // Past the video, which goes to black at once.
         controller.go()
@@ -286,7 +281,25 @@ enum Snapshots {
                 .write(to: URL(fileURLWithPath: directory).appendingPathComponent("settings.png"))
         }
 
+        wordmark(to: directory)
         exit(0)
+    }
+
+    /// A new show, with no cues, in edit mode: the wordmark on its screen in
+    /// the preview's place, partway through decrypting, once for each way a
+    /// title's letters can find their way home.
+    private static func wordmark(to directory: String) {
+        let document = ShowDocument(show: Show(), warnings: [])
+        NSDocumentController.shared.addDocument(document)
+        document.makeWindowControllers()
+        guard let controller = document.controller, let console = document.console else { exit(1) }
+        console.booth = { BoothConditions() }
+        console.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 860), display: false)
+        controller.enterEditMode()
+        for letters in TitleLetters.allCases {
+            console.holdWordmark(atFrame: 14, letters: letters)
+            save(console, "console-wordmark-\(letters.rawValue)", to: directory)
+        }
     }
 
     /// A printed street map, light, 2400 x 1500: a grid of streets of two
@@ -366,24 +379,35 @@ enum Snapshots {
             view.cacheDisplay(in: view.bounds, to: rep)
         }
 
-        // Layer-hosting views aren't drawn by cacheDisplay, so the preview's
-        // surface is rendered into its place.
+        // Layer-hosting views aren't drawn by cacheDisplay, so each stage
+        // surface showing, the previews' and the wordmark's, is rendered into
+        // its place.
         if let context = NSGraphicsContext(bitmapImageRep: rep)?.cgContext {
-            let preview = console.preview
-            let frame = preview.convert(preview.bounds, to: view)
             func display(_ layer: CALayer) {
                 layer.displayIfNeeded()
                 layer.sublayers?.forEach(display)
             }
-            display(preview.surface)
-            context.saveGState()
-            // The view is flipped; Core Animation draws from the bottom.
-            context.translateBy(x: frame.minX, y: view.bounds.height - frame.maxY)
-            preview.surface.render(in: context)
-            context.restoreGState()
+            for host in surfaces(in: view) {
+                guard let surface = host.layer as? SurfaceLayer else { continue }
+                let frame = host.convert(host.bounds, to: view)
+                display(surface)
+                context.saveGState()
+                // The view is flipped; Core Animation draws from the bottom.
+                context.translateBy(x: frame.minX, y: view.bounds.height - frame.maxY)
+                surface.render(in: context)
+                context.restoreGState()
+            }
         }
         let url = URL(fileURLWithPath: directory).appendingPathComponent(name + ".png")
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
+    /// The views showing a stage surface, anywhere under `view`.
+    private static func surfaces(in view: NSView) -> [NSView] {
+        view.subviews.flatMap { sub -> [NSView] in
+            guard !sub.isHidden else { return [] }
+            return (sub.layer is SurfaceLayer ? [sub] : []) + surfaces(in: sub)
+        }
     }
 }
 #endif

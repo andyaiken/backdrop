@@ -29,18 +29,34 @@ public struct GlyphState: Equatable, Sendable {
     /// 12.25 is a quarter of the way through the flip from M to N. `glyph`
     /// is the nearest. Nil off a card, and for characters outside the ring.
     public var flap: Double?
+    /// Fading or morphing, the two glyphs and how far from one to the other.
+    /// `glyph` is the nearer. Nil once home, and for characters outside the
+    /// ring.
+    public var blend: GlyphBlend?
 
-    init(glyph: Character, progress: Double, dial: Double? = nil, flap: Double? = nil) {
+    init(glyph: Character, progress: Double, dial: Double? = nil, flap: Double? = nil, blend: GlyphBlend? = nil) {
         self.glyph = glyph
         self.progress = progress
         self.dial = dial
         self.flap = flap
+        self.blend = blend
     }
 
     public var isSettled: Bool { progress >= 1 }
 
     /// Settled characters are bone, which is also where the warming ends.
     public var colour: RGB { Cipher.warmth(min(progress, 1)) }
+}
+
+/// One character going straight from its ciphertext glyph to its letter, in
+/// place, by fading from one to the other or by morphing one into the other.
+public struct GlyphBlend: Equatable, Sendable {
+    /// The ciphertext glyph it starts as.
+    public var from: Character
+    /// The letter it ends as.
+    public var to: Character
+    /// How far: 0 is all `from`, 1 all `to`.
+    public var amount: Double
 }
 
 /// The per-character travel plan for a line of text: worked out once when the
@@ -139,6 +155,32 @@ public struct TravelPlan: Equatable, Sendable {
                 progress: x,
                 flap: position
             )
+        }
+    }
+
+    /// Every character on frame `f` going straight from its ciphertext glyph
+    /// to its letter, in the same place, slow at each end, over the same
+    /// frames the character would otherwise take: fading out of one into the
+    /// other, or morphing. Nothing random, and nothing between: no glyph
+    /// shows but the two.
+    public func blends(_ f: Int) -> [GlyphState] {
+        blends(at: Double(f))
+    }
+
+    /// As `blends(_:)`, at any point between frames too, for letters that
+    /// move smoothly rather than a frame at a time.
+    public func blends(at position: Double) -> [GlyphState] {
+        characters.map { c in
+            let t = position - Double(c.start)
+            guard c.moves, t < Double(c.total) else { return GlyphState(glyph: c.plain, progress: 1) }
+            let x = min(max(t / Double(c.total), 0), 1)
+            let amount = x * x * (3 - 2 * x)
+            // A ciphertext space is its open box, as it is every other way.
+            // A letter that is a space goes to nothing, so it lands as the
+            // gap it is rather than a box that vanishes.
+            let from = c.cipher == " " ? Cipher.spaceMark : c.cipher
+            let nearer = amount < 0.5 ? from : (c.plain == " " ? Cipher.spaceMark : c.plain)
+            return GlyphState(glyph: nearer, progress: x, blend: GlyphBlend(from: from, to: c.plain, amount: amount))
         }
     }
 

@@ -245,7 +245,7 @@ Debug builds accept five launch arguments. All are for checking the app without 
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
-This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue and their settings in the Inspector, a transition, the Show Settings), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
+This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue and their settings in the Inspector, a transition, the Show Settings, and a new show's wordmark decrypting each way a title can), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents
@@ -273,7 +273,7 @@ This runs the Shortcuts actions and their cue lists against a show held in memor
 
 ## The app icon
 
-`Backdrop/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows one card of a split-flap board with a B on it, as title cues and the wordmark decrypt letter by letter. The card is split across the middle on two brass hinge pins. The B's top half is bone, and its lower half sits a shade back, in the shadow of the flap above. These are the console's own colours, on its navy.
+`Backdrop/AppIcon.icon` is a layered Icon Composer document, so macOS 26 draws it with Liquid Glass and makes the dark, clear and tinted versions itself. It shows a model box: a stage's side walls and floorboards in perspective, and the back wall lit with a projected picture of a brass sun setting over a slate sea, its light spilling forward onto the boards. It is the app's name drawn literally, a picture on the backdrop of a stage. These are the console's own colours, on its navy.
 
 Each layer is an SVG in `Assets/`. Open the document in Icon Composer, which comes with Xcode, to change it. To render it from the command line:
 
