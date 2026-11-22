@@ -233,6 +233,8 @@ public final class ImageRenderer: CueRenderer, ReportsProblems {
             return "Cue \(cue.number)\u{2019}s image, \(name), is missing from the show, so it is showing its label on black."
         case .undecodable:
             return "Cue \(cue.number)\u{2019}s image, \(name), couldn\u{2019}t be read, so it is showing its label on black."
+        case .notDownloaded:
+            return "Cue \(cue.number)\u{2019}s image, \(name), is in iCloud and isn\u{2019}t downloaded to this Mac, so it is showing its label on black. It comes down once the Mac is online."
         }
     }
 

@@ -184,12 +184,13 @@ public final class MorphRenderer: PaintsBetweenFrames, ReportsProblems, WaitsFor
             switch result {
             case .success(let image):
                 self.received(image, at: i, gpu: gpu)
-            case .failure:
+            case .failure(let failure):
                 // Unreadable: the label on black, as an image cue does.
                 if !self.reported.contains(i) {
                     self.reported.insert(i)
                     let name = (plan.paths[i] as NSString).lastPathComponent
-                    self.onProblem?("Cue \(plan.number)\u{2019}s \(Self.ordinal(i)) picture, \(name), couldn\u{2019}t be read, so it is showing its label on black.")
+                    let why = failure.reason == .notDownloaded ? "is in iCloud and isn\u{2019}t downloaded to this Mac" : "couldn\u{2019}t be read"
+                    self.onProblem?("Cue \(plan.number)\u{2019}s \(Self.ordinal(i)) picture, \(name), \(why), so it is showing its label on black.")
                 }
                 self.load(i, from: .label(plan.label), gpu: gpu)
             }

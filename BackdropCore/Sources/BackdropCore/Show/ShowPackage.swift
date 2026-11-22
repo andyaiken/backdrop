@@ -71,11 +71,26 @@ public enum ShowPackage {
 
     // MARK: Media
 
+    public enum ImportError: Error, Equatable {
+        /// Kept in iCloud, not on this Mac. It has been asked for, and can be
+        /// added once it has come down.
+        case notDownloaded
+    }
+
     /// Copies the file at `url` into the media folder, as it stands: no
     /// re-encoding, so what the edit exported is what plays. Keeps the file's
     /// name unless that is taken. Returns its path in the package, which is
     /// what a cue stores.
+    ///
+    /// The file is read when the package is next written, not now, so a
+    /// large clip never sits in memory. A file that isn't on the Mac is
+    /// refused here: written later, its read would fail, and with it that
+    /// save and every save after it.
     public static func importMedia(from url: URL, into package: FileWrapper) throws -> String {
+        if CloudFiles.isNotDownloaded(url) {
+            CloudFiles.requestDownload(url)
+            throw ImportError.notDownloaded
+        }
         let folder = media(of: package)
         let name = uniqueName(url.lastPathComponent, taken: Set(folder.fileWrappers?.keys.map { $0 } ?? []))
         let file = try FileWrapper(url: url, options: [])

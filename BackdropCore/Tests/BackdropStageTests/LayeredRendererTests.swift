@@ -196,6 +196,29 @@ struct LayeredRendererTests {
         #expect(renderer.frame(60))
     }
 
+    @Test("Several pictures that can\u{2019}t be had are said in one message, and the rest still play")
+    func severalMissing() async {
+        var problems: [String] = []
+        renderer.onProblem = { problems.append($0) }
+        await prepare(cue([layer("gone.png"), layer("red.png"), layer("lost.png")], base: "nowhere.png"), settings: onGo)
+        #expect(problems == ["Cue 4\u{2019}s base picture and 2 layers are missing from the show, so they are left out."])
+        _ = renderer.frame(0)
+        for f in [10, 30, 50] { renderer.carryOn(at: f); _ = renderer.frame(f) }
+        #expect(close(opacities[1], 1), "the layer that is there still arrives")
+    }
+
+    @Test("With none of its pictures, the cue shows its label on black, not black alone")
+    func nothingToShow() async {
+        var problems: [String] = []
+        renderer.onProblem = { problems.append($0) }
+        await prepare(cue([layer("gone.png"), layer("lost.png")], base: "nowhere.png"), settings: onGo)
+        #expect(problems == ["Cue 4\u{2019}s base picture and all 2 layers are missing from the show, so it is showing its label on black."])
+        _ = renderer.frame(-1)
+        #expect(tree.base.contents != nil && tree.base.opacity == 1, "the label, at full strength rather than the base\u{2019}s level")
+        for f in [10, 30] { renderer.carryOn(at: f); _ = renderer.frame(f) }
+        #expect(tree.base.opacity == 1 && renderer.frame(60), "its steps pass, with the label standing")
+    }
+
     @Test("A layer that isn\u{2019}t the base\u{2019}s shape is reported, and still plays")
     func shapeMismatch() async {
         var problems: [String] = []

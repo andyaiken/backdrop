@@ -28,6 +28,9 @@ public final class ImageLoader {
             case missing
             /// There, but not an image ImageIO can decode.
             case undecodable
+            /// Kept in iCloud, not on this Mac. It has been asked for, and
+            /// comes once the Mac is online; loading it again then works.
+            case notDownloaded
         }
 
         public let reason: Reason
@@ -127,6 +130,13 @@ public final class ImageLoader {
             }
             return .success(image)
         case .file(let url):
+            // Not read at all: offline, the read would only fail, and only
+            // after a minute's wait. Failures aren't kept, so the next load
+            // finds the file once it has come down.
+            if CloudFiles.isNotDownloaded(url) {
+                CloudFiles.requestDownload(url)
+                return .failure(Failure(reason: .notDownloaded))
+            }
             guard FileManager.default.isReadableFile(atPath: url.path),
                   let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
                 return .failure(Failure(reason: .missing))

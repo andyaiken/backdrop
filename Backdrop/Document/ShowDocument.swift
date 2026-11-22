@@ -331,9 +331,20 @@ final class ShowDocument: NSDocument {
                 }
             }
             checkLayerSize(of: url, in: cue, slot: slot)
+        } catch ShowPackage.ImportError.notDownloaded {
+            controller.say(Self.notDownloaded([url]))
         } catch {
             controller.say("\(url.lastPathComponent) couldn\u{2019}t be copied into the show.")
         }
+    }
+
+    /// What the console says of files the import refused because iCloud is
+    /// keeping them. They have been asked for already.
+    static func notDownloaded(_ urls: [URL]) -> String {
+        let names = urls.map(\.lastPathComponent).joined(separator: ", ")
+        return urls.count == 1
+            ? "\(names) is in iCloud and isn\u{2019}t downloaded to this Mac, so it wasn\u{2019}t added. It has been asked for: add it again once it has come down, which needs the Mac online."
+            : "\(names) are in iCloud and aren\u{2019}t downloaded to this Mac, so they weren\u{2019}t added. They have been asked for: add them again once they have come down, which needs the Mac online."
     }
 
     /// A layer is a full-frame picture at the base's pixel size, with
@@ -400,10 +411,17 @@ final class ShowDocument: NSDocument {
         let refused = urls.filter { Self.cueKind(for: $0) == nil }
         var cues: [Cue] = []
         var failed: [URL] = []
+        var offline: [URL] = []
         if let package = try? ShowPackage.updated(self.package, with: controller.show) {
             self.package = package
             for url in usable {
-                guard let path = try? ShowPackage.importMedia(from: url, into: package) else {
+                let path: String
+                do {
+                    path = try ShowPackage.importMedia(from: url, into: package)
+                } catch ShowPackage.ImportError.notDownloaded {
+                    offline.append(url)
+                    continue
+                } catch {
                     failed.append(url)
                     continue
                 }
@@ -418,7 +436,9 @@ final class ShowDocument: NSDocument {
         }
         controller.addCues(cues, at: position, cues.count == 1 ? "Add \(cues[0].kind.heading) Cue" : "Add Cues")
         func names(_ urls: [URL]) -> String { urls.map(\.lastPathComponent).joined(separator: ", ") }
-        if !failed.isEmpty {
+        if !offline.isEmpty {
+            controller.say(Self.notDownloaded(offline))
+        } else if !failed.isEmpty {
             controller.say("\(names(failed)) couldn\u{2019}t be copied into the show.")
         } else if !refused.isEmpty {
             controller.say(refused.count == 1

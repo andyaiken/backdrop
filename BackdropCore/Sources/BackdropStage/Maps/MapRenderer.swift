@@ -163,7 +163,8 @@ public final class MapRenderer: PaintsBetweenFrames, ReportsProblems, WaitsForGO
             guard let self, token == self.token else { return }
             guard let image else {
                 plan?.isReady = true
-                onProblem?("Cue \(cue.number)\u{2019}s map, \((content.src as NSString).lastPathComponent), couldn\u{2019}t be read, so its dot moves over black.")
+                let why = CloudFiles.isNotDownloaded(url) ? "is in iCloud and isn\u{2019}t downloaded to this Mac" : "couldn\u{2019}t be read"
+                onProblem?("Cue \(cue.number)\u{2019}s map, \((content.src as NSString).lastPathComponent), \(why), so its dot moves over black.")
                 repaint()
                 return
             }

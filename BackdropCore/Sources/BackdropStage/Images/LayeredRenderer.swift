@@ -39,7 +39,12 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
     struct Plan {
         let cuePlan: LayeredCuePlan
         var timeline: GoTimeline
+        /// The base, or the cue's label when no picture at all could be had.
         let base: CGImage?
+        /// None of the cue's pictures could be had, so its label stands in
+        /// the base's place, at full strength, as an image cue's does, and
+        /// its steps pass with nothing to show.
+        let labelOnly: Bool
         /// Nil for a layer whose file is missing: it is skipped, its step still happens.
         let images: [CGImage?]
         let bounds: [PictureRect?]
@@ -149,15 +154,31 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         // through the speech.
         var base: CGImage?
         var images = [CGImage?](repeating: nil, count: content.layers.count)
+        var failed: [Failed] = []
         var outstanding = 1 + content.layers.count
         func done() {
             outstanding -= 1
             guard outstanding == 0, token == self.token else { return }
-            self.ready(base: base, images: images)
+            let nothing = base == nil && images.allSatisfy { $0 == nil } && !failed.isEmpty
+            self.report(failed, cue: cue, content: content, labelOnly: nothing)
+            guard nothing else { return self.ready(base: base, images: images) }
+            // Pure black would look like Backdrop had stopped working.
+            self.loader.load(.label(content.text), maxPixels: self.maxPixels) { [weak self] result in
+                guard let self, token == self.token else { return }
+                self.ready(base: try? result.get(), images: images, labelOnly: true)
+            }
         }
-        load(content.base, what: "base picture", cue: cue) { image in base = image; done() }
+        load(content.base) { image, reason in
+            base = image
+            if let reason { failed.append(Failed(layer: nil, name: (content.base as NSString).lastPathComponent, reason: reason)) }
+            done()
+        }
         for (i, layer) in content.layers.enumerated() {
-            load(layer.src, what: "layer \(i + 1), \(layer.displayName)", cue: cue) { image in images[i] = image; done() }
+            load(layer.src) { image, reason in
+                images[i] = image
+                if let reason { failed.append(Failed(layer: i, name: (layer.src as NSString).lastPathComponent, reason: reason)) }
+                done()
+            }
         }
     }
 
@@ -252,22 +273,56 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
 
     // MARK: Loading
 
-    private func load(_ path: String, what: String, cue: Cue, _ completion: @escaping (CGImage?) -> Void) {
-        guard !path.isEmpty else { completion(nil); return }
-        let name = (path as NSString).lastPathComponent
-        guard let url = media(path) else {
-            onProblem?("Cue \(cue.number)\u{2019}s \(what), \(name), is missing from the show, so it is left out.")
-            completion(nil)
+    /// A picture of the cue's that couldn't be had.
+    private struct Failed {
+        /// Which layer, or nil for the base.
+        let layer: Int?
+        let name: String
+        let reason: ImageLoader.Failure.Reason
+    }
+
+    /// The picture at `path`, or why there isn't one. A path not set yet is
+    /// neither: no picture, and nothing wrong.
+    private func load(_ path: String, _ completion: @escaping (CGImage?, ImageLoader.Failure.Reason?) -> Void) {
+        guard !path.isEmpty else { completion(nil, nil); return }
+        guard let url = media(path) else { completion(nil, .missing); return }
+        loader.load(.file(url), maxPixels: maxPixels) { result in
+            switch result {
+            case .success(let image): completion(image, nil)
+            case .failure(let failure): completion(nil, failure.reason)
+            }
+        }
+    }
+
+    /// Every picture that couldn't be had, said once. The console shows one
+    /// message at a time, so one for each would leave only the last.
+    private func report(_ failed: [Failed], cue: Cue, content: LayeredContent, labelOnly: Bool) {
+        guard !failed.isEmpty else { return }
+        let outcome = labelOnly ? "it is showing its label on black" : failed.count == 1 ? "it is left out" : "they are left out"
+        let reasons = Set(failed.map(\.reason))
+        let cloud = reasons == [.notDownloaded]
+            ? (failed.count == 1 ? " It comes down once the Mac is online." : " They come down once the Mac is online.")
+            : ""
+        if failed.count == 1, let one = failed.first {
+            let what = one.layer.map { "layer \($0 + 1), \(content.layers[$0].displayName)" } ?? "base picture"
+            onProblem?("Cue \(cue.number)\u{2019}s \(what), \(one.name), \(Self.why(one.reason, plural: false)), so \(outcome).\(cloud)")
             return
         }
-        loader.load(.file(url), maxPixels: maxPixels) { [weak self] result in
-            switch result {
-            case .success(let image): completion(image)
-            case .failure(let failure):
-                let why = failure.reason == .missing ? "is missing from the show" : "couldn\u{2019}t be read"
-                self?.onProblem?("Cue \(cue.number)\u{2019}s \(what), \(name), \(why), so it is left out.")
-                completion(nil)
-            }
+        var what: [String] = []
+        if failed.contains(where: { $0.layer == nil }) { what.append("base picture") }
+        let layers = failed.filter { $0.layer != nil }.count
+        let set = content.layers.filter { !$0.src.isEmpty }.count
+        if layers > 0 { what.append(layers == 1 ? "1 layer" : layers == set ? "all \(layers) layers" : "\(layers) layers") }
+        // Mixed reasons, which is rare, are said as the plainest of them.
+        let why = reasons.count == 1 ? Self.why(failed[0].reason, plural: true) : Self.why(.undecodable, plural: true)
+        onProblem?("Cue \(cue.number)\u{2019}s \(what.joined(separator: " and ")) \(why), so \(outcome).\(cloud)")
+    }
+
+    private static func why(_ reason: ImageLoader.Failure.Reason, plural: Bool) -> String {
+        switch reason {
+        case .missing: plural ? "are missing from the show" : "is missing from the show"
+        case .undecodable: "couldn\u{2019}t be read"
+        case .notDownloaded: plural ? "are in iCloud and aren\u{2019}t downloaded to this Mac" : "is in iCloud and isn\u{2019}t downloaded to this Mac"
         }
     }
 
@@ -284,7 +339,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         return min(max(Int((needed * CGFloat(depth) / CGFloat(bucket)).rounded(.up)) * bucket, 1024), 8192)
     }
 
-    private func ready(base: CGImage?, images: [CGImage?]) {
+    private func ready(base: CGImage?, images: [CGImage?], labelOnly: Bool = false) {
         guard let content, let settings else { return }
         let cuePlan = LayeredCuePlan(content, settings: settings)
         var aspect = 16.0 / 9
@@ -305,13 +360,14 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         }
         let wantsOutline = settings.entrance.contains(.outline) || content.layers.contains { $0.highlight?.entrance?.contains(.outline) == true }
         var built = Plan(
-            cuePlan: cuePlan, timeline: GoTimeline(parts: cuePlan.parts), base: base, images: images,
+            cuePlan: cuePlan, timeline: GoTimeline(parts: cuePlan.parts), base: base, labelOnly: labelOnly, images: images,
             bounds: images.map { $0.flatMap { LayerImages.opaqueBounds(of: $0) } },
             edges: images.map { image in image.flatMap { wantsOutline ? LayerImages.edge(of: $0, colour: Palette.brass.cgColor(alpha: 1)) : nil } },
             aspect: aspect,
             frames: []
         )
-        built.frames = content.frames(bounds: built.bounds, camera: settings.camera, zoom: settings.zoom)
+        // A label stays where it is: there are no parts to go to.
+        built.frames = content.frames(bounds: built.bounds, camera: labelOnly ? .still : settings.camera, zoom: settings.zoom)
         plan = built
         for edit in pending { edit(&plan!.timeline) }
         pending = []
@@ -385,7 +441,7 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
         guard let content, let settings else { return }
         let standing = Set(content.layers(after: k))
         tree.base.removeAllAnimations()
-        tree.base.opacity = Float(settings.baseLevel) / 100
+        tree.base.opacity = plan?.labelOnly == true ? 1 : Float(settings.baseLevel) / 100
         tree.base.filters = nil
         for (i, layer) in tree.layers.enumerated() {
             layer.removeAllAnimations()
@@ -422,7 +478,8 @@ public final class LayeredRenderer: CueRenderer, WaitsForGO, ReportsProblems {
     /// Step `k` taken normally: what leaves goes briskly, what arrives comes
     /// up, and the layers already standing take the context treatment.
     private func take(_ k: Int) {
-        guard let content, let settings, let plan, plan.cuePlan.steps.indices.contains(k) else { return }
+        // A label alone has nothing to arrive or to treat.
+        guard let content, let settings, let plan, !plan.labelOnly, plan.cuePlan.steps.indices.contains(k) else { return }
         let step = plan.cuePlan.steps[k].step
         let standing = Set(content.layers(after: k - 1)).subtracting(step.leaving)
         let first = step.arriving.first.map { content.layers[$0] }

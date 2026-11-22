@@ -55,6 +55,13 @@ struct ShowPackageTests {
         #expect(try String(contentsOf: url.appendingPathComponent(first), encoding: .utf8) == "picture")
     }
 
+    @Test("A file on the Mac\u{2019}s own disk is never taken for one left in iCloud")
+    func localFilesAreDownloaded() throws {
+        let url = try file("local.jpg")
+        #expect(!CloudFiles.isNotDownloaded(url))
+        #expect(throws: Never.self) { try ShowPackage.importMedia(from: url, into: try ShowPackage.updated(nil, with: sample())) }
+    }
+
     @Test("Saving again replaces show.json and leaves media where they were")
     func savingLeavesMediaAlone() throws {
         let url = folder.appendingPathComponent("Cheap.backdrop")
