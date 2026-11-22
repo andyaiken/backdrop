@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import BackdropCore
 import BackdropStage
 import UniformTypeIdentifiers
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     private var current: ShowDocument? { documents.current }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Fonts.register()
         UserDefaults.standard.register(defaults: [
             Preferences.reopenLastShow: true,
             Preferences.missingDisplay: MissingDisplay.window.rawValue,
@@ -59,6 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         #if DEBUG
         if let directory = UserDefaults.standard.string(forKey: "BackdropSnapshot") {
             Snapshots.run(to: directory)
+            return
+        }
+        if let directory = UserDefaults.standard.string(forKey: "BackdropGallerySamples") {
+            StoreAssets.gallerySamples(to: directory)
             return
         }
         if let directory = UserDefaults.standard.string(forKey: "BackdropStoreAssets") {
@@ -135,22 +141,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     }
 
     /// Resume puts the last fired cue straight back on the projector,
-    /// finished, and stands by the next.
+    /// finished, and stands by the next. A sheet on the console, in the
+    /// Booth's look, with a picture of the cue.
     private func offerResume(_ record: CrashRecord, in document: ShowDocument) {
         guard let window = document.console?.window, let controller = document.controller else { return }
         let cue = controller.show[record.cue] ?? controller.show.index(ofNumber: record.cueNumber).map { controller.show.cues[$0] }
         guard let cue else { return }
-        let alert = NSAlert()
-        alert.messageText = "Backdrop stopped unexpectedly during the show."
-        alert.informativeText = "The last cue fired was cue \(cue.number). Resuming puts it straight back on the projector, finished, with the cue after it up next."
-        alert.addButton(withTitle: "Resume at Cue \(cue.number)")
-        alert.addButton(withTitle: "Start from the Top")
-        alert.beginSheetModal(for: window) { response in
-            guard response == .alertFirstButtonReturn else { return }
-            MainActor.assumeIsolated {
-                document.projector?.open()
-                controller.resume(at: cue.id)
-            }
+        let sheet = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        sheet.appearance = Booth.appearance
+        func view(_ picture: CGImage?) -> RecoveryView {
+            RecoveryView(number: cue.number, name: CueText.name(cue), firedAt: record.firedAt, picture: picture,
+                         onResume: { [weak window, weak sheet] in
+                             guard let window, let sheet else { return }
+                             window.endSheet(sheet)
+                             document.projector?.open()
+                             controller.resume(at: cue.id)
+                         },
+                         onStartOver: { [weak window, weak sheet] in
+                             guard let window, let sheet else { return }
+                             window.endSheet(sheet)
+                         })
+        }
+        let host = NSHostingController(rootView: view(nil))
+        sheet.contentViewController = host
+        window.beginSheet(sheet)
+        // The picture is drawn in the background, on black until it is ready.
+        let settings = controller.show.settings
+        Task { @MainActor in
+            let picture = await ShowThumbnail.image(of: cue, settings: settings, width: 1008,
+                                                    media: { [weak document] in document?.mediaURL($0) })
+            host.rootView = view(picture)
         }
     }
 
@@ -207,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     @objc func addCue(_ sender: Any?) { current?.console?.showAddCue() }
     @objc func duplicateCue(_ sender: Any?) { current?.console?.duplicateStandbyCue() }
     @objc func renumberAllCues(_ sender: Any?) { current?.console?.confirmRenumber() }
-    @objc func showShowSettings(_ sender: Any?) { current?.console?.showShowSettings() }
+    @objc func showStageSetup(_ sender: Any?) { current?.console?.showStageSetup() }
 
     // MARK: Show
 
@@ -243,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             return editing
         case #selector(duplicateCue(_:)):
             return editing && controller?.playhead.standby != nil
-        case #selector(showShowSettings(_:)):
+        case #selector(showStageSetup(_:)):
             return editing
         case #selector(renumberAllCues(_:)):
             return editing && controller?.show.cues.isEmpty == false
@@ -268,23 +288,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// console's own display is listed but can't be chosen.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let console = current?.projector?.consoleDisplay
-        let chosen = current?.show.settings.projector
-        let displays = Displays.current()
-        for display in displays {
-            let isConsole = console.map { display.identity.bestMatch(in: [$0]) != nil } ?? false
-            let item = NSMenuItem(title: display.identity.name + (isConsole ? " \u{2014} this Mac\u{2019}s own display" : ""),
-                                  action: #selector(chooseProjectorDisplay(_:)), keyEquivalent: "")
+        let (items, note) = DisplayMenu.items(for: current)
+        for display in items {
+            let item = NSMenuItem(title: display.title, action: #selector(chooseProjectorDisplay(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = isConsole ? nil : display.identity
-            if let chosen, chosen.bestMatch(in: [display.identity]) != nil { item.state = .on }
+            item.representedObject = display.display
+            if display.chosen { item.state = .on }
             menu.addItem(item)
         }
-        if displays.count < 2 {
+        if let note {
             menu.addItem(.separator())
-            let note = NSMenuItem(title: "Connect the projector to choose it here", action: nil, keyEquivalent: "")
-            note.isEnabled = false
-            menu.addItem(note)
+            let item = NSMenuItem(title: note, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
         }
     }
 }

@@ -72,7 +72,7 @@ enum MainMenu {
         show.addItem(withTitle: "Enter Show Mode", action: #selector(AppDelegate.enterShowMode(_:)), keyEquivalent: "")
         show.addItem(withTitle: "Enter Edit Mode", action: #selector(AppDelegate.enterEditMode(_:)), keyEquivalent: "")
         show.addItem(.separator())
-        show.addItem(withTitle: "Show Settings\u{2026}", action: #selector(AppDelegate.showShowSettings(_:)), keyEquivalent: "")
+        show.addItem(withTitle: "Stage Setup\u{2026}", action: #selector(AppDelegate.showStageSetup(_:)), keyEquivalent: "")
         show.addItem(.separator())
         show.addItem(withTitle: "Open Projector", action: #selector(AppDelegate.toggleProjector(_:)), keyEquivalent: "")
         let choose = NSMenuItem(title: "Choose Projector Display", action: nil, keyEquivalent: "")

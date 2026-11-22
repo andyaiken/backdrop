@@ -10,16 +10,18 @@ import BackdropStage
 /// a point to place it on that picture, and Delete removes the one selected.
 /// Find Faces matches two faces' features at once.
 ///
-/// One window, for one morph cue at a time, in edit mode only. Every change
-/// is one step of undo, as in the console.
-final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
+/// It takes the Studio's stage, for one morph cue at a time, in edit mode
+/// only, until Done or Escape. Every change is one step of undo, as in the
+/// rest of the console.
+final class MorphPointsEditor: NSView {
     let cueID: UUID
     private weak var controller: ShowController?
     private let mediaURL: (String) -> URL?
-    /// The document's, so Undo here undoes what was done here.
-    var undoManagerSource: () -> UndoManager? = { nil }
+    /// Done, Escape, or the cue gone: the stage comes back.
+    var onClose: () -> Void = {}
 
-    private let root = PointsRootView()
+    private let heading = Desk.label("", font: Desk.sans(14, .semibold), colour: Desk.text)
+    private let done = NSButton(title: "Done", target: nil, action: nil)
     private let hint = Desk.label("Click either picture to add a point to both, then drag it onto the same feature on each. "
                                   + "Select a point and press Delete to remove it.", font: Desk.sans(12.5), colour: Desk.dim, wraps: true)
     private let firstTitle = Desk.label("First picture", font: Desk.sans(12, .semibold), colour: Desk.dim)
@@ -54,15 +56,11 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         self.controller = controller
         self.cueID = cueID
         self.mediaURL = mediaURL
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.minSize = NSSize(width: 860, height: 640)
-        window.backgroundColor = Desk.colour
-        window.isReleasedWhenClosed = false
-        window.contentView = root
-        super.init(window: window)
-        window.delegate = self
-        window.center()
+        super.init(frame: .zero)
+        done.bezelStyle = .rounded
+        done.keyEquivalent = "\r"
+        done.target = self
+        done.action = #selector(donePressed)
 
         for button in [findFaces, clearAll] {
             button.bezelStyle = .rounded
@@ -87,11 +85,10 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             view.onDelete = { [weak self] index in self?.delete(index) }
             view.partner = other
         }
-        for view in [hint, stageChooser, firstTitle, secondTitle, firstView, secondView, previewTitle, preview, scrub, fromLabel, toLabel,
+        for view in [heading, done, hint, stageChooser, firstTitle, secondTitle, firstView, secondView, previewTitle, preview, scrub, fromLabel, toLabel,
                      findFaces, clearAll, status] as [NSView] {
-            root.addSubview(view)
+            addSubview(view)
         }
-        root.onLayout = { [weak self] in self?.layout() }
         refresh()
     }
 
@@ -99,9 +96,17 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        undoManagerSource()
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Desk.colour.setFill()
+        bounds.intersection(dirtyRect).fill()
     }
+
+    @objc private func donePressed() { onClose() }
+
+    /// Escape, from anywhere in the editor: the stage comes back.
+    override func cancelOperation(_ sender: Any?) { onClose() }
 
     // MARK: Showing the cue
 
@@ -110,10 +115,10 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
     /// the show has gone into show mode.
     func refresh() {
         guard let controller, controller.mode == .edit, let cue = controller.show[cueID], case .morph(let content) = cue.content else {
-            close()
+            onClose()
             return
         }
-        window?.title = "Morph Points \u{2014} Cue \(cue.number.isEmpty ? "(no number)" : cue.number)"
+        heading.stringValue = "Morph points \u{00B7} Cue \(cue.number.isEmpty ? "(no number)" : cue.number)"
         stage = min(stage, max(content.stageCount - 1, 0))
         let names = content.pictures.map { MorphContent.name(of: $0.src) }
         let stages = (0..<content.stageCount).map { "Stage \($0 + 1): \(names[$0]) \u{2192} \(names[$0 + 1])" }
@@ -122,7 +127,7 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
             stageChooser.removeAllItems()
             stageChooser.addItems(withTitles: stages)
             stageChooser.isHidden = stages.count < 2
-            root.needsLayout = true
+            needsLayout = true
         }
         if !stages.isEmpty { stageChooser.selectItem(at: stage) }
         firstTitle.stringValue = content.stageCount > 1 ? "Picture \(stage + 1): \(names[stage])" : "First picture"
@@ -294,10 +299,14 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Layout
 
-    private func layout() {
-        let b = root.bounds, margin: CGFloat = 20, gap: CGFloat = 16
+    override func layout() {
+        super.layout()
+        let b = bounds, margin: CGFloat = 0, gap: CGFloat = 16
         let width = b.width - 2 * margin
-        var y: CGFloat = 14
+        let doneSize = done.fittingSize
+        done.frame = NSRect(x: b.width - doneSize.width, y: 0, width: doneSize.width, height: 28)
+        heading.frame = NSRect(x: 0, y: 5, width: max(0, done.frame.minX - 8), height: 18)
+        var y: CGFloat = 36
         if !stageChooser.isHidden {
             let chooserWidth = min(width, max(260, stageChooser.fittingSize.width))
             stageChooser.frame = NSRect(x: margin, y: y, width: chooserWidth, height: 26)
@@ -313,8 +322,16 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         secondView.frame = NSRect(x: margin + half + gap, y: top + 22, width: half, height: max(0, pictureBottom - top - 22))
 
         // Beneath: the morph, at the stage's shape, with its slider.
-        let previewHeight = bottomHeight - 22 - 44, previewWidth = (previewHeight * 16 / 9).rounded()
-        let previewX = margin + (width - previewWidth) / 2, previewY = pictureBottom + 16
+        // As large as fits, short of the buttons at the right.
+        let buttonsRoom = findFaces.fittingSize.width + clearAll.fittingSize.width + 8 + 24
+        var previewHeight = bottomHeight - 22 - 44, previewWidth = (previewHeight * 16 / 9).rounded()
+        if previewWidth > width - 70 - 70 - buttonsRoom {
+            previewWidth = max(160, width - 70 - 70 - buttonsRoom)
+            previewHeight = (previewWidth * 9 / 16).rounded()
+        }
+        // At the left, past the slider's first label, leaving the right for
+        // the buttons.
+        let previewX = margin + 70, previewY = pictureBottom + 16
         previewTitle.frame = NSRect(x: previewX, y: previewY, width: previewWidth, height: 16)
         preview.frame = NSRect(x: previewX, y: previewY + 22, width: previewWidth, height: previewHeight)
         scrub.frame = NSRect(x: previewX, y: preview.frame.maxY + 8, width: previewWidth, height: 20)
@@ -327,23 +344,6 @@ final class MorphPointsWindowController: NSWindowController, NSWindowDelegate {
         clearAll.frame = NSRect(x: findFaces.frame.maxX + 8, y: preview.frame.minY, width: clearAll.fittingSize.width, height: 28)
         status.frame = NSRect(x: b.width - margin - 240, y: findFaces.frame.maxY + 10, width: 240, height: Desk.height(of: status, width: 240))
         showPreview()
-    }
-}
-
-/// The window's content: the desk's colour, flipped, and laid out by the
-/// window controller.
-final class PointsRootView: NSView {
-    var onLayout: () -> Void = {}
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        Desk.colour.setFill()
-        dirtyRect.fill()
-    }
-
-    override func layout() {
-        super.layout()
-        onLayout()
     }
 }
 

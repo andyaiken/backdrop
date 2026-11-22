@@ -1,22 +1,43 @@
 import AppKit
 import BackdropCore
+import BackdropStage
+import os
 
-/// The cue sheet as it reads: every cue in running order, and under the live
-/// or standby cue the GOs it waits for. In edit mode a cue is dragged by its
-/// grip to anywhere in the sheet, and pictures and clips dragged in from
+/// The cue sheet as it reads, in both rooms: every cue in running order,
+/// with a join between each pair saying how the stage changes, and under the
+/// live or standby cue the GOs it waits for. A cue that runs on by itself is
+/// linked to the next by a brass spine between their margin boxes.
+///
+/// In the Studio a cue is dragged by its grip to anywhere in the sheet, a +
+/// between rows adds one there, and pictures and clips dragged in from
 /// Finder, Photos, Safari or another app become cues where they are dropped.
 final class CueListView: NSScrollView {
-    private let document = PanelView()
+    private let document = RailDocument()
     private var cueRows: [UUID: CueRowView] = [:]
-    /// The GOs of the cues whose sub-cues are open: live or standing by.
+    /// The GOs of the cues whose steps are open: live or standing by.
     private var steps: [UUID: [SubCueRowView]] = [:]
     private var shown: [Cue] = []
-    private var shownNotes: [String?] = []
-    private var shownEditing = false
-    /// The transition rows on screen, by the cue they sit above.
-    private var transitionRows: [UUID: TransitionRowView] = [:]
+    private var shownBooth = false
+    /// The joins on screen, by the cue they lead into.
+    private var joins: [UUID: JoinView] = [:]
+    /// The Studio's + above the first cue.
+    private var lead: JoinView?
     /// The cue rows on screen, in sheet order.
     private var visible: [CueRowView] = []
+    private var room = Room.studio
+    private var settings = ShowSettings()
+    /// Under the chain that starts at the standby cue, in the Booth: what
+    /// one GO runs.
+    private let reachLine: NSTextField = {
+        let label = NSTextField(labelWithString: "")
+        label.font = Desk.sans(11.5)
+        label.lineBreakMode = .byTruncatingTail
+        return label
+    }()
+    private var reachAfter: UUID?
+    /// Where files dropped now would land, opened out.
+    private let slot = DropSlot()
+    let thumbnails = ThumbnailCache()
 
     var onClick: (UUID) -> Void = { _ in }
     /// A sub-cue clicked: its cue, and which GO.
@@ -28,12 +49,16 @@ final class CueListView: NSScrollView {
     var onDropFiles: ([URL], Int) -> Void = { _, _ in }
     var onDelete: (UUID) -> Void = { _ in }
     var onDuplicate: (UUID) -> Void = { _ in }
-    /// A transition row clicked: the cue it leads into.
+    /// A join clicked: the cue it leads into.
     var onTransitionClick: (UUID) -> Void = { _ in }
-    /// A transition row's menu: put the cue's transition back to the standard.
+    /// A join's menu: put the cue's transition back to the standard.
     var onClearTransition: (UUID) -> Void = { _ in }
     /// A cue dragged to stand before the cue at this index, or at the end.
     var onMoveCue: (UUID, Int) -> Void = { _, _ in }
+    /// A cue moved a place up or down, by VoiceOver.
+    var onMoveBy: (UUID, Int) -> Void = { _, _ in }
+    /// A + between rows: add a cue after this index, or at the start for -1.
+    var onInsert: (Int) -> Void = { _ in }
     /// Renumber every cue: the console asks first.
     var onRenumberAll: () -> Void = {}
     /// Where a dragged row will land.
@@ -46,58 +71,68 @@ final class CueListView: NSScrollView {
         autohidesScrollers = true
         documentView = document
         insertion.isHidden = true
+        slot.isHidden = true
+        reachLine.isHidden = true
+        document.addSubview(reachLine)
+        document.addSubview(slot)
         document.addSubview(insertion)
         registerForDraggedTypes(MediaDrop.pasteboardTypes)
+        thumbnails.onReady = { [weak self] id in
+            guard let self, let row = self.cueRows[id] else { return }
+            row.thumbnail = self.thumbnails.image(for: row.cue, settings: self.settings)
+        }
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private static let log = OSLog(subsystem: "Backdrop", category: .pointsOfInterest)
+
     /// - Parameters:
     ///   - standbyStep: The GO of the standby cue that stands by, if one does.
     ///   - taken: How many of the live cue's GOs it has reached.
+    ///   - issues: What is wrong with each cue that has an issue.
     ///   - selectedTransition: The cue whose transition in is selected, if one is.
-    func update(show: Show, standby: UUID?, standbyStep: Int?, live: UUID?, taken: Int, issues: Set<UUID>, editing: Bool,
-                selectedTransition: UUID? = nil) {
+    func update(show: Show, standby: UUID?, standbyStep: Int?, live: UUID?, taken: Int, issues: [UUID: String],
+                room: ShowController.Mode, selectedTransition: UUID? = nil) {
+        let signpost = OSSignpostID(log: Self.log)
+        os_signpost(.begin, log: Self.log, name: "Rail update", signpostID: signpost)
+        defer { os_signpost(.end, log: Self.log, name: "Rail update", signpostID: signpost) }
+
         let cues = show.cues
-        // Edit mode puts a transition between each pair of cues, so none above the first.
-        let notes: [String?] = cues.enumerated().map { i, cue in
-            editing && i > 0 ? TransitionRowView.note(for: cue) : nil
+        let booth = room == .show
+        let palette = Desk.room(room)
+        let paletteChanged = palette.background != self.room.background
+        self.room = palette
+        let settingsChanged = show.settings != settings
+        settings = show.settings
+        // Rows are made again only when the sheet or the room changed.
+        let rebuilt = cues != shown || booth != shownBooth
+        if rebuilt {
+            rebuild(cues, booth: booth)
         }
-        if cues != shown || notes != shownNotes || editing != shownEditing {
-            cueRows.values.forEach { $0.removeFromSuperview() }
-            transitionRows.values.forEach { $0.removeFromSuperview() }
-            cueRows = [:]
-            transitionRows = [:]
-            for (cue, note) in zip(cues, notes) {
-                if let note {
-                    let transition = TransitionRowView(cue: cue.id, note: note, isChanged: cue.transition != .standard)
-                    transition.onClick = { [weak self] in self?.onTransitionClick($0) }
-                    transition.onClear = { [weak self] in self?.onClearTransition($0) }
-                    document.addSubview(transition, positioned: .below, relativeTo: insertion)
-                    transitionRows[cue.id] = transition
-                }
-                let row = CueRowView(cue: cue)
-                row.onClick = { [weak self] in self?.onClick($0) }
-                row.onDelete = { [weak self] in self?.onDelete($0) }
-                row.onGrip = { [weak self] row, event in self?.drag(row, from: event) }
-                row.onMenu = { [weak self] id in self?.menu(forCue: id) }
-                document.addSubview(row, positioned: .below, relativeTo: insertion)
-                cueRows[cue.id] = row
-            }
-            shown = cues
-            shownNotes = notes
-            shownEditing = editing
+        if rebuilt || settingsChanged {
+            for row in cueRows.values { row.thumbnail = thumbnails.image(for: row.cue, settings: settings) }
+            let onScreen = Set(cueRows.values.filter { !$0.visibleRect.isEmpty }.map(\.cue.id))
+            thumbnails.request(cues, settings: settings, onScreen: onScreen)
         }
-        for (id, row) in transitionRows { row.isSelected = id == selectedTransition }
+        if paletteChanged || rebuilt {
+            for row in cueRows.values { row.room = palette }
+            for join in joins.values { join.room = palette }
+            lead?.room = palette
+            document.room = palette
+            reachLine.textColor = palette.dim
+            slot.room = palette
+        }
+        for (id, join) in joins { join.isSelected = id == selectedTransition }
         var open: [UUID: [SubCueRowView]] = [:]
         for row in cueRows.values {
             let id = row.cue.id
             row.isStandby = id == standby && standbyStep == nil
             row.isLive = id == live
-            row.hasIssue = issues.contains(id)
-            row.isEditing = editing
+            row.issue = issues[id]
+            row.isEditing = !booth
             // A cue's GOs open out while it is live or standing by, and fold
             // to a count otherwise.
             let points = row.cue.goPoints()
@@ -110,11 +145,12 @@ final class CueListView: NSScrollView {
                 subRows = points.enumerated().map { i, point in
                     let sub = SubCueRowView(cue: id, index: i, count: points.count, point: point)
                     sub.onClick = { [weak self] in self?.onStepClick($0, $1) }
-                    document.addSubview(sub, positioned: .below, relativeTo: insertion)
+                    document.addSubview(sub, positioned: .below, relativeTo: reachLine)
                     return sub
                 }
             }
             for sub in subRows {
+                sub.room = palette
                 sub.isStandby = id == standby && standbyStep == sub.index
                 sub.isTaken = id == live && sub.index < taken
             }
@@ -122,6 +158,17 @@ final class CueListView: NSScrollView {
         }
         for (id, subRows) in steps where open[id] == nil { subRows.forEach { $0.removeFromSuperview() } }
         steps = open
+
+        // What one GO runs, under the chain that starts at the standby cue.
+        let reach = booth ? standby.map { show.reach(from: $0) } ?? [] : []
+        if reach.count > 1, let first = reach.first, let last = reach.last {
+            reachLine.stringValue = CueText.reach(reach)?.replacingOccurrences(of: "One GO runs", with: "One GO on cue \(first.cue.number) runs") ?? ""
+            reachAfter = last.cue.id
+        } else {
+            reachAfter = nil
+        }
+        reachLine.isHidden = reachAfter == nil
+
         layoutRows()
         // Keep the standby row in view, and the live row with it if both fit.
         let standbyRow: NSView? = cueRows.values.first(where: \.isStandby) ?? steps.values.joined().first(where: \.isStandby)
@@ -134,6 +181,59 @@ final class CueListView: NSScrollView {
             document.scrollToVisible(target.insetBy(dx: 0, dy: -24))
         }
     }
+
+    /// Every row and join made afresh, for a changed sheet or room.
+    private func rebuild(_ cues: [Cue], booth: Bool) {
+        cueRows.values.forEach { $0.removeFromSuperview() }
+        joins.values.forEach { $0.removeFromSuperview() }
+        lead?.removeFromSuperview()
+        cueRows = [:]
+        joins = [:]
+        lead = nil
+        if !booth, !cues.isEmpty {
+            let join = JoinView(cue: nil, transition: nil, link: nil, after: -1)
+            join.isEditing = true
+            join.onInsert = { [weak self] in self?.onInsert($0) }
+            document.addSubview(join, positioned: .below, relativeTo: reachLine)
+            lead = join
+        }
+        for (i, cue) in cues.enumerated() {
+            if i > 0 {
+                let join = JoinView(cue: cue.id, transition: cue.transition, link: JoinView.link(for: cues[i - 1].continueMode),
+                                    after: i - 1)
+                join.isEditing = !booth
+                join.onClick = { [weak self] in self?.onTransitionClick($0) }
+                join.onClear = { [weak self] in self?.onClearTransition($0) }
+                join.onInsert = { [weak self] in self?.onInsert($0) }
+                document.addSubview(join, positioned: .below, relativeTo: reachLine)
+                joins[cue.id] = join
+            }
+            let row = CueRowView(cue: cue)
+            row.isBooth = booth
+            row.onClick = { [weak self] in self?.onClick($0) }
+            row.onDelete = { [weak self] in self?.onDelete($0) }
+            row.onGrip = { [weak self] row, event in self?.drag(row, from: event) }
+            row.onMenu = { [weak self] id in self?.menu(forCue: id) }
+            row.onMove = { [weak self] id, by in self?.onMoveBy(id, by) }
+            document.addSubview(row, positioned: .below, relativeTo: reachLine)
+            cueRows[cue.id] = row
+        }
+        shown = cues
+        shownBooth = booth
+    }
+
+    #if DEBUG
+    /// For snapshots, which have no pointer: a row as if under it.
+    func pretendHovered(_ id: UUID) {
+        cueRows[id]?.pretendHovered(true)
+    }
+
+    /// For snapshots: the slot files would open, as if they were dragged in.
+    func pretendDrop(count: Int, before index: Int) {
+        dropCount = count
+        drop = index < 0 ? nil : .before(index)
+    }
+    #endif
 
     // MARK: Right-click menus
 
@@ -215,9 +315,11 @@ final class CueListView: NSScrollView {
     /// or pictures and clips from Photos, Safari or another app.
     private var dragged: MediaDrop?
     private var drop: Drop? { didSet { if drop != oldValue { showDrop() } } }
+    /// How many usable files are being dragged, for the slot's words.
+    private var dropCount = 0
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        dragged = shownEditing ? MediaDrop(sender.draggingPasteboard) : nil
+        dragged = shownBooth ? nil : MediaDrop(sender.draggingPasteboard)
         return draggingUpdated(sender)
     }
 
@@ -260,7 +362,8 @@ final class CueListView: NSScrollView {
     /// between rows or below them, the files make new cues there.
     private func target(at point: NSPoint) -> Drop? {
         let usable = (dragged?.types ?? []).filter { ShowDocument.cueKind(for: $0) != nil }
-        guard shownEditing, !usable.isEmpty else { return nil }
+        dropCount = usable.count
+        guard !shownBooth, !usable.isEmpty else { return nil }
         if usable.count == 1, let row = visible.first(where: { $0.frame.contains(point) }),
            row.takesMedia, ShowDocument.accepts(usable[0], for: row.cue.kind) {
             let edge = min(10, row.frame.height / 4)
@@ -269,9 +372,19 @@ final class CueListView: NSScrollView {
         return .before(slot(at: point.y))
     }
 
+    /// Over a cue that takes the file, that row says so. Between rows, a
+    /// slot opens where the files would go, and the rows below move down.
     private func showDrop() {
         for row in cueRows.values { row.isTargeted = drop == .onto(row.cue.id) }
-        if case .before(let index) = drop { showInsertion(at: index) } else { insertion.isHidden = true }
+        if case .before = drop {
+            slot.count = dropCount
+        }
+        let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animate ? 0.18 : 0
+            context.allowsImplicitAnimation = animate
+            layoutRows(animated: animate)
+        }
     }
 
     private func endDrop() {
@@ -295,37 +408,111 @@ final class CueListView: NSScrollView {
 
     private func showInsertion(at slot: Int) {
         let bottom = document.subviews.filter { !$0.isHidden && $0 !== insertion }.map(\.frame.maxY).max() ?? 0
-        // Above the cue's transition row, which travels with it.
-        let y = slot < visible.count ? (transitionRows[visible[slot].cue.id] ?? visible[slot]).frame.minY - 2.5 : bottom + 0.5
+        // Above the cue's join, which travels with it.
+        let y = slot < visible.count ? (joins[visible[slot].cue.id] ?? visible[slot]).frame.minY - 2.5 : bottom + 0.5
         insertion.frame = NSRect(x: 6, y: y, width: document.bounds.width - 12, height: 2)
         insertion.isHidden = false
     }
 
-    /// Every cue in sheet order, each with its open GOs beneath it.
-    private func layoutRows() {
+    /// Every cue in sheet order: the join into it, the cue, then its open
+    /// GOs. While files are dragged between rows, a slot opens where they
+    /// would land.
+    private func layoutRows(animated: Bool = false) {
         let width = contentSize.width
         var y: CGFloat = 0
         visible = []
         cueRows.values.forEach { $0.isHidden = true }
-        transitionRows.values.forEach { $0.isHidden = true }
+        joins.values.forEach { $0.isHidden = true }
         steps.values.joined().forEach { $0.isHidden = true }
-        for cue in shown {
+        var spines: [(from: CGFloat, to: CGFloat)] = []
+        var boxes: [UUID: CGFloat] = [:]
+        let slotAt: Int? = if case .before(let index) = drop { index } else { nil }
+        slot.isHidden = slotAt == nil
+        func place(_ view: NSView, _ frame: NSRect) {
+            if animated { view.animator().frame = frame } else { view.frame = frame }
+        }
+        if let lead {
+            lead.isHidden = false
+            place(lead, NSRect(x: 0, y: y, width: width, height: JoinView.leadHeight))
+            y += JoinView.leadHeight
+        }
+        for (i, cue) in shown.enumerated() {
             guard let row = cueRows[cue.id] else { continue }
-            if let transition = transitionRows[cue.id] {
-                transition.isHidden = false
-                transition.frame = NSRect(x: 0, y: y, width: width, height: TransitionRowView.height)
-                y += TransitionRowView.height
+            if slotAt == i {
+                place(slot, NSRect(x: 0, y: y, width: width, height: DropSlot.height))
+                y += DropSlot.height
+            }
+            if let join = joins[cue.id] {
+                join.isHidden = false
+                let h = join.link == nil ? JoinView.height : JoinView.linkedHeight
+                place(join, NSRect(x: 0, y: y, width: width, height: h))
+                y += h
             }
             row.isHidden = false
-            row.frame = NSRect(x: 0, y: y, width: width, height: row.preferredHeight)
-            y += row.preferredHeight + 3
+            let h = row.preferredHeight(width: width)
+            place(row, NSRect(x: 0, y: y, width: width, height: h))
+            boxes[cue.id] = y + row.boxRect.midY
+            y += h
             visible.append(row)
             for sub in steps[cue.id] ?? [] {
                 sub.isHidden = false
-                sub.frame = NSRect(x: 0, y: y, width: width, height: SubCueRowView.height)
-                y += SubCueRowView.height + 1
+                place(sub, NSRect(x: 0, y: y, width: width, height: SubCueRowView.height))
+                y += SubCueRowView.height
+            }
+            if reachAfter == cue.id {
+                reachLine.frame = NSRect(x: CueRowView.textX, y: y + 2, width: max(0, width - CueRowView.textX - 10), height: 16)
+                y += 20
             }
         }
-        document.frame = NSRect(x: 0, y: 0, width: width, height: max(y, contentSize.height))
+        if slotAt == shown.count {
+            place(slot, NSRect(x: 0, y: y, width: width, height: DropSlot.height))
+            y += DropSlot.height
+        }
+        // A spine from each cue that runs on to the next one's margin box.
+        for (i, cue) in shown.enumerated() where i + 1 < shown.count && cue.continueMode.continues {
+            if let from = boxes[cue.id], let to = boxes[shown[i + 1].id] { spines.append((from, to)) }
+        }
+        document.spines = spines
+        document.frame = NSRect(x: 0, y: 0, width: width, height: max(y + 8, contentSize.height))
+    }
+}
+
+/// The rail's own surface: the spines that link one cue's margin box to the
+/// next when it runs on by itself, drawn under the rows.
+final class RailDocument: NSView {
+    var spines: [(from: CGFloat, to: CGFloat)] = [] { didSet { needsDisplay = true } }
+    var room = Room.studio { didSet { needsDisplay = true } }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        room.brass.setFill()
+        let x = CueRowView.boxX + CueRowView.box.width / 2 - 1
+        for spine in spines {
+            NSRect(x: x, y: spine.from, width: 2, height: spine.to - spine.from).fill()
+        }
+    }
+}
+
+/// Where files dragged over the rail would land: "Drop to add 3 cues here".
+final class DropSlot: NSView {
+    static let height: CGFloat = 28
+    var count = 0 { didSet { needsDisplay = true } }
+    var room = Room.studio { didSet { needsDisplay = true } }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let box = bounds.insetBy(dx: 6, dy: 3)
+        let path = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
+        room.brass.withAlphaComponent(0.12).setFill()
+        path.fill()
+        path.setLineDash([4, 3], count: 2, phase: 0)
+        room.brass.setStroke()
+        path.stroke()
+        let words = "Drop to add \(count) cue\(count == 1 ? "" : "s") here"
+        let text = NSAttributedString(string: words, attributes: [.font: Desk.sans(11.5, .semibold), .foregroundColor: room.brass])
+        let size = text.size()
+        text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
     }
 }

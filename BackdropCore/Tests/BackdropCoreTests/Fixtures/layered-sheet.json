@@ -107,7 +107,7 @@
           "value" : "44 · 1.9 s"
         },
         {
-          "name" : "Advance",
+          "name" : "Steps",
           "overridden" : false,
           "value" : "each step on GO"
         },

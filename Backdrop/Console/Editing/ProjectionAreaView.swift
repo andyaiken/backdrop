@@ -1,7 +1,7 @@
 import BackdropCore
 import SwiftUI
 
-/// The projection area's controls, in the Inspector's Show Settings: width,
+/// The projection area's controls, in the Inspector's Stage setup: width,
 /// height and offsets as percentages of the projector output, a shape to
 /// fit them to, alignment guides, and a reset.
 struct ProjectionAreaView: View {

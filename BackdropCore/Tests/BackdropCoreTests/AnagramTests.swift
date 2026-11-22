@@ -163,7 +163,7 @@ struct AnagramTests {
         #expect(dsm.rows[0].type == "Anagram")
         #expect(dsm.rows[0].content == ["SO DARK THE CON OF MAN", "\u{2192} MADONNA OF THE ROCKS"])
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[0].settings
-        #expect(settings.map(\.name) == ["Clock", "Wave", "Hold", "Advance", "Pause", "Font", "Transition", "Fade"])
+        #expect(settings.map(\.name) == ["Clock", "Wave", "Hold", "Steps", "Pause", "Font", "Transition", "Fade"])
         #expect(settings[3].value == "by itself" && settings[4].value == "44 \u{00B7} 1.9 s", "a pause in seconds, as a hold")
         #expect(settings[5].value == "SF Mono", "the stage's own type, by name")
     }

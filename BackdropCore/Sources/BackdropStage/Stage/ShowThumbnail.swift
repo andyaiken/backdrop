@@ -23,17 +23,26 @@ public enum ShowThumbnail {
     /// - Parameter media: Where a cue's media path is on disk.
     public static func image(of show: Show, width: Int, media: @escaping (String) -> URL?) async -> CGImage? {
         guard let cue = cue(of: show) else { return nil }
+        return await image(of: cue, settings: show.settings, width: width, media: media)
+    }
+
+    /// One cue, drawn finished, `width` pixels across, at the stage's shape.
+    /// A blank is its colour; a feed has no picture to show until its camera
+    /// is open, and a video none until it is played, so they are nil.
+    public static func image(of cue: Cue, settings: ShowSettings, width: Int, media: @escaping (String) -> URL?) async -> CGImage? {
+        if case .blank(let blank) = cue.content { return filled(blank.colour, width: width) }
+        guard kinds.contains(cue.kind) else { return nil }
         let renderers: [Cue.Kind: any CueRenderer] = [
             .title: TitleRenderer(), .anagram: AnagramRenderer(), .image: ImageRenderer(media: media),
             .morph: MorphRenderer(media: media), .map: MapRenderer(media: media), .layered: LayeredRenderer(media: media),
             .keypad: KeypadRenderer(), .sms: SMSRenderer(), .conversation: ConversationRenderer(), .cascade: CascadeRenderer(), .text: TextRenderer(),
         ]
         let runner = StageRunner(renderers: renderers)
-        runner.geometry = show.settings.geometry
+        runner.geometry = settings.geometry
         let surface = SurfaceLayer(role: .live)
         surface.contentsScale = 1
         surface.frame = CGRect(x: 0, y: 0, width: width, height: max(1, width * 9 / 16))
-        surface.geometry = show.settings.geometry
+        surface.geometry = settings.geometry
         runner.attach(surface)
 
         if let renderer = renderers[cue.kind], loadsPictures(renderer) {
@@ -41,20 +50,32 @@ public enum ShowThumbnail {
             await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
                 waiting.done = done
                 setOnReady(renderer) { waiting.finish() }
-                runner.redraw(cue, show: show.settings, at: 0)
+                runner.redraw(cue, show: settings, at: 0)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 4) { MainActor.assumeIsolated { waiting.finish() } }
             }
             setOnReady(renderer, nil)
         }
         // Once more, now any picture is in hand: it comes from the cache at
         // once, and the cue is drawn finished with it.
-        runner.redraw(cue, show: show.settings, at: 0)
+        runner.redraw(cue, show: settings, at: 0)
         return render(surface)
+    }
+
+    /// A blank cue: its colour, edge to edge.
+    private static func filled(_ colour: RGB, width: Int) -> CGImage? {
+        let height = max(1, width * 9 / 16)
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(srgbRed: CGFloat(colour.r) / 255, green: CGFloat(colour.g) / 255,
+                                     blue: CGFloat(colour.b) / 255, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
     }
 
     /// The whole stage on black, as the projector shows it, outside the
     /// projection area too. A new surface shows no guides.
-    private static func render(_ surface: SurfaceLayer) -> CGImage? {
+    public static func render(_ surface: SurfaceLayer) -> CGImage? {
         let w = Int(surface.bounds.width), h = Int(surface.bounds.height)
         guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -80,11 +101,11 @@ public enum ShowThumbnail {
         }
     }
 
-    private static func loadsPictures(_ renderer: any CueRenderer) -> Bool {
+    public static func loadsPictures(_ renderer: any CueRenderer) -> Bool {
         renderer is ImageRenderer || renderer is MorphRenderer || renderer is MapRenderer || renderer is LayeredRenderer
     }
 
-    private static func setOnReady(_ renderer: any CueRenderer, _ ready: (() -> Void)?) {
+    public static func setOnReady(_ renderer: any CueRenderer, _ ready: (() -> Void)?) {
         switch renderer {
         case let r as ImageRenderer: r.onReady = ready
         case let r as MorphRenderer: r.onReady = ready

@@ -9,6 +9,8 @@ import QuartzCore
 final class SurfaceView: NSView {
     let surface: SurfaceLayer
     weak var controller: ShowController?
+    /// The console, for the keys that open something on it: G and ?.
+    weak var console: ConsoleKeys?
     /// The runner this surface belongs to, if not the controller's main one.
     weak var runner: StageRunner?
     private var link: CADisplayLink?
@@ -61,14 +63,19 @@ final class SurfaceView: NSView {
         link?.isPaused = !on
     }
 
+    /// Each tick of this view's display link, after the stage has moved on:
+    /// the Studio's timeline follows Run again with it.
+    var onStep: (() -> Void)?
+
     @objc private func step(_ link: CADisplayLink) {
         controller?.tick(at: link.targetTimestamp)
+        onStep?()
     }
 
     // MARK: Keys
 
     override func keyDown(with event: NSEvent) {
-        guard let controller, ShowKeys.handle(event, controller: controller) else {
+        guard let controller, ShowKeys.handle(event, controller: controller, console: console) else {
             super.keyDown(with: event)
             return
         }

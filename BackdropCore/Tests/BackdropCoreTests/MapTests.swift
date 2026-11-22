@@ -175,6 +175,6 @@ struct MapTests {
         #expect(rows[1].content == ["OPERATION NIGHTJAR", "SOHO \u{2192} KING'S CROSS \u{2192} \u{21AF} DOCKS"])
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[1].settings
         #expect(settings.first { $0.name == "Route" }?.value == "2 stops, 1 by a jump")
-        #expect(settings.map(\.name).prefix(7) == ["Clock", "Hold", "Advance", "Pause", "View", "Zoom", "Trail"])
+        #expect(settings.map(\.name).prefix(7) == ["Clock", "Hold", "Steps", "Pause", "View", "Zoom", "Trail"])
     }
 }

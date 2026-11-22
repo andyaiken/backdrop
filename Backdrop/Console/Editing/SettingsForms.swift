@@ -280,7 +280,7 @@ struct SettingGroup: Identifiable {
     }
 }
 
-/// The Show Settings the Inspector holds: the title printed on the cue sheet,
+/// Stage setup, as the Inspector holds it: the title printed on the cue sheet,
 /// the size of text, and the projection area.
 struct ShowSettingsView: View {
     let title: String
@@ -368,20 +368,33 @@ struct CueSettingsSections: View {
     let cue: Cue
     let onChange: (SettingKey, SettingValue, Bool) -> Void
 
+    /// Look: every setting this kind has that isn't timing or steps. A
+    /// transition: its style, and where a wipe starts; its length is the
+    /// timeline's In bar.
+    private var keys: [SettingKey] {
+        if transitions { return [.transition, .wipeFrom] }
+        let applying = SettingGroup.applying(to: cue.kind).flatMap(\.keys)
+        return applying.filter { SettingKey.look.contains($0) }
+    }
+
     var body: some View {
-        ForEach(SettingGroup.applying(to: cue.kind).filter { transitions == ($0.id == "Transitions") }) { group in
+        if !keys.isEmpty {
             Section {
-                ForEach(group.keys, id: \.self) { key in
+                ForEach(keys, id: \.self) { key in
                     if let value = key.value(in: cue) {
                         let state = SettingState.of(key, in: cue)
-                        SettingRowView(key: key, kind: cue.kind, value: value,
-                                       annotation: state.annotation, isEnabled: state.enabled,
-                                       onChange: { value, continuous in onChange(key, value, continuous) })
+                        if !transitions, LookChips.shows(key) {
+                            LookChips(key: key, cue: cue, value: value, isEnabled: state.enabled,
+                                      onChange: { value in onChange(key, value, false) })
+                        } else {
+                            SettingRowView(key: key, kind: cue.kind, value: value,
+                                           annotation: state.annotation, isEnabled: state.enabled,
+                                           onChange: { value, continuous in onChange(key, value, continuous) })
+                        }
                     }
                 }
             } header: {
-                InfoHeading(transitions ? "Transition in" : group.id,
-                            info: group.id == "Timing" ? SettingKey.timingExplanation : nil)
+                InfoHeading(transitions ? "Transition in" : "Look")
             } footer: {
                 if transitions { Text(Self.transitionNote) }
             }
@@ -393,7 +406,7 @@ struct CueSettingsSections: View {
         }
     }
 
-    private static let transitionNote = "How the stage changes to this cue, when it fires."
+    private static let transitionNote = "How the stage changes to this cue, when it fires. Its length is the In bar on the timeline."
 
     private func note(for cue: Cue) -> String? {
         switch cue.kind {

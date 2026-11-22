@@ -27,6 +27,10 @@ public final class ShowController {
 
     /// The one line the console shows about what just happened, if anything.
     public private(set) var message: String?
+    /// Where the message came from, when show control or a shortcut said
+    /// it, so the status line can badge it and let it fade. Nil for the
+    /// console's own messages.
+    public private(set) var messageOrigin: CommandSource?
 
     public enum Mode: Sendable {
         /// The sheet and settings are locked. Every show opens in this mode.
@@ -144,6 +148,11 @@ public final class ShowController {
 
     /// Space. The only way a cue is fired by hand.
     public func go() {
+        // The operator's own GO: what show control last said is done with.
+        if messageOrigin != nil {
+            message = nil
+            messageOrigin = nil
+        }
         guard let fire = playhead.go(in: show) else {
             say("End of the cue sheet. Press R to run the live cue again.")
             return
@@ -173,34 +182,15 @@ public final class ShowController {
         say(nil)
     }
 
-    /// The Go-to field, which reaches numbers with letters in them.
-    public func standBy(number: String) {
+    /// Go To, which reaches numbers with letters in them. Says so when no
+    /// cue has the number. Whether a cue stood by.
+    @discardableResult
+    public func standBy(number: String) -> Bool {
         let trimmed = number.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        say(playhead.standBy(number: trimmed, in: show) ? nil : "No cue is numbered \(trimmed).")
-    }
-
-    public func type(_ c: Character) {
-        playhead.type(c)
-        changed()
-    }
-
-    public func deleteBackward() {
-        playhead.deleteBackward()
-        changed()
-    }
-
-    public func clearEntry() {
-        playhead.clearEntry()
-        changed()
-    }
-
-    public func commitEntry() {
-        switch playhead.commitEntry(in: show) {
-        case .empty: changed()
-        case .stoodBy: say(nil)
-        case .noSuchCue(let number): say("No cue is numbered \(number).")
-        }
+        guard !trimmed.isEmpty else { return false }
+        let found = playhead.standBy(number: trimmed, in: show)
+        say(found ? nil : "No cue is numbered \(trimmed).")
+        return found
     }
 
     /// R. In show mode, the live cue runs again; in edit mode, the selected one.
@@ -257,28 +247,33 @@ public final class ShowController {
     ///
     /// GO for a cue by number fires that cue and nothing else: a number not
     /// in the sheet fires nothing, rather than whatever stands by.
-    public func perform(_ command: RemoteCommand, from source: String) {
+    public func perform(_ command: RemoteCommand, from source: CommandSource) {
+        /// What the status line says, marked as from the source.
+        func report(_ text: String?) {
+            say(text)
+            if text != nil { messageOrigin = source }
+        }
         guard mode == .show else {
-            say("Ignored \(command.name), which arrived by \(source): Backdrop only acts on cues from other machines in show mode.")
+            report("Ignored \(command.name), which arrived by \(source): Backdrop only acts on cues from other machines in show mode.")
             return
         }
         switch command {
         case .go(let number):
             if let number, !playhead.standBy(number: number, in: show) {
-                say("GO for cue \(number) arrived by \(source), but no cue is numbered \(number).")
+                report("GO for cue \(number) arrived by \(source), but no cue is numbered \(number).")
                 return
             }
             guard let fire = playhead.go(in: show) else {
-                say("GO arrived by \(source), but this is the end of the cue sheet.")
+                report("GO arrived by \(source), but this is the end of the cue sheet.")
                 return
             }
             perform(fire)
             // A problem the cue reported as it loaded matters more.
             if message == nil, let cue = show[fire.cue] {
-                say(fire.presentation == .carryOn ? "Cue \(cue.number) carried on by \(source)." : "Cue \(cue.number) fired by \(source).")
+                report(fire.presentation == .carryOn ? "Cue \(cue.number) carried on by \(source)." : "Cue \(cue.number) fired by \(source).")
             }
         case .standBy(let number):
-            say(playhead.standBy(number: number, in: show)
+            report(playhead.standBy(number: number, in: show)
                 ? "Cue \(number) made next by \(source)."
                 : "Asked by \(source) to make cue \(number) next, but no cue is numbered \(number).")
         case .blackout(let on):
@@ -286,7 +281,7 @@ public final class ShowController {
                 playhead.blackout = on
                 runner.blackout = on
             }
-            say(on ? "Blacked out by \(source). Press B to bring the picture back." : "Picture brought back by \(source).")
+            report(on ? "Blacked out by \(source). Press B to bring the picture back." : "Picture brought back by \(source).")
         }
     }
 
@@ -449,28 +444,32 @@ public final class ShowController {
         needsTicks(true)
     }
 
+    /// A new cue of a kind, with every field empty: the editor hints at
+    /// what goes in each.
+    public static func emptyCue(_ kind: Cue.Kind) -> Cue {
+        switch kind {
+        case .title: Cue(content: .title(TitleContent()))
+        case .anagram: Cue(content: .anagram(AnagramContent()))
+        case .image: Cue(content: .image(ImageContent()))
+        case .text: Cue(content: .text(TextContent()))
+        case .morph: Cue(content: .morph(MorphContent()))
+        case .map: Cue(content: .map(MapContent()))
+        case .layered: Cue(content: .layered(LayeredContent()))
+        case .keypad: Cue(content: .keypad(KeypadContent()))
+        case .sms: Cue(content: .sms(SMSContent()))
+        case .conversation: Cue(content: .conversation(ConversationContent()))
+        case .cascade: Cue(content: .cascade(CascadeContent()))
+        case .video: Cue(content: .video(VideoContent()))
+        case .feed: Cue(content: .feed(FeedContent()))
+        case .blank: Cue(content: .blank(BlankContent()))
+        }
+    }
+
     /// Adds a cue after the one standing by, or at the end, numbered between
     /// its neighbours, and stands it by so it can be edited.
     @discardableResult
     public func addCue(_ kind: Cue.Kind) -> UUID? {
-        // Every field starts empty; the editor hints at what goes in each.
-        let cue: Cue
-        switch kind {
-        case .title: cue = Cue(content: .title(TitleContent()))
-        case .anagram: cue = Cue(content: .anagram(AnagramContent()))
-        case .image: cue = Cue(content: .image(ImageContent()))
-        case .text: cue = Cue(content: .text(TextContent()))
-        case .morph: cue = Cue(content: .morph(MorphContent()))
-        case .map: cue = Cue(content: .map(MapContent()))
-        case .layered: cue = Cue(content: .layered(LayeredContent()))
-        case .keypad: cue = Cue(content: .keypad(KeypadContent()))
-        case .sms: cue = Cue(content: .sms(SMSContent()))
-        case .conversation: cue = Cue(content: .conversation(ConversationContent()))
-        case .cascade: cue = Cue(content: .cascade(CascadeContent()))
-        case .video: cue = Cue(content: .video(VideoContent()))
-        case .feed: cue = Cue(content: .feed(FeedContent()))
-        case .blank: cue = Cue(content: .blank(BlankContent()))
-        }
+        let cue = Self.emptyCue(kind)
         let after = playhead.standby.flatMap { show.index(of: $0) }
         guard edit("Add \(kind.heading) Cue", { $0.insert(cue, after: after) }) else { return nil }
         playhead.standBy(cue.id)
@@ -630,6 +629,7 @@ public final class ShowController {
     /// Puts a line in the console's status, or clears it.
     public func say(_ text: String?) {
         message = text
+        messageOrigin = nil
         preloadNext()
         changed()
     }

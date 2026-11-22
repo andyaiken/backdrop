@@ -1,4 +1,5 @@
 import AppKit
+import BackdropStage
 
 /// The desk palette: the Mac's own colours, named for what they are used
 /// for. They follow the system appearance and the user's accent colour, so
@@ -33,6 +34,12 @@ enum Desk {
     /// The corners of the previews.
     static let previewRadius: CGFloat = 10
 
+    /// The palette for the room a mode puts the console in: the Booth's,
+    /// always dark, in show mode, and these system colours in edit mode.
+    static func room(_ mode: ShowController.Mode) -> Room {
+        mode == .show ? .booth : .studio
+    }
+
     /// The window's background with some of the accent mixed in, worked out
     /// afresh for each appearance and accent colour. With Increase Contrast
     /// on, it is the plain background: a tint would only soften the edges
@@ -64,6 +71,15 @@ enum Desk {
 
     static func sans(_ size: CGFloat, _ weight: NSFont.Weight = .regular) -> NSFont {
         NSFont.systemFont(ofSize: size, weight: weight)
+    }
+
+    /// Cue points: Courier Prime, as typed in the book, or Courier New if
+    /// the bundled face isn't there.
+    static func script(_ size: CGFloat, italic: Bool = false) -> NSFont {
+        let name = italic ? "CourierPrime-Italic" : "CourierPrime-Regular"
+        if let font = NSFont(name: name, size: size) { return font }
+        let fallback = NSFont(name: "Courier New", size: size) ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        return italic ? NSFontManager.shared.convert(fallback, toHaveTrait: .italicFontMask) : fallback
     }
 
     @MainActor
@@ -122,8 +138,8 @@ enum Desk {
 /// light appearance's colour after the Mac turned dark, or the old accent
 /// after the user picked another.
 class PanelView: NSView {
-    private let fill: NSColor?
-    private let border: NSColor?
+    var fill: NSColor? { didSet { applyColours() } }
+    var border: NSColor? { didSet { applyColours() } }
 
     init(fill: NSColor? = nil, border: NSColor? = nil, radius: CGFloat = 0) {
         self.fill = fill

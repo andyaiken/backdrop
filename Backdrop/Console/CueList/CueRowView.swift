@@ -1,20 +1,27 @@
 import AppKit
 import BackdropCore
 
-/// One row: number, a glyph for the kind, the name, and beneath it the
-/// subtitle and the cue point. The live cue sits on a raised background with
-/// a grey LIVE tab at its left; the standby cue has a tint, a brass number
-/// and a brass NEXT tab. In edit mode every cue but
-/// the first has a row above it for the transition in, `TransitionRowView`.
+/// One cue in the rail, as pencilled in the book: its number in a margin
+/// box, its name, its cue point in typewriter italics, and at the right a
+/// picture of it finished. The Studio adds the row's summary, and while the
+/// pointer is over it, delete and a grip to drag it by.
+///
+/// The square tab down the left edge says what the row is: NEXT in brass,
+/// ON STAGE in red, or, with no word, amber for a cue with an issue.
 final class CueRowView: NSView {
     let cue: Cue
-    var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true } } }
-    var isLive = false { didSet { if isLive != oldValue { needsDisplay = true } } }
-    var hasIssue = false
-    /// How many GOs the cue waits for while they are folded away: shown as a
-    /// count. Zero while its sub-cues are open, or when it has none.
+    var room = Room.studio { didSet { needsDisplay = true } }
+    /// The Booth draws two lines of cue point and no summary; the Studio one
+    /// of each.
+    var isBooth = false { didSet { if isBooth != oldValue { needsDisplay = true } } }
+    var isStandby = false { didSet { if isStandby != oldValue { needsDisplay = true; updateAccessibility() } } }
+    var isLive = false { didSet { if isLive != oldValue { needsDisplay = true; updateAccessibility() } } }
+    /// What is wrong with the cue, in the sheet's words, if anything.
+    var issue: String? { didSet { if issue != oldValue { needsDisplay = true; updateAccessibility() } } }
+    /// How many GOs the cue waits for while they are folded away. Zero while
+    /// its steps are open, or when it has none.
     var foldedGoes = 0 { didSet { if foldedGoes != oldValue { needsDisplay = true } } }
-    /// Edit mode: a delete button and a grip to drag the row by, at the right.
+    /// The Studio: delete and a grip, while the pointer is over the row.
     var isEditing = false {
         didSet {
             guard isEditing != oldValue else { return }
@@ -22,32 +29,42 @@ final class CueRowView: NSView {
             window?.invalidateCursorRects(for: self)
         }
     }
+    /// The cue finished, at the right.
+    var thumbnail: CGImage? { didSet { if thumbnail !== oldValue { needsDisplay = true } } }
     /// Dimmed while it's being dragged to a new place.
     var isLifted = false { didSet { alphaValue = isLifted ? 0.45 : 1 } }
     /// A picture or clip dragged over it would go to this cue. The list
     /// decides, since it takes every drop.
     var isTargeted = false { didSet { if isTargeted != oldValue { needsDisplay = true } } }
-    private var isHovered = false { didSet { if isHovered != oldValue { needsDisplay = true } } }
+    private(set) var isHovered = false {
+        didSet {
+            guard isHovered != oldValue else { return }
+            needsDisplay = true
+            window?.invalidateCursorRects(for: self)
+        }
+    }
     var onClick: (UUID) -> Void = { _ in }
     var onDelete: (UUID) -> Void = { _ in }
     /// The grip was pressed: the list takes the drag from here.
     var onGrip: (CueRowView, NSEvent) -> Void = { _, _ in }
+    /// The Studio's accessibility actions: move the cue up or down a place.
+    var onMove: (UUID, Int) -> Void = { _, _ in }
 
     init(cue: Cue) {
         self.cue = cue
         super.init(frame: .zero)
-        let continues = cue.continueMode.continues ? "Continues " + cue.continueMode.summary : nil
-        toolTip = [cue.line.isEmpty ? nil : cue.line, continues].compactMap { $0 }.joined(separator: "\n").nilIfEmpty
+        toolTip = cue.line.isEmpty ? nil : cue.line
+        updateAccessibility()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
     /// Whether a picture or clip dropped on the row goes to the cue, as its
     /// file. A layered image has a base and layers, so a drop would be
     /// ambiguous; its strip in the Inspector takes them instead.
     var takesMedia: Bool { [.image, .morph, .map, .video].contains(cue.kind) }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
 
     override var isFlipped: Bool { true }
 
@@ -60,69 +77,221 @@ final class CueRowView: NSView {
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
 
-    /// At the right of the row, for a cue that moves on by itself: a down
-    /// arrow if it continues when finished, whatever the wait after, or the
-    /// moment it fires; a clock if it continues a while after it fires.
-    static func continueSymbol(_ mode: ContinueMode) -> String? {
-        switch mode {
-        case .whenCued: nil
-        case .whenFinished, .after(0): "arrow.down"
-        case .after: "clock"
-        }
-    }
+    #if DEBUG
+    /// For snapshots, which have no pointer.
+    func pretendHovered(_ on: Bool) { isHovered = on }
+    #endif
 
-    /// What the cue shows beneath its name, with a count of its GOs while
-    /// they are folded away.
-    var subtitle: String {
+    // MARK: Geometry
+
+    static let inset: CGFloat = 8
+    static let boxX: CGFloat = 18
+    static let box = NSSize(width: 32, height: 22)
+    static let textX: CGFloat = 62
+    static let thumb = NSSize(width: 56, height: 32)
+    private static let lineHeight: CGFloat = 16
+
+    /// The margin box, where the rail's links join one cue to the next.
+    var boxRect: NSRect { NSRect(x: Self.boxX, y: Self.inset + 1, width: Self.box.width, height: Self.box.height) }
+    private var thumbRect: NSRect {
+        NSRect(x: bounds.width - 10 - Self.thumb.width, y: Self.inset + 1, width: Self.thumb.width, height: Self.thumb.height)
+    }
+    /// Delete and the grip, left of the picture, while the pointer is over a
+    /// row in the Studio.
+    private var showsControls: Bool { isEditing && isHovered }
+    var gripRect: NSRect { NSRect(x: thumbRect.minX - 26, y: thumbRect.minY, width: 22, height: Self.thumb.height) }
+    var deleteRect: NSRect { NSRect(x: gripRect.minX - 24, y: thumbRect.midY - 11, width: 22, height: 22) }
+    private var textWidth: CGFloat { max(40, thumbRect.minX - 10 - Self.textX) }
+
+    private var summary: String {
         let goes = foldedGoes > 0 ? "\u{25B8} \(foldedGoes) GO\(foldedGoes == 1 ? "" : "s")" : ""
-        return [content, goes].filter { !$0.isEmpty }.joined(separator: "   ")
+        return [CueText.summary(cue), goes].filter { !$0.isEmpty }.joined(separator: "   ")
     }
 
-    private var content: String {
-        switch cue.content {
-        case .title(let c): c.sub
-        case .anagram(let c):
-            [c.anagrams.first.map { $0.answer.isEmpty ? "" : "\u{2192} " + $0.answer } ?? "",
-             c.anagrams.count > 1 ? "and \(c.anagrams.count - 1) more" : ""].filter { !$0.isEmpty }.joined(separator: "   ")
-        case .image(let c): c.src.isEmpty ? "no picture" : ""
-        case .morph(let c):
-            c.pictures.count < 2 ? "needs two pictures"
-                : c.pictures.count > 2 ? "\(c.pictures.count) pictures"
-                : "\(c.pictures[1].pairs.count) point\(c.pictures[1].pairs.count == 1 ? "" : "s")"
-        case .map(let c):
-            c.src.isEmpty ? "no map"
-                : c.stops.count < 2 ? "no stops" : "\(c.stops.count - 1) stop\(c.stops.count == 2 ? "" : "s")"
-        case .video(let c): [c.sub, c.atEnd == .hold ? "" : c.atEnd.rawValue].filter { !$0.isEmpty }.joined(separator: "   ")
-        case .feed(let c):
-            [c.sub, c.settings.device.isEmpty ? "no camera" : c.settings.deviceName].filter { !$0.isEmpty }.joined(separator: "   ")
-        case .blank(let c): c.colour.hex
-        case .conversation(let c):
-            c.messages.isEmpty ? "no messages" : "\(c.messages.count) message\(c.messages.count == 1 ? "" : "s")"
-        case .sms(let c): [c.sub.isEmpty ? "no sender" : "from \(c.sub)", c.settings.shownStatus == .none ? (c.settings.sent ? "sent" : "") : "sent, \(c.settings.shownStatus.name.lowercased())" + (c.settings.goStatuses.isEmpty ? "" : " \u{2192} read")].filter { !$0.isEmpty }.joined(separator: "   ")
-        case .keypad(let c): c.script.isEmpty ? "no keys" : "\(c.boxCount) boxes"
-        case .cascade(let c): c.hasMessage ? (c.settings.messageOnGO ? "message on GO" : "") : "rain only"
-        case .text: ""
-        case .layered(let c):
-            c.layers.isEmpty ? "no layers" : "\(c.layers.count) layer\(c.layers.count == 1 ? "" : "s")"
+    private static let scriptFont = Desk.script(12.5, italic: true)
+
+    /// How many lines the cue point takes: two at most in the Booth, one in
+    /// the Studio.
+    private func cuePointLines(width: CGFloat) -> Int {
+        guard !cue.line.isEmpty else { return 0 }
+        guard isBooth else { return 1 }
+        let size = (cue.line as NSString).boundingRect(with: NSSize(width: width, height: 1000),
+                                                       options: [.usesLineFragmentOrigin],
+                                                       attributes: [.font: Self.scriptFont])
+        return size.height > Self.lineHeight * 1.5 ? 2 : 1
+    }
+
+    func preferredHeight(width: CGFloat) -> CGFloat {
+        let textWidth = max(40, width - 10 - Self.thumb.width - 10 - Self.textX)
+        var height = 2 * Self.inset + 18
+        if !isBooth, !summary.isEmpty { height += 17 }
+        height += CGFloat(cuePointLines(width: textWidth)) * Self.lineHeight
+        if issue != nil { height += Self.lineHeight }
+        return max(height, Self.thumb.height + 2 * Self.inset + 2)
+    }
+
+    // MARK: Drawing
+
+    override func resetCursorRects() {
+        if showsControls { addCursorRect(gripRect, cursor: .openHand) }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let box = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let shape = NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4)
+        if isTargeted {
+            room.raised.setFill()
+            shape.fill()
+            room.brass.setStroke()
+            shape.lineWidth = 1.5
+            shape.stroke()
+        } else if isStandby {
+            room.raised.setFill()
+            shape.fill()
+            room.brass.withAlphaComponent(0.6).setStroke()
+            shape.stroke()
+        } else if isLive {
+            room.tally.withAlphaComponent(0.12).setFill()
+            shape.fill()
+        } else if isHovered {
+            room.ink.withAlphaComponent(0.06).setFill()
+            shape.fill()
+        }
+        if let _ = issue, !isStandby, !isLive { drawHatch(in: box) }
+
+        // The tab names the row. The live cue stood by again shows NEXT,
+        // since that's what Space will do.
+        if isStandby {
+            Desk.drawTab("NEXT", fill: room.brass, ink: room.background, in: box, radius: 4)
+        } else if isLive {
+            Desk.drawTab("ON STAGE", fill: room.tally, ink: .white, in: box, radius: 4)
+        } else if issue != nil {
+            Desk.drawTab(nil, fill: room.amber, ink: room.background, in: box, radius: 4)
+        }
+
+        drawMarginBox()
+
+        var y = Self.inset
+        if case .blank(let blank) = cue.content {
+            // A blank has no words, only a colour: a small bordered swatch of it.
+            let swatch = NSBezierPath(roundedRect: NSRect(x: Self.textX + 0.5, y: y + 3.5, width: 34, height: 13), xRadius: 3, yRadius: 3)
+            NSColor(srgbRed: CGFloat(blank.colour.r) / 255, green: CGFloat(blank.colour.g) / 255,
+                    blue: CGFloat(blank.colour.b) / 255, alpha: 1).setFill()
+            swatch.fill()
+            room.line.setStroke()
+            swatch.stroke()
+            // The Studio's summary gives the colour; the Booth has none, so it goes here.
+            if isBooth { draw(blank.colour.hex, Desk.mono(12), room.dim, x: Self.textX + 44, y: y + 1, width: textWidth - 44) }
+        } else {
+            draw(CueText.name(cue), Desk.mono(13), room.ink, x: Self.textX, y: y, width: textWidth, kern: 0.65)
+        }
+        y += 18
+        if !isBooth, !summary.isEmpty {
+            draw(summary, Desk.sans(11.5), room.dim, x: Self.textX, y: y, width: textWidth)
+            y += 17
+        } else if isBooth, foldedGoes > 0, cue.line.isEmpty {
+            draw("\u{25B8} \(foldedGoes) GO\(foldedGoes == 1 ? "" : "s")", Desk.sans(11.5), room.dim, x: Self.textX, y: y, width: textWidth)
+        }
+        let lines = cuePointLines(width: textWidth)
+        if lines > 0 {
+            draw(cue.line, Self.scriptFont, room.dim, x: Self.textX, y: y, width: textWidth, lines: lines)
+            y += CGFloat(lines) * Self.lineHeight
+        }
+        if let issue {
+            draw(issue, Desk.sans(11.5, .medium), room.amber, x: Self.textX, y: y, width: textWidth)
+        }
+        drawThumbnail()
+        if showsControls {
+            drawSymbol("line.3.horizontal", room.dim, centredIn: gripRect)
+            drawSymbol("trash", room.dim, centredIn: deleteRect, size: 10.5)
+        }
+        if isTargeted {
+            let words = cue.kind == .video ? "Use this clip" : "Use this picture"
+            draw(words, Desk.sans(11.5, .semibold), room.brass, x: Self.textX, y: bounds.height - Self.inset - 16,
+                 width: textWidth)
         }
     }
 
-    /// The middle of the cue's own lines. The number and kind on the left,
-    /// and every mark and control on the right, centre on it, so they line up
-    /// however many lines the row has.
-    private var middleY: CGFloat { bounds.height / 2 }
-    /// The whole height of the row's right edge, so it's easy to take hold of.
-    var gripRect: NSRect { NSRect(x: bounds.width - 26, y: 0, width: 26, height: bounds.height) }
-    var deleteRect: NSRect { NSRect(x: bounds.width - 48, y: middleY - 11, width: 22, height: 22) }
-    /// A mark's place at the right, centred on the middle.
-    private func markRect(x: CGFloat) -> NSRect { NSRect(x: x, y: middleY - 8, width: 14, height: 16) }
-    /// The room the edit-mode controls take at the right.
-    private var controlsWidth: CGFloat { isEditing ? 48 : 0 }
+    /// The number in its box, as pencilled in the margin: filled brass when
+    /// next, red when on stage.
+    private func drawMarginBox() {
+        let rect = boxRect.insetBy(dx: 0.75, dy: 0.75)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
+        path.lineWidth = 1.5
+        let ink: NSColor
+        if isStandby {
+            room.brass.setFill()
+            path.fill()
+            ink = room.background
+        } else {
+            // Filled with the rail's own colour, so a link's spine passes behind it.
+            room.panel.setFill()
+            path.fill()
+            (isLive ? room.tally : room.line).setStroke()
+            path.stroke()
+            ink = isLive ? room.tally : room.dim
+        }
+        let font = Desk.mono(cue.number.count > 3 ? 10 : 12, .medium)
+        let text = NSAttributedString(string: cue.number, attributes: [.font: font, .foregroundColor: ink])
+        let size = text.size()
+        text.draw(at: NSPoint(x: rect.midX - min(size.width, rect.width - 4) / 2, y: rect.midY - size.height / 2))
+    }
 
-    /// How far below the top of its rectangle AppKit draws a font's
-    /// baseline: the ascender, rounded to a whole point.
-    private static let lines = NSLayoutManager()
-    private static func baseline(_ font: NSFont) -> CGFloat { lines.defaultBaselineOffset(for: font) }
+    /// The cue finished. A feed shows a camera; a picture not yet drawn,
+    /// black.
+    private func drawThumbnail() {
+        let rect = thumbRect
+        let path = NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3)
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        NSColor.black.setFill()
+        rect.fill()
+        if let thumbnail, let context = NSGraphicsContext.current?.cgContext {
+            // Flipped view: draw the image the right way up, filling the box.
+            context.saveGState()
+            context.translateBy(x: rect.minX, y: rect.maxY)
+            context.scaleBy(x: 1, y: -1)
+            let aspect = CGFloat(thumbnail.width) / CGFloat(max(1, thumbnail.height))
+            let w = max(rect.width, rect.height * aspect), h = w / aspect
+            context.draw(thumbnail, in: CGRect(x: (rect.width - w) / 2, y: (rect.height - h) / 2, width: w, height: h))
+            context.restoreGState()
+        } else if cue.kind == .feed {
+            drawSymbol("video", NSColor.white.withAlphaComponent(0.6), centredIn: rect, size: 12)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        room.line.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    /// Faint amber stripes across a row with an issue.
+    private func drawHatch(in box: NSRect) {
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).addClip()
+        room.amber.withAlphaComponent(0.08).setStroke()
+        let stripes = NSBezierPath()
+        stripes.lineWidth = 6
+        var x = box.minX - box.height
+        while x < box.maxX {
+            stripes.move(to: NSPoint(x: x, y: box.maxY))
+            stripes.line(to: NSPoint(x: x + box.height, y: box.minY))
+            x += 14
+        }
+        stripes.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func draw(_ text: String, _ font: NSFont, _ colour: NSColor, x: CGFloat, y: CGFloat, width: CGFloat,
+                      kern: CGFloat = 0, lines: Int = 1) {
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = lines > 1 ? .byWordWrapping : .byTruncatingTail
+        style.maximumLineHeight = Self.lineHeight
+        let string = NSAttributedString(string: text, attributes: [
+            .font: font, .foregroundColor: colour, .paragraphStyle: style, .kern: kern,
+        ])
+        string.draw(with: NSRect(x: x, y: y, width: width, height: CGFloat(lines) * Self.lineHeight + 2),
+                    options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
 
     /// A system symbol, drawn the right way up in this top-down view.
     private func drawSymbol(_ name: String, _ colour: NSColor, centredIn rect: NSRect, size: CGFloat = 11) {
@@ -134,110 +303,9 @@ final class CueRowView: NSView {
                    from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
-    override func resetCursorRects() {
-        if isEditing { addCursorRect(gripRect, cursor: .openHand) }
-    }
+    // MARK: Mouse
 
-    var preferredHeight: CGFloat {
-        16 + 18 + (subtitle.isEmpty ? 0 : 17) + (cue.line.isEmpty ? 0 : 17)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let box = bounds.insetBy(dx: 0.5, dy: 0.5)
-        if isTargeted {
-            let path = NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3)
-            Desk.raised.setFill()
-            path.fill()
-            Desk.brass.setStroke()
-            path.stroke()
-        } else if isLive {
-            let path = NSBezierPath(roundedRect: box, xRadius: 3, yRadius: 3)
-            Desk.raised.setFill()
-            path.fill()
-            Desk.lineBright.setStroke()
-            path.stroke()
-        }
-        // Standing by is a tint and a tab; the pointer over a row is a lighter tint.
-        if isStandby || (isHovered && !isTargeted) {
-            (isStandby ? Desk.selected : Desk.hover).setFill()
-            NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
-        }
-        // A tab at the left names the row. The live cue stood by again shows
-        // NEXT, since that's what Space will do; its raised background still
-        // says it's live.
-        if isStandby {
-            Desk.drawTab("NEXT", fill: Desk.brass, ink: .white, in: box, radius: 4)
-        } else if isLive {
-            Desk.drawTab("LIVE", fill: Desk.dim, ink: Desk.colour, in: box, radius: 3)
-        }
-
-        func draw(_ text: String, _ font: NSFont, _ colour: NSColor, x: CGFloat, y: CGFloat, width: CGFloat, align: NSTextAlignment = .left, kern: CGFloat = 0) {
-            let style = NSMutableParagraphStyle()
-            style.alignment = align
-            style.lineBreakMode = .byTruncatingTail
-            NSAttributedString(string: text, attributes: [
-                .font: font, .foregroundColor: colour, .paragraphStyle: style, .kern: kern,
-            ]).draw(in: NSRect(x: x, y: y, width: width, height: 18))
-        }
-
-        // The cue's own lines are centred down the row as a block, on their
-        // ink: from the first line's capitals, or a blank's swatch, to the
-        // last line's baseline. That is how the number and the marks beside
-        // them are centred, so the two sit level.
-        let titleFont = Desk.mono(13), smallFont = Desk.sans(11.5)
-        let isBlank: Bool = if case .blank = cue.content { true } else { false }
-        let below = (subtitle.isEmpty ? 0 : 1) + (cue.line.isEmpty ? 0 : 1)
-        let inkTop = isBlank ? 2.5 : Self.baseline(titleFont) - titleFont.capHeight
-        let inkBottom = below == 0 ? (isBlank ? 15.5 : Self.baseline(titleFont)) : 18 + CGFloat(below - 1) * 17 + Self.baseline(smallFont)
-        var y = (middleY - (inkTop + inkBottom) / 2).rounded()
-        // A figure or a mark is centred by its own height, not its line's: a
-        // line has room below the baseline for descenders that digits never
-        // use, which would leave them sitting high beside the icons.
-        func centredY(_ font: NSFont) -> CGFloat { middleY + font.capHeight / 2 - Self.baseline(font) }
-        let numberFont = Desk.mono(12)
-        draw(cue.number, numberFont, isStandby ? Desk.brass : Desk.dim, x: 8, y: centredY(numberFont), width: 40, align: .right)
-        drawSymbol(cue.kind.symbol, Desk.dim, centredIn: NSRect(x: 56, y: middleY - 8, width: 14, height: 14))
-        // At the right: in edit mode the grip and delete; then how the cue
-        // continues, then any problem.
-        if isEditing {
-            drawSymbol("line.3.horizontal", Desk.dim, centredIn: NSRect(x: gripRect.minX, y: middleY - 11, width: gripRect.width, height: 22))
-            drawSymbol("trash", Desk.dim, centredIn: deleteRect, size: 10.5)
-        }
-        let symbol = Self.continueSymbol(cue.continueMode)
-        let marks = CGFloat((symbol == nil ? 0 : 1) + (hasIssue ? 1 : 0))
-        let textX: CGFloat = 78, textWidth = bounds.width - textX - 10 - marks * 18 - controlsWidth
-        if case .blank(let blank) = cue.content {
-            // A blank has no words, only a colour: a small bordered swatch of it.
-            let swatch = NSBezierPath(roundedRect: NSRect(x: textX + 0.5, y: y + 2.5, width: 34, height: 13), xRadius: 3, yRadius: 3)
-            NSColor(srgbRed: CGFloat(blank.colour.r) / 255, green: CGFloat(blank.colour.g) / 255,
-                    blue: CGFloat(blank.colour.b) / 255, alpha: 1).setFill()
-            swatch.fill()
-            Desk.lineBright.setStroke()
-            swatch.stroke()
-        } else {
-            draw(cue.text.isEmpty ? "\u{2014}" : cue.text.replacingOccurrences(of: "\n", with: " \u{23CE} "), titleFont, Desk.text, x: textX, y: y, width: textWidth, kern: 0.65)
-        }
-        var markX = bounds.width - 22 - controlsWidth
-        if let symbol {
-            drawSymbol(symbol, isStandby ? Desk.brass : Desk.dim, centredIn: markRect(x: markX))
-            markX -= 18
-        }
-        if hasIssue {
-            let bang = Desk.mono(13, .bold)
-            draw("!", bang, Desk.brass, x: markX + 2, y: centredY(bang), width: 12)
-        }
-        y += 18
-        if !subtitle.isEmpty {
-            draw(subtitle, smallFont, Desk.dim, x: textX, y: y, width: textWidth)
-            y += 17
-        }
-        if !cue.line.isEmpty {
-            let italic = NSFontManager.shared.convert(smallFont, toHaveTrait: .italicFontMask)
-            draw(cue.line, italic, Desk.dim, x: textX, y: y, width: textWidth)
-        }
-    }
-
-    /// In edit mode, a right click offers what the list puts together for
+    /// In the Studio, a right click offers what the list puts together for
     /// this cue.
     var onMenu: (UUID) -> NSMenu? = { _ in nil }
 
@@ -247,14 +315,67 @@ final class CueRowView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if isEditing, deleteRect.contains(point) {
+        if showsControls, deleteRect.contains(point) {
             onDelete(cue.id)
             return
         }
-        if isEditing, gripRect.contains(point) {
+        if showsControls, gripRect.contains(point) {
             onGrip(self, event)
             return
         }
         onClick(cue.id)
+    }
+
+    // MARK: Accessibility
+
+    /// "Cue 5, Safe, next. Keypad, 4 boxes. Cue point: TOM: The combination,
+    /// Mara. Quickly. Runs on after 3 seconds."
+    private func updateAccessibility() {
+        setAccessibilityElement(true)
+        setAccessibilityRole(.row)
+        var parts = ["Cue \(cue.number), \(cue.text.isEmpty ? cue.kind.heading : CueText.name(cue))"
+            + (isStandby ? ", next" : "") + (isLive ? ", on stage" : "") + "."]
+        parts.append([cue.kind.heading, CueText.summary(cue)].filter { !$0.isEmpty }.joined(separator: ", ") + ".")
+        if !cue.line.isEmpty { parts.append("Cue point: \(cue.line)") }
+        switch cue.continueMode {
+        case .whenCued: break
+        case .after(0): parts.append("Runs on at once.")
+        case .after(let ms): parts.append("Runs on after \(ContinueMode.seconds(ms)) seconds.")
+        case .whenFinished(0): parts.append("Runs on when finished.")
+        case .whenFinished(let ms): parts.append("Runs on \(ContinueMode.seconds(ms)) seconds after finishing.")
+        }
+        if let issue { parts.append("Issue: \(issue)") }
+        setAccessibilityLabel(parts.joined(separator: " "))
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onClick(cue.id)
+        return true
+    }
+
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        guard isEditing else { return nil }
+        return [
+            NSAccessibilityCustomAction(name: "Stand by") { [weak self] in
+                guard let self else { return false }
+                self.onClick(self.cue.id)
+                return true
+            },
+            NSAccessibilityCustomAction(name: "Delete") { [weak self] in
+                guard let self else { return false }
+                self.onDelete(self.cue.id)
+                return true
+            },
+            NSAccessibilityCustomAction(name: "Move up") { [weak self] in
+                guard let self else { return false }
+                self.onMove(self.cue.id, -1)
+                return true
+            },
+            NSAccessibilityCustomAction(name: "Move down") { [weak self] in
+                guard let self else { return false }
+                self.onMove(self.cue.id, 1)
+                return true
+            },
+        ]
     }
 }

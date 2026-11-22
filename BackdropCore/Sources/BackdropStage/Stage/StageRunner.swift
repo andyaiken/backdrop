@@ -287,6 +287,14 @@ public final class StageRunner {
         settlePending = false
     }
 
+    /// Where the running cue is at `time`, in its frames from the end of its
+    /// hold, fractions and all: negative during the hold. Nil with nothing
+    /// running. The Studio's timeline draws its playhead from this.
+    public func position(at time: Double) -> Double? {
+        guard isRunning || change != nil, let clock else { return nil }
+        return clock.position(at: time)
+    }
+
     /// Advances the live cue to `time`. Returns the cue's id on the tick it
     /// settles, once; nil otherwise.
     public func tick(at time: Double) -> UUID? {

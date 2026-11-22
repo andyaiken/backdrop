@@ -1,7 +1,6 @@
 import Foundation
 
-/// What the operator is driving: the cue on stage, what GO will do next, and
-/// any cue number being typed.
+/// What the operator is driving: the cue on stage, and what GO will do next.
 ///
 /// Only `go`, a continue, `rerun` and `resume` put anything on stage, and each
 /// returns a `Fire` for the app to act on. Everything else only moves what
@@ -23,8 +22,6 @@ public struct Playhead: Equatable, Sendable {
     /// The step of the standby cue that stands by, when one does: its GO
     /// point, counted from 0. Nil for the cue itself, fired from its start.
     public private(set) var standbyStep: Int?
-    /// Digits typed toward a cue number, shown in the standby panel.
-    public private(set) var entry = ""
     /// The override the operator toggles when something has gone wrong. It
     /// stays on across cues until toggled back.
     public var blackout = false
@@ -33,9 +30,6 @@ public struct Playhead: Equatable, Sendable {
     /// GO to point k reaches k + 1 of them.
     public private(set) var goPoints = 0
     public private(set) var goPointsTaken = 0
-
-    /// The longest number the keypad entry accepts.
-    public static let entryLimit = 8
 
     /// A show opens with nothing on stage and its first cue standing by.
     public init(show: Show) {
@@ -73,10 +67,9 @@ public struct Playhead: Equatable, Sendable {
 
     // MARK: Firing
 
-    /// GO: act on what stands by, and stand by the row after it. Any entry
-    /// in progress is discarded. Nil at the end of the sheet.
+    /// GO: act on what stands by, and stand by the row after it. Nil at the
+    /// end of the sheet.
     public mutating func go(in show: Show) -> Fire? {
-        entry = ""
         guard let id = standby, show.index(of: id) != nil else { return nil }
         if id == live, let step = standbyStep {
             // The live cue's own step: on to it, or straight to it.
@@ -120,7 +113,6 @@ public struct Playhead: Equatable, Sendable {
     /// Edit mode: runs the cue standing by on the stage, from the start, and
     /// leaves it standing by, so the cue being edited stays selected.
     public mutating func runStandby(in show: Show) -> Fire? {
-        entry = ""
         // With nothing standing by, as after the last cue has gone, the live
         // cue is the one selected.
         guard let id = standby ?? live, show.index(of: id) != nil else { return nil }
@@ -137,7 +129,6 @@ public struct Playhead: Equatable, Sendable {
     /// After a crash: put `id` up in its finished state and stand by the next.
     public mutating func resume(at id: UUID, in show: Show) -> Fire? {
         guard show.index(of: id) != nil else { return nil }
-        entry = ""
         return fire(id, in: show, presentation: .settled, automatic: false, step: nil)
     }
 
@@ -203,7 +194,6 @@ public struct Playhead: Equatable, Sendable {
     /// → ↓ PageDown: the next row, a cue's steps included. From the last row
     /// this reaches the end of the sheet.
     public mutating func standByNext(in show: Show) {
-        entry = ""
         guard let id = standby, show.index(of: id) != nil else { return }
         standByRow(after: id, step: standbyStep, in: show)
     }
@@ -211,7 +201,6 @@ public struct Playhead: Equatable, Sendable {
     /// ← ↑ PageUp: the row before. From the end of the sheet this reaches the
     /// last row; from the first cue it stays.
     public mutating func standByPrevious(in show: Show) {
-        entry = ""
         guard let id = standby, show.index(of: id) != nil else {
             guard let last = show.cues.last?.id else { return }
             let n = points(of: last, in: show)
@@ -226,7 +215,6 @@ public struct Playhead: Equatable, Sendable {
 
     /// A click on a cue in the list.
     public mutating func standBy(_ id: UUID) {
-        entry = ""
         standby = id
         standbyStep = nil
     }
@@ -238,47 +226,12 @@ public struct Playhead: Equatable, Sendable {
         if step >= 0, step < points(of: id, in: show) { standbyStep = step }
     }
 
-    /// The Go-to field, which also reaches numbers with letters in them.
+    /// Go To, which also reaches numbers with letters in them.
     /// False if no cue has that number.
     public mutating func standBy(number: String, in show: Show) -> Bool {
         guard let i = show.index(ofNumber: number) else { return false }
         standBy(show.cues[i].id)
         return true
-    }
-
-    // MARK: Keypad entry
-
-    /// 0–9 and `.`. Anything else is ignored.
-    public mutating func type(_ c: Character) {
-        guard c.isASCII, c.isNumber || c == ".", entry.count < Self.entryLimit else { return }
-        entry.append(c)
-    }
-
-    /// Backspace.
-    public mutating func deleteBackward() {
-        if !entry.isEmpty { entry.removeLast() }
-    }
-
-    /// Escape.
-    public mutating func clearEntry() {
-        entry = ""
-    }
-
-    public enum EntryResult: Equatable, Sendable {
-        case empty
-        case stoodBy(UUID)
-        case noSuchCue(String)
-    }
-
-    /// Return: stand by the cue whose number was typed. The entry clears
-    /// either way.
-    public mutating func commitEntry(in show: Show) -> EntryResult {
-        let typed = entry
-        entry = ""
-        guard !typed.isEmpty else { return .empty }
-        guard let i = show.index(ofNumber: typed) else { return .noSuchCue(typed) }
-        standBy(show.cues[i].id)
-        return .stoodBy(show.cues[i].id)
     }
 
     // MARK: Video arming

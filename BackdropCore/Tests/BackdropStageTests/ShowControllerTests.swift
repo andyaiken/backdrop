@@ -46,8 +46,7 @@ struct ShowControllerTests {
     @Test func spaceFiresTheStandbyCueAndNothingElseDoes() {
         let c = controller([titleCue("THE LOUVRE"), titleCue("SAINT-SULPICE")])
         c.standByNext()
-        c.type("1")
-        c.commitEntry()
+        c.standBy(number: "1")
         #expect(c.playhead.live == nil)
         #expect(onStage().isEmpty, "nothing reaches the stage before GO")
 
@@ -148,7 +147,7 @@ struct ShowControllerTests {
         #expect(ShowController(show: Show()).runner.kinds == Set(Cue.Kind.allCases))
     }
 
-    @Test func aVideoWithNoClipSaysSoInTheStandbyPanelByDefault() {
+    @Test func aVideoWithNoClipSaysSoOnTheStandbyCardByDefault() {
         let video = Cue(number: "2", content: .video(VideoContent(text: "CRYPTEX", src: "media/cryptex.mov")))
         let c = ShowController(show: Show(cues: [video]))
         guard case .failed = c.standbyArmState else {
@@ -159,8 +158,7 @@ struct ShowControllerTests {
 
     @Test func messagesNameCuesByNumber() {
         let c = controller([titleCue("THE LOUVRE")])
-        for ch in "44" { c.type(ch) }
-        c.commitEntry()
+        #expect(!c.standBy(number: "44"))
         #expect(c.message == "No cue is numbered 44.")
         c.rerun()
         #expect(c.message == "Nothing is on stage yet.")

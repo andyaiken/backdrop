@@ -159,6 +159,7 @@ final class ShowDocument: NSDocument {
 
         let projector = ProjectorManager(controller: controller)
         projector.console = console.window
+        projector.view.console = console
         self.projector = projector
         let clock = ClockSource(projector: projector.view, preview: console.nextPreview)
         self.clock = clock
@@ -180,6 +181,8 @@ final class ShowDocument: NSDocument {
         projector.onChange = { [weak clock, weak projector] in clock?.projectorVisible = projector?.isVisible ?? false }
         console.openProjector = { [weak projector] in projector?.open() }
         console.closeProjector = { [weak projector] in projector?.close() }
+        console.displayItems = { [weak self] in DisplayMenu.items(for: self) }
+        console.chooseDisplay = { [weak projector] display in projector?.choose(display) }
         console.setMode = { [weak self] editing in
             if editing { self?.enterEditMode() } else { self?.enterShowMode() }
         }

@@ -106,7 +106,7 @@ struct CascadeTests {
         #expect(dsm.rows[1].type == "GO 1")
         let op = CueSheet(show: show, title: "T", layout: .operatorSettings)
         let names = op.rows[0].settings.map(\.name)
-        #expect(names.starts(with: ["Clock", "Hold", "Advance", "Columns", "Density", "Streak", "Colour", "Message"]))
+        #expect(names.starts(with: ["Clock", "Hold", "Steps", "Columns", "Density", "Streak", "Colour", "Message"]))
         #expect(op.rows[0].settings.first { $0.name == "Colour" }?.value == "#00FF41")
     }
 

@@ -14,7 +14,7 @@ final class ShowControl {
     static let didChange = Notification.Name("BackdropShowControlDidChange")
 
     /// Where commands go, with where they came from for the status line.
-    @ObservationIgnored var onCommand: (_ command: RemoteCommand, _ source: String) -> Void = { _, _ in }
+    @ObservationIgnored var onCommand: (_ command: RemoteCommand, _ source: CommandSource) -> Void = { _, _ in }
 
     /// The device ID MSC is taken for, while it is taken.
     private(set) var mscDeviceID: Int?
@@ -102,12 +102,12 @@ final class ShowControl {
 
     private func received(msc message: [UInt8], from source: String) {
         guard let deviceID = mscDeviceID, let command = MSC.command(in: message, deviceID: deviceID) else { return }
-        onCommand(command, "MIDI Show Control from \(source)")
+        onCommand(command, .msc(source))
     }
 
     private func received(osc packet: [UInt8], from sender: String) {
         for message in OSCMessage.parse(packet) ?? [] {
-            if let command = RemoteCommand(osc: message) { onCommand(command, "OSC from \(sender)") }
+            if let command = RemoteCommand(osc: message) { onCommand(command, .osc(sender)) }
         }
     }
 }

@@ -143,9 +143,10 @@ struct CommittingField: View {
     }
 }
 
-/// Edit mode's Inspector for the cue standing by. It starts with what every
-/// cue has (its number, cue point and continue), then what only this kind
-/// has (its text, pictures and the like), then the settings it runs with.
+/// The Studio's Inspector for the cue standing by, in three groups: In the
+/// book, what the DSM writes (its number, cue point, continue and steps);
+/// On stage, what only this kind shows (its text, pictures and the like);
+/// and Look, the settings that aren't timing, which the timeline holds.
 /// Every change goes through the show controller as one undoable edit.
 struct CueEditorView: View {
     let cue: Cue?
@@ -176,7 +177,7 @@ struct CueEditorView: View {
     var body: some View {
         Form {
             if let cue {
-                Section("Cue") {
+                Section("In the book") {
                     FieldRow(label: "Number") {
                         CommittingField(field: .number, focus: $focus, order: fieldOrder, prompt: "", mono: true, value: cue.number,
                                         commit: { v in typing("Change Cue Number") { $0.number = v.trimmingCharacters(in: .whitespaces) } },
@@ -187,6 +188,12 @@ struct CueEditorView: View {
                                         commit: commitCuePoint(cue), onFinished: onFinished)
                     }
                     continueRow(cue)
+                    // Today's Advance: whether the cue waits for GO partway.
+                    if SettingKey.advance.applies(to: cue.kind), let value = SettingKey.advance.value(in: cue) {
+                        let state = SettingState.of(.advance, in: cue)
+                        SettingRowView(key: .advance, kind: cue.kind, value: value, isEnabled: state.enabled,
+                                       onChange: { value, continuous in onSetting(.advance, value, continuous) })
+                    }
                 }
                 content(cue)
                 CueSettingsSections(transitions: false, cue: cue, onChange: onSetting)
@@ -206,6 +213,11 @@ struct CueEditorView: View {
     }
 
     // MARK: The cue itself
+
+    /// The heading over what the cue shows: "On stage · Decryption".
+    private func onStage(_ cue: Cue) -> String {
+        "On stage \u{00B7} \(cue.kind.heading)"
+    }
 
     private var cuePointPrompt: String {
         goPoint.map { "The line or action GO \($0.number) waits for" } ?? "The line or action to wait for"
@@ -294,7 +306,7 @@ struct CueEditorView: View {
     private func content(_ cue: Cue) -> some View {
         switch cue.content {
         case .title(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Text", cue, name: "Change Text")
                 subRow("Subtext", cue, name: "Change Subtext")
                 FieldRow(label: "Key") {
@@ -312,12 +324,12 @@ struct CueEditorView: View {
                 InfoHeading("Anagrams", info: Anagram.formatExplanation)
             }
         case .image(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Picture", path: c.src, kind: .image, empty: "No picture \u{2014} drop one here", cue: cue)
             }
         case .text(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Text", cue, name: "Change Text", multiline: true)
                 FieldRow(label: "Font") {
                     Picker("", selection: Binding(get: { c.font }, set: { family in
@@ -378,7 +390,7 @@ struct CueEditorView: View {
                 }
             }
         case .morph:
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
             }
             Section {
@@ -387,7 +399,7 @@ struct CueEditorView: View {
                 InfoHeading("Pictures", info: MorphPicturesView.explanation)
             }
         case .map(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Header", cue, name: "Change Label")
                 mediaRow("Map", path: c.src, kind: .map, empty: "No map \u{2014} drop one here", cue: cue)
                 FieldRow(label: "Route") {
@@ -399,7 +411,7 @@ struct CueEditorView: View {
                 }
             }
         case .video(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Caption", cue, name: "Change Caption")
                 mediaRow("Clip", path: c.src, kind: .video, empty: "No clip \u{2014} drop one here", cue: cue)
@@ -419,7 +431,7 @@ struct CueEditorView: View {
                 }
             }
         case .feed(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Caption", cue, name: "Change Caption")
                 FieldRow(label: "Camera") {
@@ -482,7 +494,7 @@ struct CueEditorView: View {
                 }
             }
         case .layered(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 mediaRow("Base", path: c.base, kind: .image, empty: "No base \u{2014} black", cue: cue)
             }
@@ -495,7 +507,7 @@ struct CueEditorView: View {
                 InfoHeading("Layers", info: LayeredStripView.explanation)
             }
         case .keypad(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 FieldRow(label: "Keys") {
                     CommittingField(field: .script, focus: $focus, order: fieldOrder, prompt: "a stage per line, e.g. 1332, <<<<, 1123, GOOD", mono: true, multiline: true, value: c.script,
@@ -508,7 +520,7 @@ struct CueEditorView: View {
                     .foregroundStyle(.secondary)
             }
         case .cascade(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Message", cue, name: "Change Message", multiline: true)
                 FieldRow(label: "Colour") {
                     ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
@@ -524,7 +536,7 @@ struct CueEditorView: View {
                     .foregroundStyle(.secondary)
             }
         case .conversation(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 textRow("Label", cue, name: "Change Label")
                 subRow("Contact", cue, name: "Change Contact")
                 FieldRow(label: "Script") {
@@ -582,7 +594,7 @@ struct CueEditorView: View {
                 }
             }
         case .sms(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 FieldRow(label: "Message") {
                     CommittingField(field: .text, focus: $focus, order: fieldOrder, prompt: "", mono: true, multiline: true, value: cue.text,
                                     commit: { v in typing("Change Message") { $0.text = v } }, onFinished: onFinished)
@@ -677,7 +689,7 @@ struct CueEditorView: View {
                 }
             }
         case .blank(let c):
-            Section(cue.kind.heading) {
+            Section(onStage(cue)) {
                 FieldRow(label: "Colour") {
                     ColorPicker("", selection: colourBinding(c.colour, name: "Change Colour") { rgb, cue in
                         if case .blank(var b) = cue.content { b.colour = rgb; cue.content = .blank(b) }

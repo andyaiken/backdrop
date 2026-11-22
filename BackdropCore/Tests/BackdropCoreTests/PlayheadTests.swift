@@ -55,52 +55,20 @@ struct PlayheadTests {
         #expect(playhead.live == live)
     }
 
-    @Test func typedDigitsBuildANumberAndFireNothing() {
-        var playhead = Playhead(show: sheet)
-        for c in "1x2" { playhead.type(c) }
-        #expect(playhead.entry == "12", "only digits and points are accepted")
-        #expect(playhead.commitEntry(in: sheet) == .stoodBy(sheet.cues[4].id))
-        #expect(playhead.standby == sheet.cues[4].id)
-        #expect(playhead.live == nil)
-        #expect(playhead.entry.isEmpty)
-
-        for c in "9.5" { playhead.type(c) }
-        #expect(playhead.commitEntry(in: sheet) == .stoodBy(sheet.cues[3].id))
-
-        for c in "44" { playhead.type(c) }
-        #expect(playhead.commitEntry(in: sheet) == .noSuchCue("44"))
-        #expect(playhead.standby == sheet.cues[3].id, "a miss leaves the standby cue alone")
-        #expect(playhead.commitEntry(in: sheet) == .empty)
-    }
-
-    @Test func entryCanBeEditedAndCleared() {
-        var playhead = Playhead(show: sheet)
-        for c in "123" { playhead.type(c) }
-        playhead.deleteBackward()
-        #expect(playhead.entry == "12")
-        playhead.clearEntry()
-        #expect(playhead.entry.isEmpty)
-        for c in "123456789" { playhead.type(c) }
-        #expect(playhead.entry.count == Playhead.entryLimit)
-    }
-
-    @Test func goDiscardsAnEntryAndFiresWhatIsShown() {
-        var playhead = Playhead(show: sheet)
-        playhead.type("3")
-        let fire = playhead.go(in: sheet)
-        #expect(fire?.cue == sheet.cues[0].id, "Space fires the standby cue already shown")
-        #expect(playhead.entry.isEmpty)
-    }
-
-    @Test func listClicksAndTheGoToFieldStandBy() {
-        var playhead = Playhead(show: sheet)
-        playhead.standBy(sheet.cues[2].id)
-        #expect(playhead.standby == sheet.cues[2].id)
-        let found = playhead.standBy(number: " 9.5 ", in: sheet)
-        #expect(found && playhead.standby == sheet.cues[3].id)
-        let missing = playhead.standBy(number: "P99", in: sheet)
-        #expect(!missing && playhead.standby == sheet.cues[3].id)
-        #expect(playhead.live == nil)
+    @Test func listClicksAndGoToStandBy() {
+        let numbered = show(["1", "2", "3", "9.5", "12", "P12", "7", "7"].map { cue($0) })
+        var playhead = Playhead(show: numbered)
+        playhead.standBy(numbered.cues[2].id)
+        #expect(playhead.standby == numbered.cues[2].id)
+        #expect(playhead.standBy(number: "12", in: numbered) && playhead.standby == numbered.cues[4].id, "digits")
+        #expect(playhead.standBy(number: "9.5", in: numbered) && playhead.standby == numbered.cues[3].id, "a decimal")
+        #expect(playhead.standBy(number: "P12", in: numbered) && playhead.standby == numbered.cues[5].id, "a letter and digits")
+        #expect(playhead.standBy(number: " 9.5 ", in: numbered) && playhead.standby == numbered.cues[3].id, "surrounding spaces")
+        let missing = playhead.standBy(number: "P99", in: numbered)
+        #expect(!missing && playhead.standby == numbered.cues[3].id, "a miss leaves the standby cue alone")
+        #expect(playhead.standBy(number: "7", in: numbered) && playhead.standby == numbered.cues[6].id,
+                "a number used twice reaches the first cue with it")
+        #expect(playhead.live == nil, "nothing fires")
     }
 
     @Test func rerunReplaysTheLiveCue() {

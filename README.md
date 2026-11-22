@@ -44,38 +44,41 @@ Every target is signed as [Signing.xcconfig](Config/Signing.xcconfig) says: auto
 
 On first launch Backdrop opens a new, empty show. To try it:
 
-1. A new show opens in edit mode. Add cues with Add Cue in the header or from the Edit menu. The Inspector beside the preview edits the cue marked Next: what every cue has at the top, then what this kind of cue shows, then the settings it runs with. The show's title, text size and projection area are in Show › Show Settings, since none is touched often.
-2. Choose Show › Enter Show Mode, then Show › Open Projector.
+1. A new show opens in edit mode, the Studio. Add cues with Add cue in the toolbar, the + between cues, or from the Edit menu; each opens the cue gallery. The stage shows the cue marked Next, with its timeline under it, where its timings are dragged. The Inspector beside it edits the rest, in three groups: In the book, On stage and Look. The show's title, text size and projection area are in Stage setup, in the toolbar or Show › Stage Setup…, where the area is dragged on the stage itself.
+2. Click Lock for show in the header, or choose Show › Enter Show Mode, then open the projector from its lamp at the top right, or Show › Open Projector.
 3. Press Space to fire the next cue.
 
 | Key | In show mode |
 | --- | --- |
 | Space | Fire the next cue, or go to the step that is next. No other key fires a cue; only show control, below, can fire one from another machine |
 | → ↓ PageDown, ← ↑ PageUp | Make the row below or above next: a cue, or one of the GOs a cue waits for |
-| 0–9 and `.`, then Return | Make a cue next by its number |
+| G | Go To: type a cue's number, letters and all, then Return to make it next. Escape or a click outside closes it; Space still fires the next cue |
 | R | Run the live cue again |
 | B | Blackout |
+| ? | Every key, over the console. ? or Escape puts it away |
 
-Entering and leaving show mode is deliberately done from the menu only, with no shortcut: a key that silently unlocked the cue sheet mid-performance would be a liability.
+The number keys do nothing on their own: a cue number is typed into Go To. G works from the projector window too, bringing the console forward.
 
-In edit mode a cue is dragged by its grip to anywhere in the sheet, taking its number with it. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
+Neither entering nor leaving show mode has a key: a key that silently unlocked the cue sheet mid-performance would be a liability. In show mode, the Locked for show pill must be pressed and held for a second to unlock the sheet, so a stray click does nothing; Show › Enter Edit Mode does the same at once.
+
+In edit mode a cue is dragged by its grip, which shows while the pointer is over its row, to anywhere in the sheet, taking its number with it. Right-clicking a cue offers to renumber the whole sheet, 1, 2, 3 in running order; it asks first, because cue numbers are what the DSM writes in the book.
 
 Pictures and clips come in from wherever they are:
 
-- **Dragged onto the cue list,** from Finder, Photos, Safari, Mail or another app. They become image and video cues where they are dropped, named for their files and numbered between their neighbours. Several at once go in order of their names, as one undo step. An empty show takes them too, to start the sheet.
+- **Dragged onto the cue list,** from Finder, Photos, Safari, Mail or another app. A slot opens where they will land, and they become image and video cues there, named for their files and numbered between their neighbours. Several at once go in order of their names, as one undo step. An empty show takes them on its bare stage, to start the sheet.
 - **Dragged onto a cue.** A single picture or clip dropped on the middle of an image, morph, map or video cue goes to that cue. So does one dropped on the Inspector's picture well, or on its list of a morph's pictures or a layered image's layers, where it goes at the end.
 - **Edit › Import from iPhone or iPad,** with Continuity Camera. A photo goes into the next cue if that is an image cue still waiting for its picture, and otherwise becomes a new image cue after it.
 - **Choose…** in the Inspector, whose panel also reaches the Photos library, under Media in its sidebar.
 
 Photos, Safari and Mail don't hand over a file until the drop, so what they send is written into a temporary folder first. Backdrop copies it into the show when the show is saved, as it does a file from Finder.
 
-The console is in the Mac's own controls and follows its light or dark appearance and its accent colour; the stage keeps a palette of its own, because that is the projected picture rather than the interface.
+The console has two rooms. Show mode is the Booth, which is always dark, whatever the Mac's appearance, so it never lights up the booth; with Increase Contrast it uses a high-contrast palette. Edit mode is the Studio, in the Mac's own controls, following its light or dark appearance and its accent colour. Changing room cross-fades, or is instant under Reduce Motion. The stage keeps a palette of its own, because that is the projected picture rather than the interface.
 
-Nothing takes the keyboard in show mode except the Go-to field, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
+Nothing takes the keyboard in show mode except the Go To panel, and Space still fires GO while it is open, so these keys always reach the show. In edit mode a control may take it, and while one does, the keys go to that control instead. Click empty space or press Escape to hand them back.
 
 ### Show control
 
-Another machine in the booth can fire Backdrop's cues, so one GO in QLab, or on a lighting desk, runs sound and projection together. Both kinds are off until turned on in Backdrop's Settings, which belong to the Mac rather than the show. In show mode the status line says what each command did and where it came from. In edit mode commands are ignored, and the status line says that too.
+Another machine in the booth can fire Backdrop's cues, so one GO in QLab, or on a lighting desk, runs sound and projection together. Both kinds are off until turned on in Backdrop's Settings, which belong to the Mac rather than the show. In show mode the status line, at the foot of the cue list, says what each command did, with a badge saying where it came from: OSC, MSC or SHORTCUT. It flashes green as it arrives and goes after eight seconds. In edit mode commands are ignored, and the status line says that too.
 
 - **MIDI Show Control (MSC).** Backdrop listens on every MIDI source: interfaces, USB, other apps such as QLab, and Network MIDI sessions, which are turned on in Audio MIDI Setup › MIDI Network Setup.
   - It answers to its own device ID (1 unless set otherwise) and to All Devices.
@@ -146,12 +149,23 @@ Backdrop/                    the app: AppKit windows, menus, documents
   App/                       launch, menus, keys, preferences, the crash record,
                              the booth watch
   Document/                  the show document and its display clock
-  Console/                   the console window, its palette, PanelHost, and
+  Console/                   the console window, its header, palette, PanelHost, and
                              pictures and clips dragged in from other apps
     CueList/                 the cue list and its rows: cues, transitions, GOs
-    Panels/                  the header, standby panel, key bar, wordmark, warning
-    Editing/                 edit mode's Inspector: cue editor and settings forms
-  Editors/                   edit mode's own windows: morph points, map route
+    Booth/                   show mode: monitors, standby card, GO plate, keys,
+                             warnings, Beginners and Recovery
+    GoTo/                    the Go To panel and its flaps
+    Gallery/                 the cue gallery, its sample cues and previews
+    Studio/                  edit mode: toolbar, stage, timeline, stage setup,
+                             storyboard and the bare stage
+    Panels/                  the wordmark
+    Editing/                 edit mode's Inspector: cue editor, settings forms
+                             and look chips
+  Editors/                   the morph points and map route editors, which
+                             take the Studio's stage
+  Fonts/                     Courier Prime, for cue points, and its licence
+  GallerySamples/            the gallery's sample pictures, drawn once by
+                             -BackdropGallerySamples
   Projector/                 the projector window and display handling
   ShowControl/               MIDI Show Control and OSC from other machines
   Intents/                   Shortcuts' actions, and shows in Spotlight
@@ -191,16 +205,16 @@ The code is in three layers:
   - `ProjectorState`, in [ProjectorPlacement.swift](BackdropCore/Sources/BackdropStage/Stage/ProjectorPlacement.swift): where the projector window goes.
   - `BoothConditions`, in [BoothCheck.swift](BackdropCore/Sources/BackdropStage/Stage/BoothCheck.swift): what the console warns of about the Mac itself. [BoothWatch.swift](Backdrop/App/BoothWatch.swift) reads it from macOS.
   - `CueSheetView`: prints the cue sheet.
-  - `ShowThumbnail`: draws a show's first cue, finished, for Finder.
+  - `ShowThumbnail`: draws a show's first cue, finished, for Finder, and any one cue for the console's thumbnails.
 
   None of it needs a window, so its tests render offscreen.
-- **Backdrop**, the app. Its interface is SwiftUI in the Mac's own controls, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
+- **Backdrop**, the app. Its interface is mostly SwiftUI, hosted in AppKit windows by `PanelHost`. What stays AppKit is the cue list, which draws its own rows and handles its own dragging; the Studio's timeline and stage setup, which draw and drag; the surfaces the renderers paint into; and the document, menu and window plumbing. Its main files:
   - [ShowDocument.swift](Backdrop/Document/ShowDocument.swift) and [DocumentController.swift](Backdrop/App/DocumentController.swift): the document, with one show open at a time.
-  - [ConsoleWindow.swift](Backdrop/Console/ConsoleWindow.swift): the console window and where everything in it goes. Given the room, the Inspector stands beside the preview in a column of its own and scrolls; narrower, it sits beneath it.
+  - [ConsoleWindow.swift](Backdrop/Console/ConsoleWindow.swift): the console window, in either room, and where everything in it goes. The frames come from `ConsoleGeometry`, in BackdropStage, so the layout rules are tested without a window.
   - [Projector.swift](Backdrop/Projector/Projector.swift): the projector window and display handling.
   - [CueListView.swift](Backdrop/Console/CueList/CueListView.swift): the cue list, which lays out and drags the rows beside it in `CueList/`.
-  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift): the Inspector's form for the cue standing by. [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): what takes their place for a selected transition or the Show Settings. Each is a SwiftUI form, in `Editing/`, behind a small AppKit `PanelHost`.
-  - [MorphPointsWindow.swift](Backdrop/Editors/MorphPointsWindow.swift) and [MapRouteWindow.swift](Backdrop/Editors/MapRouteWindow.swift): the windows a morph's points and a map's route are laid in, opened from the Inspector.
+  - [CueEditor.swift](Backdrop/Console/Editing/CueEditor.swift): the Inspector's form for the cue standing by, in three groups: In the book, On stage and Look. Timing settings are on the [timeline](Backdrop/Console/Studio/TimelineView.swift) instead, laid out by `CueTimeline`. [SettingsPanels.swift](Backdrop/Console/Editing/SettingsPanels.swift): what takes the form's place for a selected transition or Stage setup. Each is a SwiftUI form, in `Editing/`, behind a small AppKit `PanelHost`.
+  - [MorphPointsEditor.swift](Backdrop/Editors/MorphPointsEditor.swift) and [MapRouteEditor.swift](Backdrop/Editors/MapRouteEditor.swift): where a morph's points and a map's route are laid, on the Studio's stage, opened from the Inspector until Done or Escape.
   - [BackdropApp.swift](Backdrop/App/BackdropApp.swift) and [MainMenu.swift](Backdrop/App/MainMenu.swift): launch and the menus.
 
 Every kind of cue keeps its code in a folder of its own name in each library, so everything about anagrams is in `BackdropCore/Sources/BackdropCore/Anagrams` and `BackdropCore/Sources/BackdropStage/Anagrams`. Files are named for what they hold, mostly one type each; a type's small helpers stay beside it.
@@ -239,13 +253,13 @@ The JSON files in `BackdropCore/Tests/BackdropCoreTests/Fixtures/` are known-goo
 
 ## Debug tools
 
-Debug builds accept five launch arguments. All are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits. Each writes into the folder it is given, which must be under `/tmp`: that is the one place outside the sandbox a debug build may write.
+Debug builds accept these launch arguments. All are for checking the app without a second display or anyone at the keyboard. Each one does its job and quits. Each writes into the folder it is given, which must be under `/tmp`: that is the one place outside the sandbox a debug build may write.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropSnapshot /tmp/console
 ```
 
-This renders the console offscreen in several states (show mode, an image turning, the booth warnings, edit mode for several kinds of cue and their settings in the Inspector, a transition, the Show Settings, and a new show's wordmark decrypting each way a title can), along with the morph points and map route windows and the Settings window, and writes the PNGs to the folder.
+This renders the console offscreen in each of its states and writes the PNGs to the folder. The Booth's are `booth-*`: Beginners, standing by, arming, reach, blackout, a stop, cautions, Go To, the key help, a GO from OSC, the end of the sheet and the smallest window, with `recovery` for the sheet after a crash. The Studio's are `studio-*`: a cue of each sort with its timeline, a transition, stage setup, the two focus modes, the storyboard, issues, a new cue, the bare stage and the smallest window. The cue list's are `rail-*`, including a 300-cue sheet with `rail-long.txt`, how long it takes to refresh. The cue gallery's are `gallery-*`. Most are saved three times, for a Mac in light mode, in dark mode and with Increase Contrast: `name.png`, `name-dark.png` and `name-hc.png`. The older `console-*` states and the Settings window are there too.
 
 ```bash
 DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropDocumentCheck /tmp/documents
@@ -270,6 +284,18 @@ DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropI
 ```
 
 This runs the Shortcuts actions and their cue lists against a show held in memory, as Shortcuts would. It puts a show into Spotlight, finds it by a word on one of its cues, and takes it out again. It writes PASS or FAIL lines to `result.txt` in the folder.
+
+```bash
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropStoreAssets /tmp/storeassets
+```
+
+This writes the App Store listing's demo show, *The Last Light*, and its screenshots of the console at 1280 × 800 points.
+
+```bash
+DerivedData/Build/Products/Debug/Backdrop.app/Contents/MacOS/Backdrop -BackdropGallerySamples /tmp/gallery
+```
+
+This draws the cue gallery's sample pictures, which are kept in `Backdrop/GallerySamples/`. Copy them there if their drawing changes.
 
 ## The app icon
 
@@ -299,17 +325,13 @@ DaVinciCode.backdrop/
 - Install Backdrop on the booth Mac from the Mac App Store.
 - Run the booth checklist: a Focus mode is on, the projector's wallpaper is black and automatic updates are off. macOS doesn't let Backdrop check these itself.
 
-Backdrop checks the rest of the booth itself, and says so above the preview for as long as anything is wrong. Two warnings come up in either mode, because they decide where the picture goes:
+Backdrop checks the rest of the booth itself, and keeps saying so for as long as anything is wrong. Each warning is either a stop or a caution:
 
-- The console's display is mirrored, so the projector has no display of its own.
-- The projector's display is the main display, so notification banners would appear on it.
+- **A stop** is a red band across the console, with STOP on it. Nothing should go on until it is cleared: another app is in front, so Space won't fire GO; the console's display is mirrored, so the projector has no display of its own; or the Mac is overheating.
+- **A caution** is an amber lamp in the header, with a short label, and the most urgent one's message on a line under it; clicking a lamp shows its message there instead. They are: the Mac running hot, on battery, or in Low Power Mode; the show on an external drive or a server; the projector's display being the main display, so notification banners would appear on it; the projector standing in on another display, in a window, or disconnected; and an OSC port another app has.
 
-The rest only matter on the night, so they come up in show mode only:
+Mirroring, the projector and show control speak up in either mode, because they decide where the picture goes or what can fire it. The rest only matter on the night, so they come up in show mode only.
 
-- Another app is in front, so Space won't fire GO.
-- The Mac is on battery.
-- The Mac is hot enough that macOS is slowing it down.
-- Low Power Mode is on.
-- The show is on an external drive or a server rather than the internal disk.
+Before the first GO, the Booth shows Beginners in the On stage monitor's place: every check, green when fine, with the three reminders macOS can't check under it.
 
 While a show is open, Backdrop also keeps the Mac and its displays awake, and asks macOS not to nap it or hold back its timers.

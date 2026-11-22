@@ -13,7 +13,7 @@ public struct Travel: Equatable, Sendable {
     /// The frame the character starts moving.
     public var start: Int
 
-    var total: Int { pad + steps }
+    public var total: Int { pad + steps }
 }
 
 /// What one character shows on one frame.

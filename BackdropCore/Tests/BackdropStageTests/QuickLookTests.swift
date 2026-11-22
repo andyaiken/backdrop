@@ -82,4 +82,21 @@ struct QuickLookTests {
         let pdf = try #require(CGPDFDocument(CGDataProvider(data: data as CFData)!))
         #expect(pdf.numberOfPages > 1, "sixty cues run onto a second page: \(pdf.numberOfPages)")
     }
+
+    @Test("One cue's thumbnail, for every kind the rail draws, and a blank as its colour")
+    func eachKind() async throws {
+        for kind in ShowThumbnail.kinds.sorted(by: { $0.rawValue < $1.rawValue }) {
+            var cue = ShowController.emptyCue(kind)
+            cue.text = "CUE"
+            let image = await ShowThumbnail.image(of: cue, settings: ShowSettings(), width: 112, media: { _ in nil })
+            #expect(image != nil, "\(kind) has a thumbnail")
+            #expect(image?.width == 112)
+        }
+        let blank = Cue(content: .blank(BlankContent(colour: RGB(0, 128, 255))))
+        let image = try #require(await ShowThumbnail.image(of: blank, settings: ShowSettings(), width: 112, media: { _ in nil }))
+        let colour = pixel(image, x: 50, y: 30)
+        #expect(colour.r == 0 && colour.b == 255)
+        let feed = Cue(content: .feed(FeedContent()))
+        #expect(await ShowThumbnail.image(of: feed, settings: ShowSettings(), width: 112, media: { _ in nil }) == nil)
+    }
 }

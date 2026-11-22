@@ -202,7 +202,7 @@ struct AnagramWorkingTests {
         #expect(skipped.rows.map(\.content) == [["Leonardo da Vinci! (solved)", "Oh, lame saint! (ignored)"]], "and no GO for either")
         let settings = CueSheet(show: Show(title: "T", cues: [anagramCue("4", [Self.rats], advance: .eachStep)]), title: "T",
                                 layout: .operatorSettings).rows[0].settings
-        #expect(settings.first { $0.name == "Advance" } == CueSheet.Setting(name: "Advance", value: "each step on GO")) 
+        #expect(settings.first { $0.name == "Steps" } == CueSheet.Setting(name: "Steps", value: "each step on GO")) 
     }
 
     // MARK: Settings

@@ -123,3 +123,25 @@ struct SettingKeyTests {
         #expect(!SettingKey.reveal.applies(to: .title))
     }
 }
+
+@Suite("Settings: timing and look")
+struct SettingKeyTimingTests {
+    @Test("Timing settings are the ones the timeline drags")
+    func timing() {
+        let timing = SettingKey.allCases.filter(\.isTiming)
+        #expect(Set(timing) == [.clock, .wave, .hold, .pause, .morphTime, .layerTime, .flip, .move, .length, .fade])
+    }
+
+    @Test("Look is everything else a cue sets, but its steps and its transition")
+    func look() {
+        #expect(SettingKey.look.allSatisfy { !$0.isTiming })
+        #expect(!SettingKey.look.contains(.advance))
+        #expect(!SettingKey.look.contains(.transition) && !SettingKey.look.contains(.wipeFrom))
+        #expect(SettingKey.look.contains(.letters) && SettingKey.look.contains(.camera) && SettingKey.look.contains(.entrance))
+    }
+
+    @Test("Advance reads Steps, on the printed sheet too")
+    func steps() {
+        #expect(SettingKey.advance.label == "Steps")
+    }
+}

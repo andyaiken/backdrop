@@ -25,8 +25,8 @@ private func showInShowMode() throws -> ShowController {
     return controller
 }
 
-/// What the status line says the intent did.
-private let byShortcut = "a shortcut"
+/// Where the status line says the intent's command came from.
+private let byShortcut = CommandSource.shortcut
 
 // MARK: Open Show
 

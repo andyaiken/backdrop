@@ -112,7 +112,7 @@ struct MorphTests {
         #expect(show.issues == [.morphWithoutPictures(cue: half.id)])
         #expect(show.message(for: show.issues[0]) == "Cue 9 needs two pictures at least: the one it starts from and one it becomes.")
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[0].settings
-        #expect(settings.map(\.name) == ["Clock", "Hold", "Advance", "Pause", "Morph", "Picture 1", "Transition", "Fade"])
+        #expect(settings.map(\.name) == ["Clock", "Hold", "Steps", "Pause", "Morph", "Picture 1", "Transition", "Fade"])
         #expect(settings[5].value == "leonardo.jpg")
         let whole = Cue(number: "9", content: .morph(MorphContent(text: "LEONARDO", src: "media/leonardo.jpg", into: "media/mona-lisa.jpg", pairs: Self.face)))
         let rows = CueSheet(show: Show(title: "T", cues: [whole]), title: "T", layout: .operatorSettings).rows[0].settings

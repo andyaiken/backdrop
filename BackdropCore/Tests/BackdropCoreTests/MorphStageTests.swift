@@ -137,7 +137,7 @@ struct MorphStageTests {
         #expect(rows[0].content == ["PAINTING", "sketch \u{2192} wash \u{2192} finished"])
         #expect(rows[1].content == ["wash"])
         let settings = CueSheet(show: show, title: "T", layout: .operatorSettings).rows[0].settings
-        #expect(settings.first { $0.name == "Advance" }?.value == "each stage on GO")
+        #expect(settings.first { $0.name == "Steps" }?.value == "each stage on GO")
         #expect(settings.filter { $0.name.hasPrefix("Picture") }.map(\.value)
                 == ["sketch.png", "wash.png \u{00B7} 1 point", "finished.png \u{00B7} a dissolve \u{00B7} 1.0 s"])
         #expect(show.issues.isEmpty)

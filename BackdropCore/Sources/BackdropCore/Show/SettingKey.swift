@@ -21,7 +21,7 @@ public enum SettingValue: Equatable, Sendable {
 /// Every setting a cue holds. One definition serves the cue editor's panels
 /// and the printed sheet: its range and step, how it reads, and where it
 /// lives in the model.
-public enum SettingKey: String, CaseIterable, Sendable {
+public enum SettingKey: String, CaseIterable, Codable, Sendable {
     case clock, wave, hold, advance, pause, textScale, histogram, sceneLine, letters, bars, grid, flip, order, reveal, font, morphTime, camera, zoom, trail
     case layerTime, baseLevel, context, strength, length, entrance, push, move
     case columns, density, streak
@@ -63,6 +63,22 @@ public enum SettingKey: String, CaseIterable, Sendable {
         ("Transitions", transitions),
     ]
 
+    /// A setting of when, rather than how: the Studio sets these on the
+    /// timeline, by dragging, not in the Inspector. Clock is the timeline's
+    /// tempo, in its header.
+    public var isTiming: Bool {
+        switch self {
+        case .clock, .wave, .hold, .pause, .morphTime, .layerTime, .flip, .move, .length, .fade: true
+        default: false
+        }
+    }
+
+    /// What the Inspector's Look section holds, in order: every setting that
+    /// isn't timing, steps, or a transition's.
+    public static let look: [SettingKey] = allCases.filter {
+        !$0.isTiming && $0 != .advance && $0 != .textScale && !transitions.contains($0)
+    }
+
     public var label: String {
         switch self {
         case .clock: "Clock"
@@ -77,7 +93,7 @@ public enum SettingKey: String, CaseIterable, Sendable {
         case .flip: "Flip"
         case .order: "Order"
         case .reveal: "Reveal"
-        case .advance: "Advance"
+        case .advance: "Steps"
         case .pause: "Pause"
         case .font: "Font"
         case .morphTime: "Morph"

@@ -95,7 +95,7 @@ enum ShowControlCheck {
         check(await until { control.oscState == .portInUse }, "Backdrop sees that port \(port + 1) is taken")
         check(await until {
             console.booth().warnings(mode: controller.mode, projector: controller.projector)
-                .contains { $0.hasPrefix("Backdrop can\u{2019}t take OSC on port \(port + 1), because another app is using it.") }
+                .contains { $0.message.hasPrefix("Backdrop can\u{2019}t take OSC on port \(port + 1), because another app is using it.") }
         }, "the console warns that the port is taken")
         blocker = nil
         control.configure(msc: 1, osc: port)

@@ -30,9 +30,10 @@ public struct MapContent: Equatable, Sendable {
     }
 
     /// The stop at a place in the route, the start as a stop with nothing
-    /// to say if it has none.
+    /// to say if it has none. A map with no route yet, as a new cue has,
+    /// has only that empty start.
     public func stop(at index: Int) -> MapStop {
-        route[index].stop ?? MapStop()
+        route.indices.contains(index) ? route[index].stop ?? MapStop() : MapStop()
     }
 }
 

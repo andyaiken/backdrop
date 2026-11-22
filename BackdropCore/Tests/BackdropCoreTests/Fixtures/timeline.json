@@ -1,0 +1,313 @@
+[
+  {
+    "clockMs" : 44,
+    "endFrame" : 106,
+    "goes" : [
+
+    ],
+    "holdTicks" : 44,
+    "then" : {
+      "waits" : {
+
+      }
+    },
+    "tracks" : [
+      {
+        "name" : "Letters",
+        "spans" : [
+          {
+            "end" : 62,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 46
+          },
+          {
+            "end" : 65,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 49
+          },
+          {
+            "end" : 73,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 57
+          },
+          {
+            "end" : 78,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 59
+          },
+          {
+            "end" : 75,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 59
+          },
+          {
+            "end" : 81,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 64
+          },
+          {
+            "end" : 81,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 65
+          },
+          {
+            "end" : 86,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 70
+          },
+          {
+            "end" : 88,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 72
+          },
+          {
+            "end" : 92,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 76
+          },
+          {
+            "end" : 100,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 81
+          },
+          {
+            "end" : 99,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 83
+          },
+          {
+            "end" : 102,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 85
+          },
+          {
+            "end" : 106,
+            "handle" : "slope",
+            "key" : "wave",
+            "start" : 90
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "clockMs" : 44,
+    "endFrame" : 108,
+    "goes" : [
+
+    ],
+    "holdTicks" : 44,
+    "then" : {
+      "waits" : {
+
+      }
+    },
+    "tracks" : [
+      {
+        "name" : "Tiles",
+        "spans" : [
+          {
+            "end" : 108,
+            "handle" : "end",
+            "key" : "flip",
+            "label" : "diagonal · wave 3",
+            "start" : 44
+          }
+        ]
+      }
+    ],
+    "transitionIn" : {
+      "end" : 12,
+      "handle" : "end",
+      "key" : "fade",
+      "label" : "fade",
+      "start" : 0
+    }
+  },
+  {
+    "clockMs" : 44,
+    "endFrame" : 127,
+    "goes" : [
+      44,
+      84
+    ],
+    "holdTicks" : 44,
+    "then" : {
+      "waits" : {
+
+      }
+    },
+    "tracks" : [
+      {
+        "name" : "Working",
+        "spans" : [
+          {
+            "end" : 44,
+            "handle" : "slope",
+            "key" : "wave",
+            "label" : "Part 1",
+            "start" : 44
+          },
+          {
+            "end" : 84,
+            "handle" : "slope",
+            "key" : "wave",
+            "label" : "Part 2",
+            "start" : 44
+          },
+          {
+            "end" : 127,
+            "handle" : "slope",
+            "key" : "wave",
+            "label" : "Part 3",
+            "start" : 84
+          }
+        ]
+      }
+    ],
+    "transitionIn" : {
+      "end" : 12,
+      "handle" : "end",
+      "key" : "fade",
+      "label" : "fade",
+      "start" : 0
+    }
+  },
+  {
+    "clockMs" : 44,
+    "endFrame" : 118,
+    "goes" : [
+
+    ],
+    "holdTicks" : 60,
+    "then" : {
+      "after" : {
+        "ms" : 3000
+      }
+    },
+    "tracks" : [
+      {
+        "name" : "Rain",
+        "spans" : [
+          {
+            "end" : 60,
+            "handle" : "end",
+            "key" : "hold",
+            "label" : "rain",
+            "start" : 0
+          },
+          {
+            "end" : 118,
+            "label" : "message",
+            "start" : 60
+          }
+        ]
+      }
+    ],
+    "transitionIn" : {
+      "end" : 12,
+      "handle" : "end",
+      "key" : "fade",
+      "label" : "fade",
+      "start" : 0
+    }
+  },
+  {
+    "clockMs" : 44,
+    "endFrame" : 144,
+    "goes" : [
+      100
+    ],
+    "holdTicks" : 44,
+    "then" : {
+      "waits" : {
+
+      }
+    },
+    "tracks" : [
+      {
+        "name" : "Keys",
+        "spans" : [
+          {
+            "end" : 45,
+            "key" : "pause",
+            "start" : 44
+          },
+          {
+            "end" : 59,
+            "key" : "pause",
+            "start" : 58
+          },
+          {
+            "end" : 73,
+            "key" : "pause",
+            "start" : 72
+          },
+          {
+            "end" : 87,
+            "key" : "pause",
+            "start" : 86
+          },
+          {
+            "end" : 101,
+            "key" : "pause",
+            "start" : 100
+          }
+        ]
+      },
+      {
+        "name" : "Verdict",
+        "spans" : [
+          {
+            "end" : 144,
+            "label" : "flash",
+            "start" : 114
+          }
+        ]
+      }
+    ],
+    "transitionIn" : {
+      "end" : 12,
+      "handle" : "end",
+      "key" : "fade",
+      "label" : "fade",
+      "start" : 0
+    }
+  },
+  {
+    "clockMs" : 44,
+    "endFrame" : 0,
+    "goes" : [
+
+    ],
+    "holdTicks" : 0,
+    "then" : {
+      "waits" : {
+
+      }
+    },
+    "tracks" : [
+
+    ],
+    "transitionIn" : {
+      "end" : 12,
+      "handle" : "end",
+      "key" : "fade",
+      "label" : "fade",
+      "start" : 0
+    }
+  }
+]

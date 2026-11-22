@@ -107,6 +107,39 @@ enum StoreAssets {
         exit(0)
     }
 
+    /// The cue gallery's sample pictures, written once into
+    /// `Backdrop/GallerySamples/`: the demo show's three lighthouses at
+    /// 640 × 360, and the snapshots' street map.
+    ///
+    ///     Backdrop.app/Contents/MacOS/Backdrop -BackdropGallerySamples /some/folder
+    static func gallerySamples(to directory: String) {
+        let folder = URL(fileURLWithPath: directory)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let pictures = [("dusk", Self.lighthouse(sky: [(0.98, 0.62, 0.35), (0.55, 0.30, 0.45), (0.10, 0.10, 0.25)], beam: false)),
+                        ("night", Self.lighthouse(sky: [(0.12, 0.16, 0.30), (0.05, 0.07, 0.16), (0.01, 0.01, 0.05)], beam: true)),
+                        ("storm", Self.lighthouse(sky: [(0.35, 0.38, 0.42), (0.20, 0.22, 0.28), (0.06, 0.07, 0.10)], beam: true))]
+        for (name, data) in pictures {
+            guard let image = NSBitmapImageRep(data: data)?.cgImage,
+                  let small = Self.scaled(image, width: 640, height: 360) else { continue }
+            try? NSBitmapImageRep(cgImage: small).representation(using: .jpeg, properties: [.compressionFactor: 0.82])?
+                .write(to: folder.appendingPathComponent(name + ".jpg"))
+        }
+        if let image = NSBitmapImageRep(data: Snapshots.streets())?.cgImage, let small = Self.scaled(image, width: 960, height: 600) {
+            try? NSBitmapImageRep(cgImage: small).representation(using: .png, properties: [:])?
+                .write(to: folder.appendingPathComponent("streets.png"))
+        }
+        exit(0)
+    }
+
+    private static func scaled(_ image: CGImage, width: Int, height: Int) -> CGImage? {
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
     /// Thumbnails and the preview are made in the background.
     private static func settle(_ console: ConsoleWindowController) {
         console.refresh()

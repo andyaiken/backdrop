@@ -3,8 +3,8 @@ import BackdropCore
 import BackdropStage
 import SwiftUI
 
-/// The Inspector's Show Settings: the show's title, text size and projection
-/// area, in place of the cue's form while the header's Show Settings is on.
+/// The Inspector's Stage setup: the show's title, text size and projection
+/// area, in place of the cue's form while the toolbar's Stage setup is on.
 ///
 /// AppKit on the outside so the console's layout places it like any other
 /// panel; SwiftUI within, in the Mac's own controls.
