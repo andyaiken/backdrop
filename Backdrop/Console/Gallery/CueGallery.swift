@@ -120,7 +120,7 @@ struct GalleryPlace: Equatable {
     }
 
     var text: Text {
-        cue.map { Text(lead) + Text($0).bold() } ?? Text(lead)
+        cue.map { Text("\(lead)\(Text($0).bold())") } ?? Text(lead)
     }
 }
 

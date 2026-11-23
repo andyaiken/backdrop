@@ -1,4 +1,5 @@
 import AppKit
+import BackdropStage
 import SwiftUI
 
 /// Every show key, over the console: ? shows it, and ?, Escape or any click
@@ -30,7 +31,7 @@ final class KeyHelp: NSView {
 
     override func layout() {
         super.layout()
-        host.frame = bounds.insetBy(dx: Self.margin, dy: Self.margin)
+        host.frame = bounds.insetClamped(dx: Self.margin, dy: Self.margin)
     }
 
     /// Clicks pass through to the monitor that closes it.

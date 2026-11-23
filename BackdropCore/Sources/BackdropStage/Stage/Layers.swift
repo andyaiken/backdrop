@@ -123,4 +123,13 @@ extension CGRect {
     func flipped(within height: CGFloat) -> CGRect {
         CGRect(x: minX, y: height - maxY, width: width, height: self.height)
     }
+
+    /// Inset that never goes past empty. insetBy gives CGRect.null, at
+    /// infinity, when the rectangle is smaller than the inset, as a view is
+    /// before its first layout; this keeps the middle, at zero size.
+    public func insetClamped(dx: CGFloat, dy: CGFloat) -> CGRect {
+        let r = standardized
+        let w = max(0, r.width - 2 * dx), h = max(0, r.height - 2 * dy)
+        return CGRect(x: r.midX - w / 2, y: r.midY - h / 2, width: w, height: h)
+    }
 }

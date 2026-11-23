@@ -188,7 +188,7 @@ public final class FeedRenderer: CueRenderer, ReportsProblems, ArmsCues, Snapsho
         let size = max(9, min(bounds.height * 0.07, 15))
         let height = (size * 1.9).rounded()
         tree.strip.frame = CGRect(x: 0, y: 0, width: bounds.width, height: height)
-        tree.readout.frame = tree.strip.bounds.insetBy(dx: size * 0.8, dy: 0)
+        tree.readout.frame = tree.strip.bounds.insetClamped(dx: size * 0.8, dy: 0)
         tree.readout.contentsScale = surface.contentsScale
         tree.readout.baseline = (height - size) / 2 + size * 0.2
         if let clip = current { updateReadout(tree, clip) }

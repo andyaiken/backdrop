@@ -894,12 +894,12 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate {
         nextFrame.isHidden = empty
         if empty {
             wordmarkFrame.frame = f.canvas
-            wordmark.frame = wordmarkFrame.bounds.insetBy(dx: 1, dy: 1)
+            wordmark.frame = wordmarkFrame.bounds.insetClamped(dx: 1, dy: 1)
             return
         }
         stageHeader.frame = NSRect(x: f.canvas.minX, y: f.canvasHeader.minY, width: f.canvas.width, height: f.canvasHeader.height)
         nextFrame.frame = f.canvas
-        nextPreview.frame = nextFrame.bounds.insetBy(dx: 1, dy: 1)
+        nextPreview.frame = nextFrame.bounds.insetClamped(dx: 1, dy: 1)
     }
 
     /// The timeline goes under the stage while a cue is on it, and the stage

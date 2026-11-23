@@ -1,4 +1,5 @@
 import AppKit
+import BackdropStage
 import QuartzCore
 import SwiftUI
 
@@ -60,7 +61,7 @@ final class MonitorFrame: NSView {
     }
 
     /// Where the picture sits: inside the border.
-    var pictureFrame: NSRect { bounds.insetBy(dx: Self.border, dy: Self.border) }
+    var pictureFrame: NSRect { bounds.insetClamped(dx: Self.border, dy: Self.border) }
 
     override func layout() {
         super.layout()

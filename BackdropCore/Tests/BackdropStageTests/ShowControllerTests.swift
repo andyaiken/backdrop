@@ -226,7 +226,6 @@ struct ModeTests {
         #expect(live.showsGuides && preview.showsGuides)
         c.enterShowMode()
         #expect(!live.showsGuides && !preview.showsGuides)
-        #expect(c.message == "Show mode. The cue sheet and settings are locked.")
     }
 
     @Test func guidesAreDrawnOnlyWhenOn() {

@@ -167,9 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         window.beginSheet(sheet)
         // The picture is drawn in the background, on black until it is ready.
         let settings = controller.show.settings
-        Task { @MainActor in
+        Task { @MainActor [weak document] in
             let picture = await ShowThumbnail.image(of: cue, settings: settings, width: 1008,
-                                                    media: { [weak document] in document?.mediaURL($0) })
+                                                    media: { document?.mediaURL($0) })
             host.rootView = view(picture)
         }
     }

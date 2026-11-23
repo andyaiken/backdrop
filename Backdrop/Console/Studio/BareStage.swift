@@ -1,4 +1,5 @@
 import AppKit
+import BackdropStage
 import SwiftUI
 
 /// A show with no cues: the wordmark decrypting on a plain preview screen,
@@ -42,7 +43,7 @@ final class BareStage: NSView {
         // The screen at 16:9, as large as fits, centred.
         let w = min(room.width, room.height * 16 / 9).rounded(.down), h = (w * 9 / 16).rounded(.down)
         screen.frame = NSRect(x: ((room.width - w) / 2).rounded(), y: ((room.height - h) / 2).rounded(), width: w, height: h)
-        wordmark.frame = screen.bounds.insetBy(dx: 1, dy: 1)
+        wordmark.frame = screen.bounds.insetClamped(dx: 1, dy: 1)
         note.frame = NSRect(x: 0, y: room.maxY, width: bounds.width, height: noteHeight)
     }
 
