@@ -8,9 +8,9 @@ import BackdropCore
 /// In the Studio a join is clickable and selects the transition, and a
 /// right click puts a changed one back to the standard fade. With the
 /// pointer over it a brass + appears at its left, to add a cue there. The
-/// join above the first cue is only that +.
+/// joins above the first cue and below the last are only that +.
 final class JoinView: NSView {
-    /// The cue the transition leads into. Nil above the first cue.
+    /// The cue the transition leads into. Nil above the first cue and below the last.
     let cue: UUID?
     let style: TransitionStyle
     let note: String
@@ -31,8 +31,8 @@ final class JoinView: NSView {
 
     static let height: CGFloat = 20
     static let linkedHeight: CGFloat = 24
-    /// Above the first cue: room for the + alone.
-    static let leadHeight: CGFloat = 12
+    /// Above the first cue and below the last: room for the + alone.
+    static let leadHeight: CGFloat = 20
     static let glyph = NSSize(width: 26, height: 8)
 
     init(cue: UUID?, transition: Transition?, link: String?, after: Int) {
@@ -72,9 +72,18 @@ final class JoinView: NSView {
             NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4).fill()
         }
         if isEditing, isHovered {
-            // A brass line where the cue would go, and the + to add it.
+            // Over a transition, a box round it, to pick it; above the first
+            // cue, a line where the cue would go. Either way, the + to add one.
+            room.brass.setStroke()
             room.brass.setFill()
-            NSRect(x: 22, y: bounds.midY - 0.75, width: bounds.width - 30, height: 1.5).fill()
+            if cue != nil {
+                let box = NSBezierPath(roundedRect: NSRect(x: CueRowView.boxX, y: 0, width: bounds.width - CueRowView.boxX - 8, height: bounds.height)
+                    .insetBy(dx: 0.75, dy: 0.75), xRadius: 4, yRadius: 4)
+                box.lineWidth = 1.5
+                box.stroke()
+            } else {
+                NSRect(x: 22, y: bounds.midY - 0.75, width: bounds.width - 30, height: 1.5).fill()
+            }
             let circle = NSBezierPath(ovalIn: plusRect.insetBy(dx: 1, dy: 1))
             circle.fill()
             let plus = NSBezierPath()

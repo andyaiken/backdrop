@@ -22,6 +22,8 @@ final class CueListView: NSScrollView {
     private var joins: [UUID: JoinView] = [:]
     /// The Studio's + above the first cue.
     private var lead: JoinView?
+    /// Below the last cue: the + to add one at the end.
+    private var tail: JoinView?
     /// The cue rows on screen, in sheet order.
     private var visible: [CueRowView] = []
     private var room = Room.studio
@@ -121,6 +123,7 @@ final class CueListView: NSScrollView {
             for row in cueRows.values { row.room = palette }
             for join in joins.values { join.room = palette }
             lead?.room = palette
+            tail?.room = palette
             document.room = palette
             reachLine.textColor = palette.dim
             slot.room = palette
@@ -187,15 +190,21 @@ final class CueListView: NSScrollView {
         cueRows.values.forEach { $0.removeFromSuperview() }
         joins.values.forEach { $0.removeFromSuperview() }
         lead?.removeFromSuperview()
+        tail?.removeFromSuperview()
         cueRows = [:]
         joins = [:]
         lead = nil
+        tail = nil
         if !booth, !cues.isEmpty {
-            let join = JoinView(cue: nil, transition: nil, link: nil, after: -1)
-            join.isEditing = true
-            join.onInsert = { [weak self] in self?.onInsert($0) }
-            document.addSubview(join, positioned: .below, relativeTo: reachLine)
-            lead = join
+            func end(after: Int) -> JoinView {
+                let join = JoinView(cue: nil, transition: nil, link: nil, after: after)
+                join.isEditing = true
+                join.onInsert = { [weak self] in self?.onInsert($0) }
+                document.addSubview(join, positioned: .below, relativeTo: reachLine)
+                return join
+            }
+            lead = end(after: -1)
+            tail = end(after: cues.count - 1)
         }
         for (i, cue) in cues.enumerated() {
             if i > 0 {
@@ -467,6 +476,11 @@ final class CueListView: NSScrollView {
         if slotAt == shown.count {
             place(slot, NSRect(x: 0, y: y, width: width, height: DropSlot.height))
             y += DropSlot.height
+        }
+        if let tail {
+            tail.isHidden = false
+            place(tail, NSRect(x: 0, y: y, width: width, height: JoinView.leadHeight))
+            y += JoinView.leadHeight
         }
         // A spine from each cue that runs on to the next one's margin box.
         for (i, cue) in shown.enumerated() where i + 1 < shown.count && cue.continueMode.continues {

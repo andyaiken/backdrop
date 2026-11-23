@@ -129,7 +129,8 @@ public enum ConsoleGeometry {
 
     /// Space around the Studio's middle column.
     public static let studioInset: CGFloat = 24
-    public static let canvasHeaderHeight: CGFloat = 24
+    /// The cue's name and Run again over the canvas, with a gap under them.
+    public static let canvasHeaderHeight: CGFloat = 34
     /// Between the canvas and the timeline.
     public static let timelineGap: CGFloat = 16
     /// The line under the timeline, into the next cue.

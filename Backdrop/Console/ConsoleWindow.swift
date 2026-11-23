@@ -551,7 +551,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate {
 
         header.update(
             mode: controller.mode == .edit,
-            title: show.title.isEmpty ? (document?.displayName ?? "Untitled") : show.title,
             lamp: playhead.blackout ? "Blacked out \u{2014} press B" : projector.lamp,
             live: projector.display != nil && !playhead.blackout,
             warn: projector.warning != nil,
@@ -560,7 +559,6 @@ final class ConsoleWindowController: NSWindowController, NSWindowDelegate {
             stageSetupOn: showingStageSetup,
             cautions: cautions,
             selectedCaution: selectedCaution,
-            isEdited: document?.isDocumentEdited ?? false,
             issues: show.issues.enumerated().map { i, issue in
                 SheetHealthIssue(id: i, cue: issue.cues.first, message: show.message(for: issue))
             }

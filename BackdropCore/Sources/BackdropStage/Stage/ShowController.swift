@@ -323,13 +323,11 @@ public final class ShowController {
         guard mode != .show else { return }
         mode = .show
         runner.showsGuides = false
-        say("Show mode. The cue sheet and settings are locked.")
     }
 
     public func enterEditMode() {
         guard mode != .edit else { return }
         mode = .edit
-        say("Edit mode.")
     }
 
     /// Alignment guides, on every surface. Edit mode only.

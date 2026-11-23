@@ -8,9 +8,10 @@ struct SheetHealthIssue: Identifiable, Equatable {
     let message: String
 }
 
-/// The Studio's toolbar: the show's title and whether it is edited, Lock for
-/// show, Add cue, Stage setup and the sheet's health; then any cautions and
-/// the projector, with a small live picture of what it shows.
+/// The Studio's toolbar: Lock for show, Add cue, Stage setup and, when the
+/// sheet has any, its issues; then any cautions and the projector, with a
+/// small live picture of what it shows. The show's name and whether it is
+/// edited are in the title bar above.
 ///
 /// Nothing here takes the keyboard, so the show keys still reach the show.
 struct StudioToolbar: View {
@@ -19,22 +20,11 @@ struct StudioToolbar: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(state.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                if state.isEdited {
-                    Text("Edited").foregroundStyle(.secondary)
-                }
-            }
-            .padding(.trailing, 6)
-
             LockControl(face: .studio, onLock: state.onLock)
 
             Button { state.onShowAddCue() } label: {
                 HStack(spacing: 6) {
                     Text("+ Add cue")
-                    Text("\u{21E7}\u{2318}N").foregroundStyle(.secondary)
                 }
             }
             .sheet(isPresented: $state.showingAddCue, onDismiss: { state.onGalleryClosed() }) {
@@ -53,7 +43,7 @@ struct StudioToolbar: View {
                 .focusable(false)
                 .help("The show's title, text size and projection area, set on the stage")
 
-            health
+            if !state.issues.isEmpty { health }
 
             Spacer(minLength: 16)
 
@@ -68,25 +58,22 @@ struct StudioToolbar: View {
         .coordinateSpace(name: HeaderBar.space)
     }
 
-    /// "Sheet OK" in green, or how many issues in amber; either opens a list
-    /// of every issue, each with a button that stands its cue by.
+    /// How many issues the sheet has, in amber; it opens a list of every
+    /// issue, each with a button that stands its cue by.
     private var health: some View {
         Button { showingIssues.toggle() } label: {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(state.issues.isEmpty ? Color(nsColor: .systemGreen) : Color(nsColor: .systemOrange))
+                    .fill(Color(nsColor: .systemOrange))
                     .frame(width: 7, height: 7)
-                Text(state.issues.isEmpty ? "Sheet OK" : "\(state.issues.count) issue\(state.issues.count == 1 ? "" : "s")")
+                Text("\(state.issues.count) issue\(state.issues.count == 1 ? "" : "s")")
             }
         }
         .fixedSize()
         .focusable(false)
-        .help(state.issues.isEmpty ? "The cue sheet has no issues" : "What needs fixing in the cue sheet")
+        .help("What needs fixing in the cue sheet")
         .popover(isPresented: $showingIssues, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 10) {
-                if state.issues.isEmpty {
-                    Text("The cue sheet has no issues.").foregroundStyle(.secondary)
-                }
                 ForEach(state.issues) { issue in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Circle().fill(Color(nsColor: .systemOrange)).frame(width: 6, height: 6)

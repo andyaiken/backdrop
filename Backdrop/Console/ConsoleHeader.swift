@@ -8,8 +8,6 @@ import SwiftUI
 @MainActor
 final class HeaderState: ObservableObject {
     @Published var editing = false
-    /// The show's title, as the Booth's header names it.
-    @Published var title = ""
     @Published var lamp = ""
     @Published var live = false
     @Published var warn = false
@@ -40,8 +38,6 @@ final class HeaderState: ObservableObject {
     var displays: () -> (items: [DisplayMenu.Item], note: String?) = { ([], nil) }
     var onChooseDisplay: (DisplayIdentity) -> Void = { _ in }
 
-    /// The document has changes not yet saved.
-    @Published var isEdited = false
     /// The cue sheet's issues, for the Studio's sheet health.
     @Published var issues: [SheetHealthIssue] = []
     /// Stands a cue by, from the sheet health popover.
@@ -71,12 +67,11 @@ final class HeaderView: PanelHost<HeaderBar> {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(mode editing: Bool, title: String, lamp text: String, live: Bool, warn: Bool, blackout: Bool,
+    func update(mode editing: Bool, lamp text: String, live: Bool, warn: Bool, blackout: Bool,
                 projectorOpen: Bool, stageSetupOn: Bool, cautions: [BoothWarning], selectedCaution: BoothWarning.ID?,
-                isEdited: Bool = false, issues: [SheetHealthIssue] = []) {
+                issues: [SheetHealthIssue] = []) {
         // Only what changed is set, so SwiftUI isn't asked to redraw for nothing.
         if state.editing != editing { state.editing = editing }
-        if state.title != title { state.title = title }
         if state.lamp != text { state.lamp = text }
         if state.live != live { state.live = live }
         if state.warn != warn { state.warn = warn }
@@ -84,7 +79,6 @@ final class HeaderView: PanelHost<HeaderBar> {
         if state.projectorOpen != projectorOpen { state.projectorOpen = projectorOpen }
         if state.stageSetupOn != stageSetupOn { state.stageSetupOn = stageSetupOn }
         if state.cautions != cautions { state.cautions = cautions }
-        if state.isEdited != isEdited { state.isEdited = isEdited }
         if state.issues != issues { state.issues = issues }
         if state.selectedCaution != selectedCaution { state.selectedCaution = selectedCaution }
     }
